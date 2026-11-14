@@ -20,7 +20,8 @@ export const sections: Section[] = [
   { key: 'inbox', label: 'Inbox', path: '/inbox', arrives: 'week 2', pages: [] },
   {
     key: 'leads',
-    label: 'Leads',
+    // Renamed from Leads on 14 November 2026 at Mia's request: the one two-word tab (docs/decisions.md).
+    label: 'Business development',
     path: '/leads',
     arrives: 'weeks 2 and 3',
     pages: [

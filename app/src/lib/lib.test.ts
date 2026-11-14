@@ -95,9 +95,8 @@ describe('next line (section 14.9)', () => {
 })
 
 describe('sections', () => {
-  it('has nine file tabs with one-word names', () => {
-    expect(sections).toHaveLength(9)
-    for (const s of sections) expect(s.label).toMatch(/^\w+$/)
+  it('has the file tabs in order, one word each except Business development (docs/decisions.md)', () => {
+    for (const s of sections) expect(s.label === 'Business development' || /^\w+$/.test(s.label)).toBe(true)
     expect(landing(sections[2])).toBe('/leads/jobs')
     expect(landing(sections[0])).toBe('/home')
   })

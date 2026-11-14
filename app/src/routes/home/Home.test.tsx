@@ -131,7 +131,7 @@ describe('Home', () => {
     await waitFor(() => expect(screen.getAllByTestId('tab-dot')).toHaveLength(2))
     const tabs = screen.getAllByRole('navigation', { name: 'Sections' })[0]
     expect(within(tabs).getByRole('link', { name: /Inbox/ })).toContainElement(screen.getAllByTestId('tab-dot')[0])
-    expect(within(tabs).getByRole('link', { name: /Leads/ })).toContainElement(screen.getAllByTestId('tab-dot')[1])
+    expect(within(tabs).getByRole('link', { name: /Business development/ })).toContainElement(screen.getAllByTestId('tab-dot')[1])
     expect(tabs.textContent).not.toMatch(/\d/)
   })
 
@@ -141,7 +141,7 @@ describe('Home', () => {
     await userEvent.keyboard('2')
     expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument()
     await userEvent.keyboard('3')
-    expect(await screen.findByRole('heading', { name: 'Leads' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Business development' })).toBeInTheDocument()
     await userEvent.keyboard(']')
     expect(screen.getByRole('link', { name: 'Referrals' })).toHaveAttribute('aria-current', 'page')
   })

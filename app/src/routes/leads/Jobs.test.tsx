@@ -57,7 +57,7 @@ describe('Jobs', () => {
   it('T-LEAD-1 opens /leads on Jobs with two hero numbers and 7 rows at most', async () => {
     mock()
     open()
-    expect(screen.getByRole('heading', { name: 'Leads' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Business development' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
     await waitFor(() => expect(values()).toEqual(['12/20', '09']))
     const main = screen.getByRole('main')

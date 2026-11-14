@@ -196,7 +196,7 @@ export function Jobs() {
 
   return (
     <div className="flex flex-col gap-12">
-      <PageHeader title="Leads" tabs={tabs} />
+      <PageHeader title={leadsTab.label} tabs={tabs} />
 
       <div className="grid grid-cols-2 gap-x-8 gap-y-12 md:flex md:gap-x-16">
         <HeroStat label="Chased this week" value={chasedText} meter={meter} onClick={() => setFilter('chased')} />
