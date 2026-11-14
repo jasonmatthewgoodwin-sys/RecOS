@@ -98,6 +98,8 @@ Open `https://rec-os-gules.vercel.app` on any device, click **Email me a sign-in
 
 **The emails are rationed.** Supabase's built-in mail service sends only a few sign-in emails an hour per project (the exact figure is under Authentication, Rate Limits). Two were used on 14 November at 13:15 and 14:22; a request inside the same hour sends nothing, and the app still says "a link is on its way", by design, so the form cannot be used to test addresses. If a link does not arrive, wait an hour and ask once. The lasting fix is to connect the project's own mail sender under Authentication, SMTP Settings (a Resend or Postmark account in Jason's name), which lifts the limit and sends from his own address. That is Jason's decision and his account to create.
 
+**A password, once set, avoids the email altogether.** On a device where Jason is signed in, open the cog, Profile, and set a password of 12 characters or more. From then on the sign-in view's third choice, Sign in with a password, works on any device with no email. If the password is forgotten, the emailed link still works, and a new password can be set in Profile. This is a departure from the design, marked Pending for Jason in `docs/decisions.md`.
+
 What went wrong on 14 November, so it is not repeated: before the Site URL was changed, links were sent back to `localhost:5173`, which only exists on the computer running the app; and a used or expired link showed "This account does not have access", which the app now words correctly.
 
 ### 2. Applied to the test project on 14 November

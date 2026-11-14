@@ -16,11 +16,23 @@ type AuthState =
   | { status: 'signed-out'; problem: SignInProblem }
   | { status: 'signed-in'; session: Session }
 
+/** Passwords are at least this long. Checked here and by the auth service. */
+export const MIN_PASSWORD_LENGTH = 12
+
 type Auth = {
   state: AuthState
   signInWithMicrosoft: () => Promise<void>
   /** Always resolves the same way, so the form cannot be used to test addresses (5.5). */
   emailLink: (email: string) => Promise<void>
+  /**
+   * A departure from the design, agreed on 14 November 2026 (see
+   * docs/decisions.md): the owner may also sign in with a password he sets
+   * in Settings, Profile. A wrong address and a wrong password give the same
+   * answer, so this form cannot be used to test addresses either.
+   */
+  signInWithPassword: (email: string, password: string) => Promise<'ok' | 'no_match' | 'failed'>
+  /** Sets or replaces the signed-in owner's password. */
+  setPassword: (password: string) => Promise<'ok' | 'too_short' | 'failed'>
   signOut: () => Promise<void>
 }
 
@@ -114,6 +126,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           })
         } catch {
           // Deliberately silent. The same message shows whatever happened.
+        }
+      },
+      async signInWithPassword(email, password) {
+        if (!supabase) return 'failed'
+        try {
+          const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
+          if (!error) return 'ok'
+          return /invalid|credentials|not found/i.test(error.message) ? 'no_match' : 'failed'
+        } catch {
+          return 'failed'
+        }
+      },
+      async setPassword(password) {
+        if (password.length < MIN_PASSWORD_LENGTH) return 'too_short'
+        if (!supabase) return 'ok'
+        try {
+          const { error } = await supabase.auth.updateUser({ password })
+          return error ? 'failed' : 'ok'
+        } catch {
+          return 'failed'
         }
       },
       async signOut() {

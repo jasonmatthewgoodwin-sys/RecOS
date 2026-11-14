@@ -9,6 +9,7 @@ import { landing, sectionFor, sections, settings, visibleSections, type Section 
 import { Gallery } from './routes/gallery/Gallery'
 import { Home } from './routes/home/Home'
 import { SectionPage } from './routes/SectionPage'
+import { Profile } from './routes/settings/Profile'
 import { SignIn } from './routes/SignIn'
 
 function sectionRoutes(section: Section) {
@@ -44,6 +45,7 @@ export function SignedIn({ session }: { session: Session }) {
       <Sheet fadeKey={sectionFor(pathname)?.key}>
         <Routes>
           {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
+          {owner && <Route path="/settings/profile" element={<Profile />} />}
           {allowed.filter((s) => s.key !== 'home').map(sectionRoutes)}
           {import.meta.env.DEV && <Route path="/gallery" element={<Gallery />} />}
           <Route path="*" element={<Navigate to={start} replace />} />
