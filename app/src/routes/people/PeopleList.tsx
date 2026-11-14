@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Field } from '../../components/Field'
 import { HeroStat } from '../../components/HeroStat'
 import { Note } from '../../components/Note'
@@ -14,7 +14,9 @@ import { byTierOrder, onCadence, signalWord, sinceWord, thisWeek, tierSeats, tie
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { sections } from '../../lib/sections'
 import { ukClock } from '../../lib/time'
+import { EditLists } from './EditLists'
 import { PersonCard } from './PersonCard'
+import { usePeopleTabs } from '../../lib/peopleTabs'
 
 // One list under People (29.1 as restructured on 14 November 2026): two
 // numbers, this week's suggestions or everyone by tier, and the person card.
@@ -41,7 +43,8 @@ export function PeopleList({ listKey }: { listKey: string }) {
   const [note, setNote] = useState<string | null>(null)
 
   const tab = sections.find((s) => s.key === 'people')!
-  const tabs = tab.pages.map((p) => ({ label: p.label, route: `${tab.path}/${p.slug}` }))
+  const { tabs } = usePeopleTabs()
+  const [editing, setEditing] = useState(false)
   const list = lists.data?.find((l) => l.key === listKey)
   const mine = (members.data ?? []).filter((m) => list && m.listId === list.id)
 
@@ -168,17 +171,17 @@ export function PeopleList({ listKey }: { listKey: string }) {
   })
 
   const weekRows = thisWeek(mine).map(row)
-  const allRows = [...mine].sort(byTierOrder).map((m) => {
+  const allRows = [...mine].sort((a, b) => (a.groupName ?? '').localeCompare(b.groupName ?? '') || byTierOrder(a, b)).map((m) => {
     const inTier = mine.filter((x) => x.tier === m.tier).length
     const over = inTier > tierSeats[m.tier] ? `, ${inTier} of ${tierSeats[m.tier]} seats` : ''
-    return { ...row(m), section: `${tierWord[m.tier]}${over}` }
+    return { ...row(m), section: m.groupName ?? `${tierWord[m.tier]}${over}` }
   })
 
   const empty = members.status === 'ready' && mine.length === 0
 
   return (
     <div className="flex flex-col gap-12">
-      <PageHeader title={tab.label} tabs={tabs} />
+      <PageHeader title={tab.label} tabs={tabs} aside={<TextLink label="Edit tabs" icon="pen" onClick={() => setEditing(true)} />} />
 
       <div className="grid grid-cols-2 gap-x-8 gap-y-12 md:flex md:gap-x-16">
         <HeroStat label="Due" value={members.data ? twoDigits(due).text : undefined} onClick={() => setFilter('week')} />
@@ -250,7 +253,14 @@ export function PeopleList({ listKey }: { listKey: string }) {
         />
       )}
 
+      {editing && lists.data && <EditLists lists={lists.data} onClose={() => setEditing(false)} onNote={setNote} />}
       {note && <Note text={note} onClose={() => setNote(null)} />}
     </div>
   )
+}
+
+/** A list reached by its tab: /people/<key with dashes>. */
+export function PeopleListByKey() {
+  const { listKey = '' } = useParams()
+  return <PeopleList listKey={listKey.replace(/-/g, '_')} />
 }

@@ -1,5 +1,5 @@
 import type { Tone } from '../theme/tokens'
-import { gradClass, orbClass, toneFor, toneWord } from '../lib/tone'
+import { gradClass, orbClass, toneFor } from '../lib/tone'
 import { Icon, type IconName } from './Icon'
 import type { RowProps } from './Row'
 
@@ -51,17 +51,13 @@ export function Tile({ dot, title, detail, meta, word, detailWord, done, actions
           ) : (
             <span aria-hidden className={`flex size-10 items-center justify-center rounded-pill ${orb} text-ink`}>{icon ? <Icon name={icon} size={16} /> : null}</span>
           )}
-        </span>
-        <span className={`line-clamp-2 text-body ${done ? 'text-ink-3' : 'text-ink'}`}>{title}</span>
-        <span className="flex items-center gap-2 font-mono text-label text-ink-2" data-status={t}>
           {done ? (
             <span aria-hidden data-strike className="block h-px w-3 bg-ink-3" />
           ) : (
             <span aria-hidden data-dot={dot} className={`block size-2 rounded-pill border border-ink ${dot === 'solid' ? 'bg-ink' : 'bg-transparent'}`} />
           )}
-          <span aria-hidden className={`block size-2.5 rounded-pill ${orb}`} />
-          {toneWord[t]}
         </span>
+        <span className={`line-clamp-2 text-body ${done ? 'text-ink-3' : 'text-ink'}`}>{title}</span>
         {word && <span className="label-caps text-ink">{word}</span>}
         {detail && <span className="line-clamp-2 text-label text-ink-2">{detail}</span>}
         {detailWord && <span className="label-caps text-ink-2">{detailWord}</span>}

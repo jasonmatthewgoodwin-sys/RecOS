@@ -491,6 +491,24 @@ test('P1-46: find a person, export them, delete them with counts and an audit ro
   })
 })
 
+test('0027: the owner adds, colours, reorders and archives lists and groups members; the reviewer cannot (workspace)', async () => {
+  await owner(async () => {
+    await db.query(`insert into lists (owner_id, key, name, kind, colour, position) values ($1, 'warm_clients', 'Warm clients', 'other', 'pending', 5)`, [ownerId])
+    assert.deepEqual(await rows(`select name, colour, archived from lists where key = 'warm_clients'`), [{ name: 'Warm clients', colour: 'pending', archived: false }])
+    assert.match(await refused(`update lists set colour = 'purple' where key = 'warm_clients'`), /check constraint/)
+    await db.query(`update lists set archived = true, position = 9 where key = 'warm_clients'`)
+    assert.deepEqual(await rows(`select archived, position from lists where key = 'warm_clients'`), [{ archived: true, position: 9 }])
+    const [m] = await rows(`select id from league_members limit 1`)
+    await db.query(`update league_members set group_name = 'Boston' where id = $1`, [m.id])
+    assert.deepEqual(await rows(`select group_name from league_members where id = $1`, [m.id]), [{ group_name: 'Boston' }])
+    assert.match(await refused(`update league_members set group_name = '   ' where id = '${m.id}'`), /check constraint/)
+  })
+  await reviewer(async () => {
+    assert.ok(await refused(`insert into lists (owner_id, key, name) values (gen_random_uuid(), 'x', 'X')`))
+    assert.ok(await refused(`update lists set name = 'Y'`))
+  })
+})
+
 test('sign-in: the allow-list decides who gets a role, compared without case or spaces', async () => {
   const users = await rows(`select email, display_name, role from app_users`)
   assert.deepEqual(users, [{ email: OWNER_EMAIL, display_name: 'Jason Sample', role: 'owner' }])

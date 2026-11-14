@@ -5,6 +5,7 @@
 import { sampleSource } from './sample'
 import { supabase } from './supabase'
 import { mondayOf, ukClock, weekdayOf } from './time'
+import type { Tone } from '../theme/tokens'
 
 export type CalendarCall = {
   id: string
@@ -156,7 +157,7 @@ export type WiderLeadStatus = 'spotted' | 'passed' | 'meeting_booked' | 'job_won
 export type Tier = 'premier' | 'championship' | 'league_one'
 
 /** A named list under People (docs/decisions.md, 14 November 2026). */
-export type PeopleList = { id: string; key: string; name: string; kind: 'leader' | 'a_star' | 'other'; seats: number }
+export type PeopleList = { id: string; key: string; name: string; kind: 'leader' | 'a_star' | 'other'; seats: number; colour: Tone | 'mist'; archived: boolean; position: number }
 
 /** One person on a list, with their cadence state from league_due_view (14.6). Names only. */
 export type Member = {
@@ -171,6 +172,8 @@ export type Member = {
   listId: string
   tier: Tier
   why: string | null
+  /** A group of the owner's naming within the list, drawn as a separator (14 November 2026). */
+  groupName: string | null
   /** Plain dates */
   lastTouchOn: string | null
   nextDueOn: string
@@ -477,6 +480,9 @@ export interface DataSource {
 
   /** The lists under People, in order. */
   lists(): Promise<PeopleList[]>
+  createList(input: { name: string; key: string; position: number }): Promise<void>
+  updateList(id: string, patch: Partial<Pick<PeopleList, 'name' | 'colour' | 'archived' | 'position'>>): Promise<void>
+  setMemberGroup(memberId: string, group: string): Promise<void>
   /** Every active member on every list, with their cadence state. */
   members(): Promise<Member[]>
   /** The last touches with a person, newest first (29.1, History). */
@@ -1040,9 +1046,24 @@ const live: DataSource = {
   },
 
   async lists() {
-    const { data, error } = await supabase!.from('lists').select('id, key, name, kind, seats').order('position')
+    const { data, error } = await supabase!.from('lists').select('id, key, name, kind, seats, colour, archived, position').order('position')
     fail(error)
     return (data ?? []) as PeopleList[]
+  },
+
+  async createList({ name, key, position }) {
+    const { error } = await supabase!.from('lists').insert({ name, key, kind: 'other', position })
+    fail(error)
+  },
+
+  async updateList(id, patch) {
+    const { error } = await supabase!.from('lists').update(patch).eq('id', id)
+    fail(error)
+  },
+
+  async setMemberGroup(memberId, group) {
+    const { error } = await supabase!.from('league_members').update({ group_name: group.trim() || null }).eq('id', memberId)
+    fail(error)
   },
 
   async members() {
@@ -1069,12 +1090,13 @@ const live: DataSource = {
     if (views.length === 0) return []
     const { data: extra, error: e2 } = await supabase!
       .from('league_members')
-      .select('id, why, jobs_briefed, referrals_given, intros_made, person:people!person_id (city, crm_url, linkedin_url, notes_for_next_contact)')
+      .select('id, why, group_name, jobs_briefed, referrals_given, intros_made, person:people!person_id (city, crm_url, linkedin_url, notes_for_next_contact)')
       .in('id', views.map((v) => v.id))
     fail(e2)
     type Extra = {
       id: string
       why: string | null
+      group_name: string | null
       jobs_briefed: number
       referrals_given: number
       intros_made: number
@@ -1095,6 +1117,7 @@ const live: DataSource = {
         listId: v.list_id,
         tier: v.tier,
         why: e?.why ?? null,
+        groupName: e?.group_name ?? null,
         lastTouchOn: v.last_touch_on,
         nextDueOn: v.next_due_on,
         daysLate: Number(v.days_late),

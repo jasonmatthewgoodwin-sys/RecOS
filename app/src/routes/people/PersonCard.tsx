@@ -6,7 +6,7 @@ import { TextLink } from '../../components/TextLink'
 import { cityName } from '../../lib/leads'
 import { data, type Member, type PeopleList, type Tier, type Touch } from '../../lib/data'
 import { signalWord, sinceWord, tierWord, tiers } from '../../lib/people'
-import { useQuery } from '../../lib/query'
+import { invalidate, useQuery } from '../../lib/query'
 
 type Mode = 'view' | 'tier' | 'remove' | 'dnc'
 
@@ -68,6 +68,15 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
     onRemove(reason.trim())
   }
 
+  const [group, setGroup] = useState<string | null>(null)
+  async function saveGroup(v: string) {
+    try {
+      await data.setMemberGroup(m.id, v)
+      invalidate('people.members')
+    } catch {
+      setGroup(m.groupName ?? '')
+    }
+  }
   const header = [m.title, m.company, cityName(m.city)].filter(Boolean).join(', ')
 
   return (
@@ -84,6 +93,21 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
                 {m.profileUrl && <TextLink label="Open profile" href={m.profileUrl} />}
               </p>
             </div>
+          ),
+        },
+        {
+          label: 'Group',
+          body: (
+            <Field
+              label="Group within the list"
+              value={group ?? m.groupName ?? ''}
+              onChange={setGroup}
+              onBlur={() => {
+                const v = (group ?? m.groupName ?? '').trim()
+                if (v !== (m.groupName ?? '')) void saveGroup(v)
+              }}
+              placeholder="Such as Boston, or Clients to see in March"
+            />
           ),
         },
         {

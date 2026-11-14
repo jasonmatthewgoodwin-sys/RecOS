@@ -9,6 +9,7 @@ import { bookedThisWeek, bySessionOrder, coachingQuestions, heldThisWeek, sessio
 import { data, type CoachingSession } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
+import { usePeopleTabs } from '../../lib/peopleTabs'
 import { sections } from '../../lib/sections'
 import { ukClock } from '../../lib/time'
 
@@ -31,7 +32,7 @@ export function Coaching() {
   const cardId = params.get('card')?.startsWith('coaching:') ? params.get('card')!.slice(9) : null
 
   const tab = sections.find((s) => s.key === 'people')!
-  const tabs = tab.pages.map((p) => ({ label: p.label, route: `${tab.path}/${p.slug}` }))
+  const { tabs } = usePeopleTabs()
 
   const all = sessions.data ?? []
   const held = heldThisWeek(all, clock)

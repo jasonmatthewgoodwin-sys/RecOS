@@ -55,7 +55,7 @@ describe('People, Senior network', () => {
     mock()
     open('/people')
     expect(screen.getByRole('heading', { name: 'People' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Senior network' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('link', { name: 'Senior network' })).toHaveAttribute('aria-current', 'page')
     await waitFor(() => expect(values()).toEqual(['06', '2/50']))
     expect(screen.getByRole('main').querySelectorAll('[data-hero-stat]')).toHaveLength(2)
     expect(screen.getByRole('img', { name: '1 of 20' })).toBeInTheDocument()

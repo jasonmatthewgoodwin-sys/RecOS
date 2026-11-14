@@ -12,6 +12,7 @@ import { data, type Signal, type SignalStatus } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { signalWord } from '../../lib/people'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
+import { usePeopleTabs } from '../../lib/peopleTabs'
 import { sections } from '../../lib/sections'
 import { ukClock } from '../../lib/time'
 
@@ -104,7 +105,7 @@ export function Signals() {
   const cardId = params.get('card')?.startsWith('signal:') ? params.get('card')!.slice(7) : null
 
   const tab = sections.find((s) => s.key === 'people')!
-  const tabs = tab.pages.map((p) => ({ label: p.label, route: `${tab.path}/${p.slug}` }))
+  const { tabs } = usePeopleTabs()
   const all = signals.data ?? []
   const chosen = cardId ? all.find((s) => s.id === cardId) : undefined
   const senior = lists.data?.find((l) => l.kind === 'leader') ?? lists.data?.[0]

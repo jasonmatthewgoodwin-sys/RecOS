@@ -20,7 +20,7 @@ import { Jobs } from './routes/leads/Jobs'
 import { Referrals } from './routes/leads/Referrals'
 import { Wider } from './routes/leads/Wider'
 import { Coaching } from './routes/people/Coaching'
-import { PeopleList } from './routes/people/PeopleList'
+import { PeopleList, PeopleListByKey } from './routes/people/PeopleList'
 import { Signals } from './routes/people/Signals'
 import { SectionPage } from './routes/SectionPage'
 import { Agents } from './routes/settings/Agents'
@@ -65,6 +65,7 @@ function sectionRoutes(section: Section, built: Record<string, ReactNode>) {
         .map((p) => (
           <Route key={p.slug} path={p.slug} element={<PhoneGate title={section.label}>{built[`${section.key}/${p.slug}`]}</PhoneGate>} />
         ))}
+      {section.key === 'people' && <Route path=":listKey" element={<PhoneGate title={section.label}><PeopleListByKey /></PhoneGate>} />}
       <Route path="*" element={<PhoneGate title={section.label}><SectionPage section={section} /></PhoneGate>} />
     </Route>
   )

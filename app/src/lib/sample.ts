@@ -373,9 +373,9 @@ export function resetSampleBd() {
   sampleWider = freshSampleWiderLeads()
 }
 
-export const sampleLists: PeopleList[] = [
-  { id: 'list-senior', key: 'senior_network', name: 'Senior network', kind: 'leader', seats: 50 },
-  { id: 'list-top', key: 'top_candidates', name: 'Top candidates', kind: 'a_star', seats: 50 },
+export let sampleLists: PeopleList[] = [
+  { id: 'list-senior', key: 'senior_network', name: 'Senior network', kind: 'leader', seats: 50, colour: 'clear', archived: false, position: 1 },
+  { id: 'list-top', key: 'top_candidates', name: 'Top candidates', kind: 'a_star', seats: 50, colour: 'new', archived: false, position: 2 },
 ]
 
 const cadence = { premier: 18, championship: 30, league_one: 49 } as const
@@ -391,6 +391,7 @@ function member(over: Partial<Member> & Pick<Member, 'id' | 'personId' | 'name' 
     crmUrl: null,
     profileUrl: null,
     why: null,
+    groupName: null,
     daysLate,
     state: daysLate >= 0 ? 'late' : daysLate >= -7 ? 'due' : 'fine',
     missedCycles: 0,
@@ -873,6 +874,20 @@ export const sampleSource: DataSource = {
 
   async lists() {
     return sampleLists.map((l) => ({ ...l }))
+  },
+  async createList({ name, key, position }) {
+    if (sampleLists.some((l) => l.key === key)) throw new Error('That list exists')
+    sampleLists.push({ id: `list-${key}`, key, name, kind: 'other', seats: 50, colour: 'mist', archived: false, position })
+  },
+  async updateList(id, patch) {
+    const l = sampleLists.find((x) => x.id === id)
+    if (!l) throw new Error('No such list')
+    Object.assign(l, patch)
+  },
+  async setMemberGroup(memberId, group) {
+    const m = sampleMembers.find((x) => x.id === memberId)
+    if (!m) throw new Error('No such member')
+    m.groupName = group.trim() || null
   },
   async members() {
     return sampleMembers.map((m) => ({ ...m }))
