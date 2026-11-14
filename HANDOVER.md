@@ -131,6 +131,24 @@ Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. P1-18, P1-
 
 New database changes are new numbered files in `db/migrations` (next is 0020), with a policy file for every new table. `npm test` in `db/` fails if a table has no policy file. Apply new files to the test project through the SQL editor.
 
+## Hosting on Vercel, so Jason can sign in from a web address
+
+Mia chose Vercel on 14 November. Nothing is deployed yet: the Vercel account to use has not been settled (see `docs/decisions.md`). `app/vercel.json` is in place so every route serves the app. The app sends sign-in links back to whatever address it runs on, so no code changes with the host.
+
+Whoever owns the Vercel account does this once, in the Vercel dashboard:
+
+1. Add New, Project, Import the GitHub repository `jasonmatthewgoodwin-sys/RecOS`. Vercel's GitHub app must be installed on that repository, which only Jason can do for his account.
+2. Root Directory: `app`. Framework: Vite. Leave the build settings as detected.
+3. Environment variables, for Production and Preview: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, with the two values from "Get it running" above. Both are safe for a browser. Never add any other key.
+4. Deploy. Note the address, for example `https://recos.vercel.app`.
+
+Then in the Supabase dashboard for the test project, Authentication, URL Configuration:
+
+5. Site URL: the Vercel address.
+6. Redirect URLs: add `http://localhost:5173/**` so the app still works on a laptop, and `https://*.vercel.app/**` if preview deployments should allow sign-in.
+
+After that, every push to `main` deploys. The live project, when it exists, gets its own Vercel project with its own two values.
+
 ## Working habits that matter
 
 - The rules in `CLAUDE.md` under "Rules that are never broken" are binding. Thin person records, row-level security on every table, no secrets in the browser or repository, agents write through one endpoint, only the send engine sends, KPIs are events written by triggers.
