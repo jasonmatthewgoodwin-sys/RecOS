@@ -29,9 +29,9 @@ function Cog() {
   )
 }
 
-type TabsProps = { tabs: Section[]; dots?: Record<string, boolean>; showSettings?: boolean }
+type TabsProps = { tabs: Section[]; dots?: Record<string, boolean>; showSettings?: boolean; onSearch?: () => void; onCapture?: () => void }
 
-export function FileTabs({ tabs, dots = {}, showSettings = true }: TabsProps) {
+export function FileTabs({ tabs, dots = {}, showSettings = true, onSearch, onCapture }: TabsProps) {
   const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
   const current = sectionFor(pathname)
@@ -47,6 +47,16 @@ export function FileTabs({ tabs, dots = {}, showSettings = true }: TabsProps) {
         <span className="mb-3 mr-4">
           <StateKey />
         </span>
+        {onSearch && (
+          <button type="button" aria-label="Search" title="Search (/)" onClick={onSearch} className="mb-1 inline-flex size-10 items-center justify-center rounded-pill text-ink-3 hover:text-ink">
+            <Icon name="search" />
+          </button>
+        )}
+        {onCapture && (
+          <button type="button" aria-label="Quick capture" title="Quick capture (c)" onClick={onCapture} className="mb-1 inline-flex size-10 items-center justify-center rounded-pill text-ink-3 hover:text-ink">
+            <Icon name="plus" />
+          </button>
+        )}
         {showSettings && (
           <NavLink
             to={landing(settings)}

@@ -3,6 +3,7 @@
 
 import type { Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
+import type { SearchHit } from './capture'
 import { ukClock } from './time'
 
 function todayAt(hoursFromNow: number): string {
@@ -481,6 +482,9 @@ function freshSampleKpiEvents(): Record<string, KpiEvent[]> {
 }
 
 const KPI_TARGETS: Record<string, number> = { posts_chased: 20, coaching_calls: 5, linkedin_posts: 2, new_a_star: 5 }
+
+/** What quick capture saved, for tests. */
+export const captured: { kind: string; values: Record<string, string> }[] = []
 
 let sampleKpiEvents = freshSampleKpiEvents()
 
@@ -1134,6 +1138,30 @@ export const sampleSource: DataSource = {
   async saveWeeklyReview(week, fields: ReviewFields) {
     const before = sampleReviews[week]
     sampleReviews[week] = { week, followupBlockMinutes: before?.followupBlockMinutes ?? null, heldOn: before?.heldOn ?? null, ...fields }
+  },
+  async capture(kind, values) {
+    const v = (k: string) => (values[k] ?? '').trim()
+    if (kind === 'number') {
+      await this.correctKpi(v('kpi'), Number(v('amount')), v('reason'))
+      return { route: '/numbers/this-week' }
+    }
+    if (kind === 'follow_up') {
+      sampleFollowUps.unshift({ ...sampleFollowUps[0], id: `fu-${Date.now()}`, personName: v('personName'), company: null, reason: v('reason'), dueOn: v('dueOn'), status: 'open', direction: 'owed', kind: 'other', message: null })
+      return { route: '/leads/follow-ups?view=list' }
+    }
+    captured.push({ kind, values: { ...values } })
+    return { route: kind === 'referral' ? '/leads/referrals' : kind === 'idea' ? '/inbox?view=list' : '/leads/jobs' }
+  },
+  async search(query) {
+    const q = query.trim().toLowerCase()
+    const hits: SearchHit[] = []
+    for (const m of sampleMembers.filter((x) => x.name.toLowerCase().includes(q)).slice(0, 3)) {
+      const list = sampleLists.find((l) => l.id === m.listId)
+      hits.push({ kind: 'person', id: m.personId, title: m.name, detail: [m.title, m.company].filter(Boolean).join(', ') || null, route: `/people/${(list?.key ?? 'senior_network').replace(/_/g, '-')}?card=person:${m.personId}` })
+    }
+    for (const l of sampleLeads.filter((x) => `${x.role} ${x.company}`.toLowerCase().includes(q)).slice(0, 3)) hits.push({ kind: 'job_lead', id: l.id, title: `${l.role} at ${l.company}`, detail: null, route: `/leads/jobs?card=job:${l.id}` })
+    for (const f of sampleFollowUps.filter((x) => x.status === 'open' && x.personName.toLowerCase().includes(q)).slice(0, 3)) hits.push({ kind: 'follow_up', id: f.id, title: f.personName, detail: f.reason, route: `/leads/follow-ups?view=list&card=followup:${f.id}` })
+    return hits
   },
   async kpiThisWeek() {
     return sampleKpiWeeks()

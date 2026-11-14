@@ -1,11 +1,13 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Capture } from './components/Capture'
 import { PhoneGate } from './components/PhoneGate'
+import { Search } from './components/Search'
 import { Dots } from './components/Quiet'
 import { FileTabs, Paper, Sheet } from './components/Shell'
 import { AuthProvider, useAuth, type Session } from './lib/auth'
 import { data } from './lib/data'
-import { useTabKeys } from './lib/keyboard'
+import { isTyping, useTabKeys } from './lib/keyboard'
 import { useQuery } from './lib/query'
 import { applyTheme } from './lib/theme'
 import { landing, sectionFor, sections, settings, visibleSections, type Section } from './lib/sections'
@@ -89,13 +91,28 @@ export function SignedIn({ session }: { session: Session }) {
     if (owner && prefs.data) applyTheme(prefs.data)
   }, [owner, prefs.data])
 
+  // Search and quick capture (25.7): windows in the centre, by key or by the icons on the tab row.
+  const [window_, setWindow] = useState<'search' | 'capture' | null>(null)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || window_ !== null) return
+      if (e.key === '/') {
+        e.preventDefault()
+        setWindow('search')
+      }
+      if (e.key === 'c' && owner) setWindow('capture')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [owner, window_])
+
   const start = owner ? '/home' : '/numbers/this-week'
   const allowed = owner ? [...sections, settings] : tabs
   const built = builtPages(session)
 
   return (
     <>
-      <FileTabs tabs={tabs} dots={dots} showSettings={owner} />
+      <FileTabs tabs={tabs} dots={dots} showSettings={owner} onSearch={() => setWindow('search')} onCapture={owner ? () => setWindow('capture') : undefined} />
       <Sheet fadeKey={sectionFor(pathname)?.key}>
         <Routes>
           {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
@@ -105,6 +122,8 @@ export function SignedIn({ session }: { session: Session }) {
           {import.meta.env.DEV && <Route path="/gallery" element={<Gallery />} />}
           <Route path="*" element={<Navigate to={start} replace />} />
         </Routes>
+        {window_ === 'search' && <Search onClose={() => setWindow(null)} />}
+        {window_ === 'capture' && <Capture onClose={() => setWindow(null)} />}
       </Sheet>
     </>
   )

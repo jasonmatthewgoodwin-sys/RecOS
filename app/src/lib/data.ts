@@ -4,6 +4,7 @@
 
 import { sampleSource } from './sample'
 import { supabase } from './supabase'
+import type { CaptureKind, SearchHit } from './capture'
 import { mondayOf, ukClock, weekdayOf } from './time'
 import type { Tone } from '../theme/tokens'
 
@@ -554,6 +555,10 @@ export interface DataSource {
 
   /** The weekly health line on Review (33.7). Empty for the reviewer. */
   systemWeeks(): Promise<SystemWeek[]>
+
+  /** Quick capture and search (25.7). Capture returns where to go next. */
+  capture(kind: CaptureKind, values: Record<string, string>): Promise<{ route?: string }>
+  search(query: string): Promise<SearchHit[]>
 
   /** Numbers, This week (32.1). */
   kpiThisWeek(): Promise<KpiWeek[]>
@@ -1620,6 +1625,73 @@ const live: DataSource = {
         { onConflict: 'owner_id,week' },
       )
     fail(error)
+  },
+
+  async capture(kind, values) {
+    const v = (k: string) => (values[k] ?? '').trim()
+    const today = ukClock(new Date()).date
+    if (kind === 'referral') {
+      const { error } = await supabase!.from('referrals').insert({
+        referred_name: v('referredName'), referred_company: v('referredCompany') || null, referred_by_name: v('referredBy'), kind: 'person',
+        dedup_key: `manual:referral:${v('referredName').toLowerCase()}:${v('referredBy').toLowerCase()}:${today}`,
+      })
+      fail(error)
+      return { route: '/leads/referrals' }
+    }
+    if (kind === 'follow_up') {
+      const { error } = await supabase!.from('follow_ups').insert({
+        person_name: v('personName'), reason: v('reason'), kind: 'other', source: 'manual', direction: 'owed', due_on: v('dueOn'),
+        dedup_key: `manual:follow_up:${v('personName').toLowerCase()}:${today}:${Date.now()}`,
+      })
+      fail(error)
+      return { route: '/leads/follow-ups?view=list' }
+    }
+    if (kind === 'idea') {
+      const { error } = await supabase!.from('inbox_items').insert({
+        type: 'event_idea', agent: 'owner', title: v('title'), why: v('why') || null, source: 'quick capture', rank: 10,
+        dedup_key: `event_idea:manual:${v('title').toLowerCase()}:${today}`,
+      })
+      fail(error)
+      return { route: '/inbox?view=list' }
+    }
+    if (kind === 'job_lead') {
+      const { data: ck, error: e1 } = await supabase!.rpc('norm_company', { p: v('company') })
+      fail(e1)
+      const { data: rk, error: e2 } = await supabase!.rpc('norm_role', { p: v('role') })
+      fail(e2)
+      const { error } = await supabase!.from('job_leads').insert({
+        company: v('company'), company_key: ck ?? v('company').toLowerCase(), role: v('role'), role_key: rk ?? v('role').toLowerCase(),
+        sources: ['manual'], source_urls: v('sourceUrl') ? [v('sourceUrl')] : [],
+      })
+      fail(error)
+      return { route: '/leads/jobs' }
+    }
+    await this.correctKpi(v('kpi'), Number(v('amount')), v('reason'))
+    return { route: '/numbers/this-week' }
+  },
+
+  async search(query) {
+    const q = `%${query.trim()}%`
+    const hits: SearchHit[] = []
+    const [people, leads, refs, fus, lists, members] = await Promise.all([
+      supabase!.from('people').select('id, display_name, display_title, display_company').ilike('display_name', q).limit(3),
+      supabase!.from('job_leads').select('id, company, role').or(`company.ilike.${q},role.ilike.${q}`).limit(3),
+      supabase!.from('referrals').select('id, referred_name, referred_company').ilike('referred_name', q).limit(3),
+      supabase!.from('follow_ups').select('id, person_name, reason').ilike('person_name', q).eq('status', 'open').limit(3),
+      supabase!.from('lists').select('id, key'),
+      supabase!.from('people').select('id, league_members!person_id (list_id)').ilike('display_name', q).limit(3),
+    ])
+    for (const r of [people, leads, refs, fus, lists, members]) fail(r.error)
+    const listKey = new Map(((lists.data ?? []) as { id: string; key: string }[]).map((l) => [l.id, l.key]))
+    const listOf = new Map(((members.data ?? []) as unknown as { id: string; league_members: { list_id: string }[] }[]).map((p) => [p.id, p.league_members?.[0]?.list_id]))
+    for (const p of (people.data ?? []) as { id: string; display_name: string; display_title: string | null; display_company: string | null }[]) {
+      const key = listKey.get(listOf.get(p.id) ?? '')
+      hits.push({ kind: 'person', id: p.id, title: p.display_name, detail: [p.display_title, p.display_company].filter(Boolean).join(', ') || null, route: key ? `/people/${key.replace(/_/g, '-')}?card=person:${p.id}` : '/settings/data' })
+    }
+    for (const l of (leads.data ?? []) as { id: string; company: string; role: string }[]) hits.push({ kind: 'job_lead', id: l.id, title: `${l.role} at ${l.company}`, detail: null, route: `/leads/jobs?card=job:${l.id}` })
+    for (const r of (refs.data ?? []) as { id: string; referred_name: string; referred_company: string | null }[]) hits.push({ kind: 'referral', id: r.id, title: r.referred_name, detail: r.referred_company, route: `/leads/referrals?card=referral:${r.id}` })
+    for (const f of (fus.data ?? []) as { id: string; person_name: string; reason: string }[]) hits.push({ kind: 'follow_up', id: f.id, title: f.person_name, detail: f.reason, route: `/leads/follow-ups?view=list&card=followup:${f.id}` })
+    return hits
   },
 
   async kpiThisWeek() {

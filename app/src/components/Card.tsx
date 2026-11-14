@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { toneBg } from '../lib/tone'
+import type { Tone } from '../theme/tokens'
 import { theme } from '../theme/tokens'
 import { Icon } from './Icon'
 import { PillButton } from './PillButton'
@@ -17,7 +18,7 @@ type Props = {
   /** A quiet line at the bottom naming the agent and the source (27.4). */
   foot?: ReactNode
   /** The state the card is about, which tints its top edge: action, pending or clear. */
-  tone?: 'action' | 'pending' | 'clear'
+  tone?: Tone
   onClose: () => void
 }
 
