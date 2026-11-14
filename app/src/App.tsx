@@ -15,6 +15,7 @@ import { landing, sectionFor, sections, settings, visibleSections, type Section 
 import { Gallery } from './routes/gallery/Gallery'
 import { Calendar } from './routes/content/Calendar'
 import { Drafts } from './routes/content/Drafts'
+import { Events } from './routes/content/Events'
 import { Home } from './routes/home/Home'
 import { Inbox } from './routes/inbox/Inbox'
 import { Quarter } from './routes/numbers/Quarter'
@@ -42,6 +43,7 @@ function builtPages(session: Session): Record<string, ReactNode> {
   return {
     'content/calendar': <Calendar />,
     'content/drafts': <Drafts />,
+    'content/events': <Events />,
     'leads/jobs': <Jobs />,
     'leads/follow-ups': <FollowUps />,
     'leads/referrals': <Referrals />,
@@ -68,6 +70,9 @@ function firstBuilt(section: Section, built: Record<string, ReactNode>): string 
 }
 
 function sectionRoutes(section: Section, built: Record<string, ReactNode>) {
+  if (section.key === 'events') {
+    return <Route key={section.key} path={`${section.path}/*`} element={<Navigate to="/content/events" replace />} />
+  }
   if (section.pages.length === 0) {
     return <Route key={section.key} path={`${section.path}/*`} element={<PhoneGate title={section.label}><SectionPage section={section} /></PhoneGate>} />
   }

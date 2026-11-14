@@ -394,7 +394,8 @@ export type WiderLead = {
 
 /** One next action owed to a person, or awaited from them (section 8.2). */
 /** Content (12.1, 31.2): a post, a draft, an idea or a testimonial. Never a feed. */
-export type ContentKind = 'linkedin_post' | 'job_post' | 'blog' | 'testimonial' | 'case_study' | 'idea'
+export type ContentKind = 'linkedin_post' | 'job_post' | 'blog' | 'testimonial' | 'case_study' | 'idea' | 'event'
+export type EventType = 'panel' | 'happy_hour' | 'webinar' | 'breakfast' | 'other'
 export type ContentStatus = 'idea' | 'draft' | 'approved' | 'planned' | 'posted' | 'held' | 'binned'
 export type ContentSource = 'calls' | 'pmm_community' | 'recruiting_news' | 'event' | 'manual'
 export type ContentItem = {
@@ -422,9 +423,15 @@ export type ContentItem = {
   impressions: number | null
   comments: number | null
   inboundMessages: number | null
+  /** For an event (14 November 2026): what kind, and the time of day as HH:mm. */
+  eventType: EventType | null
+  eventTime: string | null
   createdAt: string
 }
-export type ContentPatch = Partial<Pick<ContentItem, 'status' | 'hook' | 'body' | 'closeLine' | 'heldReason' | 'plannedFor' | 'postedOn' | 'postUrl' | 'impressions' | 'comments' | 'inboundMessages'>>
+export type ContentPatch = Partial<Pick<ContentItem, 'status' | 'topic' | 'hook' | 'body' | 'closeLine' | 'heldReason' | 'plannedFor' | 'postedOn' | 'postUrl' | 'impressions' | 'comments' | 'inboundMessages' | 'eventType' | 'eventTime'>>
+export type NewContent =
+  | { kind: 'linkedin_post'; copy: string; plannedFor: string | null; status: ContentStatus }
+  | { kind: 'event'; copy: string; topic: string; eventType: EventType; eventTime: string | null; plannedFor: string | null; status: ContentStatus }
 
 /** A problem report (the bug handover of 14 November 2026): raised from any page, worked under Settings. */
 export type ProblemSeverity = 'low' | 'medium' | 'high'
@@ -639,7 +646,7 @@ export interface DataSource {
   contentItems(): Promise<ContentItem[]>
   updateContent(id: string, patch: ContentPatch): Promise<void>
   /** A post written by hand in the calendar's composer: a LinkedIn post from the owner, filed under its first line. */
-  addContent(input: { copy: string; plannedFor: string | null; status: ContentStatus }): Promise<ContentItem>
+  addContent(input: NewContent): Promise<ContentItem>
 
   /** Problem reports: every one, newest first; the queue narrows them. */
   problems(): Promise<Problem[]>
@@ -1884,7 +1891,7 @@ const live: DataSource = {
   async contentItems() {
     const { data, error } = await supabase!
       .from('content_items')
-      .select('id, kind, run_source, angle, topic, hook, body, close_line, hashtags, data_point, data_point_url, prompted_by, format_ok, format_reason, rank, status, held_reason, planned_for, posted_on, post_url, impressions, comments, inbound_messages, created_at')
+      .select('id, kind, run_source, angle, topic, hook, body, close_line, hashtags, data_point, data_point_url, prompted_by, format_ok, format_reason, rank, status, held_reason, planned_for, posted_on, post_url, impressions, comments, inbound_messages, event_type, event_time, created_at')
       .neq('status', 'binned')
       .order('rank', { ascending: false })
       .order('created_at', { ascending: false })
@@ -1913,6 +1920,8 @@ const live: DataSource = {
       impressions: number | null
       comments: number | null
       inbound_messages: number | null
+      event_type: EventType | null
+      event_time: string | null
       created_at: string
     }
     return ((data ?? []) as Row[]).map((r) => ({
@@ -1939,18 +1948,22 @@ const live: DataSource = {
       impressions: r.impressions,
       comments: r.comments,
       inboundMessages: r.inbound_messages,
+      eventType: r.event_type,
+      eventTime: r.event_time,
       createdAt: r.created_at,
     }))
   },
 
-  async addContent({ copy, plannedFor, status }) {
-    const parts = splitCopy(copy)
-    const topic = topicFrom(copy)
+  async addContent(input) {
+    const { copy, plannedFor, status } = input
+    const parts = input.kind === 'event' ? { hook: null, body: copy || null, closeLine: null } : splitCopy(copy)
+    const topic = input.kind === 'event' ? input.topic : topicFrom(copy)
     const { data, error } = await supabase!
       .from('content_items')
       .insert({
-        kind: 'linkedin_post', run_source: 'manual', topic, topic_key: topicKey(topic) || 'a post', hook: parts.hook, body: parts.body, close_line: parts.closeLine,
-        draft_original: copy, word_count: copy.trim().split(/\s+/).length, format_ok: true, status, planned_for: plannedFor, posted_on: status === 'posted' ? plannedFor : null,
+        kind: input.kind, run_source: 'manual', topic, topic_key: topicKey(topic) || 'a post', hook: parts.hook, body: parts.body, close_line: parts.closeLine,
+        draft_original: copy || null, word_count: copy.trim() ? copy.trim().split(/\s+/).length : null, format_ok: true, status, planned_for: plannedFor, posted_on: status === 'posted' ? plannedFor : null,
+        event_type: input.kind === 'event' ? input.eventType : null, event_time: input.kind === 'event' ? input.eventTime : null,
       })
       .select('id')
       .single()
@@ -1974,6 +1987,9 @@ const live: DataSource = {
     if (patch.impressions !== undefined) row.impressions = patch.impressions
     if (patch.comments !== undefined) row.comments = patch.comments
     if (patch.inboundMessages !== undefined) row.inbound_messages = patch.inboundMessages
+    if (patch.topic !== undefined) row.topic = patch.topic
+    if (patch.eventType !== undefined) row.event_type = patch.eventType
+    if (patch.eventTime !== undefined) row.event_time = patch.eventTime
     const { error } = await supabase!.from('content_items').update(row).eq('id', id)
     fail(error)
   },

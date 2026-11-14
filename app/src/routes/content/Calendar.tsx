@@ -3,14 +3,15 @@ import { useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Field } from '../../components/Field'
 import { HeroStat } from '../../components/HeroStat'
+import { Icon } from '../../components/Icon'
 import { Note } from '../../components/Note'
 import { PageHeader } from '../../components/PageHeader'
 import { PillButton } from '../../components/PillButton'
 import { Dots, EmptyLine } from '../../components/Quiet'
 import { Row } from '../../components/Row'
 import { TextLink } from '../../components/TextLink'
-import { DAY_NAMES, composerStates, copyOf, dayTitle, daysBetween, monthGrid, monthOf, monthTitle, postedInWeek, postsOn, readyDrafts, shiftMonth, splitCopy, stateWord } from '../../lib/calendar'
-import { data, type ContentItem, type ContentPatch, type ContentStatus } from '../../lib/data'
+import { DAY_NAMES, composerStates, copyOf, dayTitle, daysBetween, eventStates, eventTypeChoices, eventTypeWord, monthGrid, monthOf, monthTitle, postedInWeek, postsOn, readyDrafts, shiftMonth, splitCopy, stateWord } from '../../lib/calendar'
+import { data, type ContentItem, type ContentPatch, type ContentStatus, type EventType } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { sections } from '../../lib/sections'
@@ -18,11 +19,12 @@ import { mondayOf, ukClock } from '../../lib/time'
 import { KEY } from './Drafts'
 
 // Content, Calendar (the calendar handover of 14 November 2026 in the RecOS
-// look; Mia asked for a month, not a week): two numbers, then a month grid,
-// Monday to Sunday, today marked, the other months' days dimmed, a post as a
-// quiet chip on its day. A day opens a composer window over the sheet: the
-// day, the post, its state, Save; Bin with a confirm step; a guard on unsaved
-// text. Last month, This month and Next month are text links.
+// look; Jason: one calendar for posts and events, a month, not a week): two
+// numbers, then a month grid, Monday to Sunday, today marked, the other
+// months' days dimmed, a post or an event as a quiet chip on its day. A day
+// opens a composer window over the sheet: a post or an event, the day, the
+// state, Save; Bin with a confirm step; a guard on unsaved text. Events are
+// Jason's own; nothing syncs from Outlook.
 
 type Composer = { kind: 'day'; date: string } | { kind: 'post'; id: string }
 
@@ -62,7 +64,7 @@ export function Calendar() {
     })
   }
 
-  // The screen first, the server second (25.5). Posted asks for nothing (31.2).
+  // The screen first, the server second (25.5).
   async function patch(c: ContentItem, change: ContentPatch) {
     const before = items.data
     setQueryData<ContentItem[]>(KEY, (rows) => (rows ?? []).map((r) => (r.id === c.id ? { ...r, ...change } : r)))
@@ -120,13 +122,21 @@ export function Calendar() {
                     key={c.id}
                     type="button"
                     data-row
+                    data-kind={c.kind}
                     onClick={() => openComposer({ kind: 'post', id: c.id })}
-                    title={`${c.hook ?? c.topic}. ${stateWord[c.status]}`}
+                    title={`${c.hook ?? c.topic}. ${c.kind === 'event' ? (c.status === 'posted' ? 'Held' : 'Event') : stateWord[c.status]}`}
                     className={`flex min-h-7 w-full items-start gap-1.5 rounded-card px-1 text-left text-label hover:bg-paper ${c.status === 'posted' ? 'text-ink-3' : 'text-ink'}`}
                   >
-                    <span aria-hidden data-dot={c.status === 'posted' ? 'solid' : 'hollow'} className={`mt-1.5 block size-2 shrink-0 rounded-pill border border-ink ${c.status === 'posted' ? 'bg-ink' : 'bg-transparent'}`} />
-                    <span className="line-clamp-2">{c.hook ?? c.topic}</span>
-                    <span className="sr-only">. {stateWord[c.status]}</span>
+                    {c.kind === 'event' ? (
+                      <Icon name="calendar" size={11} className="mt-1 shrink-0" />
+                    ) : (
+                      <span aria-hidden data-dot={c.status === 'posted' ? 'solid' : 'hollow'} className={`mt-1.5 block size-2 shrink-0 rounded-pill border border-ink ${c.status === 'posted' ? 'bg-ink' : 'bg-transparent'}`} />
+                    )}
+                    <span className="line-clamp-2">
+                      {c.kind === 'event' && c.eventTime ? `${c.eventTime} ` : ''}
+                      {c.hook ?? c.topic}
+                    </span>
+                    <span className="sr-only">. {c.kind === 'event' ? (c.status === 'posted' ? 'Held' : 'Event') : stateWord[c.status]}</span>
                   </button>
                 ))}
               </div>
@@ -167,14 +177,16 @@ export function Calendar() {
   )
 }
 
-type ComposerProps = {
+export type ComposerProps = {
   date: string
   post?: ContentItem
   ready: ContentItem[]
   today: string
+  /** Start as an event rather than a post, with this name (from an event idea). */
+  startAs?: { kind: 'event'; topic?: string }
   onPlace: (draft: ContentItem, date: string) => void
   onClose: () => void
-  onSaved: () => void
+  onSaved: (made?: ContentItem) => void
 }
 
 /** A whole number or nothing. */
@@ -184,29 +196,50 @@ function whole(text: string): number | null | 'bad' {
   return /^\d+$/.test(t) ? Number(t) : 'bad'
 }
 
-// The composer: create and edit in one window. On a phone it is the sheet.
-function ComposerCard({ date, post, ready, today, onPlace, onClose, onSaved }: ComposerProps) {
-  const initial = { day: date, copy: post ? copyOf(post) : '', status: (post?.status ?? 'planned') as ContentStatus }
+// The composer: a post or an event, create and edit in one window. On a
+// phone it is the sheet.
+export function ComposerCard({ date, post, ready, today, startAs, onPlace, onClose, onSaved }: ComposerProps) {
+  const isEvent = post ? post.kind === 'event' : startAs?.kind === 'event'
+  const initial = {
+    day: date,
+    copy: post ? (post.kind === 'event' ? (post.body ?? '') : copyOf(post)) : '',
+    status: (post?.status ?? 'planned') as ContentStatus,
+    name: post?.kind === 'event' ? post.topic : (startAs?.topic ?? ''),
+    eventType: (post?.eventType ?? 'panel') as EventType,
+    time: post?.eventTime ?? '',
+  }
+  const [kind, setKind] = useState<'linkedin_post' | 'event'>(isEvent ? 'event' : 'linkedin_post')
   const [day, setDay] = useState(initial.day)
   const [copy, setCopy] = useState(initial.copy)
   const [status, setStatus] = useState<ContentStatus>(initial.status)
+  const [name, setName] = useState(initial.name)
+  const [eventType, setEventType] = useState<EventType>(initial.eventType)
+  const [time, setTime] = useState(initial.time)
   const [numbers, setNumbers] = useState({ impressions: post?.impressions?.toString() ?? '', comments: post?.comments?.toString() ?? '', messages: post?.inboundMessages?.toString() ?? '' })
   const [problem, setProblem] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [asking, setAsking] = useState<'bin' | 'discard' | null>(null)
 
-  const dirty = copy !== initial.copy || day !== initial.day || status !== initial.status
-  const askNumbers = post?.status === 'posted' && post.postedOn !== null && daysBetween(post.postedOn, today) >= 7
-  const stateChoices = composerStates.filter((s) => s.value !== 'draft' || !post || post.status === 'draft' || post.status === 'approved' || post.status === 'held')
+  const dirty = copy !== initial.copy || day !== initial.day || status !== initial.status || name !== initial.name || eventType !== initial.eventType || time !== initial.time
+  const askNumbers = kind === 'linkedin_post' && post?.status === 'posted' && post.postedOn !== null && daysBetween(post.postedOn, today) >= 7
+  const stateChoices = kind === 'event' ? eventStates : composerStates.filter((s) => s.value !== 'draft' || !post || post.status === 'draft' || post.status === 'approved' || post.status === 'held')
 
   async function save() {
-    if (copy.trim() === '') {
+    if (kind === 'event' && name.trim() === '') {
+      setProblem('Give the event a name.')
+      return
+    }
+    if (kind === 'linkedin_post' && copy.trim() === '') {
       setProblem('Write the post first.')
       return
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
       setProblem('Pick a day.')
+      return
+    }
+    if (kind === 'event' && time.trim() !== '' && !/^\d{2}:\d{2}$/.test(time.trim())) {
+      setProblem('A time looks like 08:30.')
       return
     }
     const parsed = { impressions: whole(numbers.impressions), comments: whole(numbers.comments), messages: whole(numbers.messages) }
@@ -219,14 +252,20 @@ function ComposerCard({ date, post, ready, today, onPlace, onClose, onSaved }: C
     setError(null)
     try {
       if (post) {
-        const change: ContentPatch = { ...splitCopy(copy), status, plannedFor: day }
+        const change: ContentPatch =
+          kind === 'event'
+            ? { topic: name.trim(), eventType, eventTime: time.trim() || null, body: copy.trim() || null, status, plannedFor: day }
+            : { ...splitCopy(copy), status, plannedFor: day }
         if (status === 'posted') change.postedOn = post.postedOn ?? day
         if (askNumbers) Object.assign(change, { impressions: parsed.impressions as number | null, comments: parsed.comments as number | null, inboundMessages: parsed.messages as number | null })
         await data.updateContent(post.id, change)
+        onSaved()
       } else {
-        await data.addContent({ copy, plannedFor: day, status })
+        const made = await data.addContent(
+          kind === 'event' ? { kind: 'event', copy: copy.trim(), topic: name.trim(), eventType, eventTime: time.trim() || null, plannedFor: day, status } : { kind: 'linkedin_post', copy, plannedFor: day, status },
+        )
+        onSaved(made)
       }
-      onSaved()
     } catch {
       setError('That did not save. Try again.')
       setBusy(false)
@@ -248,10 +287,11 @@ function ComposerCard({ date, post, ready, today, onPlace, onClose, onSaved }: C
 
   const lines = Math.max(4, copy.split('\n').length + 1)
   const count = copy.length
+  const label = post ? (kind === 'event' ? 'Event' : 'Post') : kind === 'event' ? 'New event' : 'New post'
 
   return (
     <Card
-      label={post ? 'Post' : 'New post'}
+      label={label}
       title={dayTitle(day)}
       tone={status === 'posted' ? 'clear' : status === 'planned' ? 'pending' : 'new'}
       beforeClose={() => {
@@ -260,7 +300,32 @@ function ComposerCard({ date, post, ready, today, onPlace, onClose, onSaved }: C
         return false
       }}
       sections={[
-        ...(!post && ready.length > 0
+        ...(!post
+          ? [
+              {
+                body: (
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="What">
+                    {(['linkedin_post', 'event'] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-current={k === kind || undefined}
+                        onClick={() => {
+                          setKind(k)
+                          setProblem(null)
+                        }}
+                        className={`inline-flex h-10 items-center gap-2 rounded-pill border px-4 text-body ${k === kind ? 'border-ink bg-ink text-sheet' : 'border-ink text-ink hover:bg-paper'}`}
+                      >
+                        <Icon name={k === 'event' ? 'calendar' : 'pen'} size={14} />
+                        {k === 'event' ? 'Event' : 'Post'}
+                      </button>
+                    ))}
+                  </div>
+                ),
+              },
+            ]
+          : []),
+        ...(!post && kind === 'linkedin_post' && ready.length > 0
           ? [
               {
                 label: 'Ready to place here',
@@ -277,21 +342,36 @@ function ComposerCard({ date, post, ready, today, onPlace, onClose, onSaved }: C
         {
           body: (
             <form
-              className="flex flex-col gap-6"
-              aria-label={post ? 'Edit the post' : 'Write a post'}
+              className="flex flex-col gap-5"
+              aria-label={post ? (kind === 'event' ? 'Edit the event' : 'Edit the post') : kind === 'event' ? 'Add an event' : 'Write a post'}
               onSubmit={(e) => {
                 e.preventDefault()
                 void save()
               }}
             >
-              <Field label="Day" kind="date" value={day} onChange={setDay} error={problem === 'Pick a day.' ? problem : undefined} />
-              <div className="flex flex-col gap-1">
-                <Field label="Post" kind="lines" rows={Math.min(lines, 14)} value={copy} onChange={setCopy} placeholder="The hook on its own line, then the post" autoFocus={!post} error={problem === 'Write the post first.' ? problem : undefined} />
-                <p className="font-mono text-label text-ink-3" aria-live="polite">
-                  {count} characters
-                </p>
-              </div>
-              <Field label="State" kind="choice" value={status} onChange={(v) => setStatus(v as ContentStatus)} choices={stateChoices} />
+              {kind === 'event' ? (
+                <>
+                  <Field label="Name" value={name} onChange={setName} autoFocus={!post} placeholder="PMM breakfast on pricing pages" error={problem === 'Give the event a name.' ? problem : undefined} />
+                  <div className="grid gap-5 sm:grid-cols-3">
+                    <Field label="Type" kind="choice" value={eventType} onChange={(v) => setEventType(v as EventType)} choices={eventTypeChoices} />
+                    <Field label="Day" kind="date" value={day} onChange={setDay} error={problem === 'Pick a day.' ? problem : undefined} />
+                    <Field label="Time" value={time} onChange={setTime} placeholder="08:30" error={problem === 'A time looks like 08:30.' ? problem : undefined} />
+                  </div>
+                  <Field label="Notes" kind="lines" rows={3} value={copy} onChange={setCopy} placeholder="Where, who, what to prepare" />
+                  <Field label="State" kind="choice" value={status} onChange={(v) => setStatus(v as ContentStatus)} choices={stateChoices} />
+                </>
+              ) : (
+                <>
+                  <Field label="Day" kind="date" value={day} onChange={setDay} error={problem === 'Pick a day.' ? problem : undefined} />
+                  <div className="flex flex-col gap-1">
+                    <Field label="Post" kind="lines" rows={Math.min(lines, 12)} value={copy} onChange={setCopy} placeholder="The hook on its own line, then the post" autoFocus={!post} error={problem === 'Write the post first.' ? problem : undefined} />
+                    <p className="font-mono text-label text-ink-3" aria-live="polite">
+                      {count} characters
+                    </p>
+                  </div>
+                  <Field label="State" kind="choice" value={status} onChange={(v) => setStatus(v as ContentStatus)} choices={stateChoices} />
+                </>
+              )}
               {askNumbers && (
                 <fieldset className="flex flex-col gap-4">
                   <legend className="label-caps mb-2 text-ink-2">Numbers, a week on</legend>
@@ -310,8 +390,8 @@ function ComposerCard({ date, post, ready, today, onPlace, onClose, onSaved }: C
           ? [
               {
                 body: (
-                  <div className="flex flex-wrap items-center gap-6" role="group" aria-label="Bin this post?">
-                    <p className="text-body text-ink">Bin this post?</p>
+                  <div className="flex flex-wrap items-center gap-6" role="group" aria-label={kind === 'event' ? 'Bin this event?' : 'Bin this post?'}>
+                    <p className="text-body text-ink">{kind === 'event' ? 'Bin this event?' : 'Bin this post?'}</p>
                     <PillButton label="Bin it" onClick={() => void bin()} busy={busy} icon="bin" />
                     <TextLink label="Keep it" onClick={() => setAsking(null)} />
                   </div>
@@ -338,6 +418,7 @@ function ComposerCard({ date, post, ready, today, onPlace, onClose, onSaved }: C
         <>
           <TextLink label="Cancel" onClick={() => (dirty ? setAsking('discard') : onClose())} />
           {post && <TextLink label="Bin" onClick={() => setAsking('bin')} icon="bin" />}
+          {kind === 'event' && post && <span className="font-mono text-label text-ink-3">{eventTypeWord[eventType]}</span>}
         </>
       }
       onClose={onClose}

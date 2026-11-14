@@ -474,7 +474,7 @@ export function freshSampleContent(): ContentItem[] {
   const base: ContentItem = {
     id: '', kind: 'linkedin_post', runSource: 'calls', angle: 'hiring_manager', topic: '', hook: null, body: sampleBody, closeLine: 'Fix the brief first.', hashtags: ['productmarketing'],
     dataPoint: null, dataPointUrl: null, promptedBy: null, formatOk: true, formatReason: null, rank: 0, status: 'draft', heldReason: null,
-    plannedFor: null, postedOn: null, postUrl: null, impressions: null, comments: null, inboundMessages: null, createdAt: `${daysAgo(1)}T07:00:00Z`,
+    plannedFor: null, postedOn: null, postUrl: null, impressions: null, comments: null, inboundMessages: null, eventType: null, eventTime: null, createdAt: `${daysAgo(1)}T07:00:00Z`,
   }
   return [
     { ...base, id: 'c1', runSource: 'recruiting_news', angle: 'talent_market', topic: 'PMM job posts asking for AI tooling', hook: 'Four in ten PMM job posts now ask for AI tooling.', dataPoint: '41% of PMM roles now ask for AI tooling', dataPointUrl: 'https://example.com/report', rank: 75, hashtags: ['productmarketing', 'hiring'] },
@@ -483,6 +483,7 @@ export function freshSampleContent(): ContentItem[] {
     { ...base, id: 'c4', topic: 'Three questions a CMO should ask before hiring a PMM', hook: 'Three questions a CMO should ask before hiring a PMM.', status: 'approved', rank: 60, createdAt: `${daysAgo(5)}T07:00:00Z` },
     { ...base, id: 'c5', topic: 'The best PMM hires this year', hook: 'The best PMM hires I see this year have one thing in common.', status: 'posted', postedOn: daysAgo(2), postUrl: 'https://example.com/post', impressions: 1200, comments: 14, inboundMessages: 3, rank: 70, createdAt: `${daysAgo(9)}T07:00:00Z` },
     { ...base, id: 'c7', topic: 'Three questions a CMO should ask before hiring a PMM', hook: 'Three questions a CMO should ask before hiring a PMM.', status: 'planned', plannedFor: daysAgo(-1), rank: 55, createdAt: `${daysAgo(4)}T07:00:00Z` },
+    { ...base, id: 'c8', kind: 'event', runSource: 'manual', angle: null, topic: 'PMM breakfast on pricing pages', body: 'Eight seats at the club. Bring the pricing page data point.', closeLine: null, hashtags: [], status: 'planned', plannedFor: daysAgo(-6), eventType: 'breakfast', eventTime: '08:30', createdAt: `${daysAgo(7)}T07:00:00Z` },
     { ...base, id: 'c6', kind: 'idea', runSource: 'manual', angle: null, topic: 'A post on levelling', body: null, closeLine: null, hashtags: [], status: 'idea', createdAt: `${daysAgo(3)}T07:00:00Z` },
   ]
 }
@@ -1259,10 +1260,12 @@ export const sampleSource: DataSource = {
   async contentItems() {
     return sampleContent.filter((c) => c.status !== 'binned').map((c) => ({ ...c })).sort((a, b) => b.rank - a.rank || b.createdAt.localeCompare(a.createdAt))
   },
-  async addContent({ copy, plannedFor, status }) {
-    const parts = splitCopy(copy)
+  async addContent(input) {
+    const { copy, plannedFor, status } = input
+    const parts = input.kind === 'event' ? { hook: null, body: copy || null, closeLine: null } : splitCopy(copy)
     const made: ContentItem = {
-      id: `c-${Date.now()}`, kind: 'linkedin_post', runSource: 'manual', angle: null, topic: topicFrom(copy), hook: parts.hook, body: parts.body, closeLine: parts.closeLine, hashtags: [],
+      id: `c-${Date.now()}`, kind: input.kind, runSource: 'manual', angle: null, topic: input.kind === 'event' ? input.topic : topicFrom(copy), hook: parts.hook, body: parts.body, closeLine: parts.closeLine, hashtags: [],
+      eventType: input.kind === 'event' ? input.eventType : null, eventTime: input.kind === 'event' ? input.eventTime : null,
       dataPoint: null, dataPointUrl: null, promptedBy: null, formatOk: true, formatReason: null, rank: 0, status, heldReason: null,
       plannedFor, postedOn: status === 'posted' ? plannedFor : null, postUrl: null, impressions: null, comments: null, inboundMessages: null, createdAt: new Date().toISOString(),
     }

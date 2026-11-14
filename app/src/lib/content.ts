@@ -20,8 +20,28 @@ export const angleWord: Record<string, string> = {
 /** The deck: unreviewed drafts, highest ranked first, then newest (17.3). */
 export function draftsDeck(items: ContentItem[]): ContentItem[] {
   return items
-    .filter((c) => c.status === 'draft' && c.kind !== 'idea' && c.kind !== 'testimonial')
+    .filter((c) => c.status === 'draft' && isPostDraft(c))
     .sort((a, b) => b.rank - a.rank || b.createdAt.localeCompare(a.createdAt))
+}
+
+/** A LinkedIn post, job post or blog: not an idea, a testimonial or an event. */
+export function isPostDraft(c: ContentItem): boolean {
+  return c.kind === 'linkedin_post' || c.kind === 'job_post' || c.kind === 'blog'
+}
+
+export type DraftGroup = 'new' | 'approved' | 'scheduled'
+export const groupWord: Record<DraftGroup, string> = { new: 'New', approved: 'Approved', scheduled: 'Scheduled' }
+
+/**
+ * The gallery (Jason, 14 November 2026): New by rank, then Approved with no
+ * day yet, then Scheduled by day. Posted and binned posts live on the calendar.
+ */
+export function draftsGallery(items: ContentItem[]): { item: ContentItem; group: DraftGroup }[] {
+  const posts = items.filter(isPostDraft)
+  const fresh = posts.filter((c) => c.status === 'draft').sort((a, b) => b.rank - a.rank || b.createdAt.localeCompare(a.createdAt))
+  const approved = posts.filter((c) => c.status === 'approved' && c.plannedFor === null).sort((a, b) => b.rank - a.rank)
+  const scheduled = posts.filter((c) => c.status === 'planned' || (c.status === 'approved' && c.plannedFor !== null)).sort((a, b) => (a.plannedFor ?? '').localeCompare(b.plannedFor ?? ''))
+  return [...fresh.map((item) => ({ item, group: 'new' as const })), ...approved.map((item) => ({ item, group: 'approved' as const })), ...scheduled.map((item) => ({ item, group: 'scheduled' as const }))]
 }
 
 /** The editable text: the body, a blank line, the close. */

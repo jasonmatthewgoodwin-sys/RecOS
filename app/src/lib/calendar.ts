@@ -1,4 +1,4 @@
-import type { ContentItem, ContentStatus } from './data'
+import type { ContentItem, ContentStatus, EventType } from './data'
 import { shiftDate, weekdayOf } from './time'
 
 // The content calendar (31.2, and the calendar handover of 14 November 2026
@@ -51,6 +51,15 @@ export const stateWord: Record<ContentStatus, string> = {
   held: 'Held',
   binned: 'Binned',
 }
+
+/** The states an event moves through: planned, then held. */
+export const eventStates: { value: ContentStatus; label: string }[] = [
+  { value: 'planned', label: 'Planned' },
+  { value: 'posted', label: 'Held' },
+]
+
+export const eventTypeWord: Record<EventType, string> = { panel: 'Panel', happy_hour: 'Happy hour', webinar: 'Webinar', breakfast: 'Breakfast', other: 'Other' }
+export const eventTypeChoices = (Object.keys(eventTypeWord) as EventType[]).map((value) => ({ value, label: eventTypeWord[value] }))
 
 /** The states the composer offers. */
 export const composerStates: { value: ContentStatus; label: string }[] = [

@@ -75,7 +75,7 @@ export const sections: Section[] = [
     pages: [
       { label: 'Calendar', slug: 'calendar' },
       { label: 'Drafts', slug: 'drafts' },
-      { label: 'Ideas', slug: 'ideas' },
+      { label: 'Events', slug: 'events' },
       { label: 'Testimonials', slug: 'testimonials' },
     ],
   },

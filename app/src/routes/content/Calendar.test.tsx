@@ -78,7 +78,7 @@ describe('Content calendar', () => {
     await userEvent.type(within(card).getByLabelText('Post'), 'A hook on its own line.{enter}{enter}Then the post itself.')
     expect(within(card).getByText('46 characters')).toBeInTheDocument()
     await userEvent.click(within(card).getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(add).toHaveBeenCalledWith({ copy: 'A hook on its own line.\n\nThen the post itself.', plannedFor: '2026-11-10', status: 'planned' }))
+    await waitFor(() => expect(add).toHaveBeenCalledWith({ kind: 'linkedin_post', copy: 'A hook on its own line.\n\nThen the post itself.', plannedFor: '2026-11-10', status: 'planned' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await waitFor(() => expect(within(day('2026-11-10')).getByRole('button', { name: /^A hook on its own line/ })).toBeInTheDocument())
   })

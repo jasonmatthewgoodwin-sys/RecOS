@@ -1195,6 +1195,18 @@ test('0030: the owner asks for a profile pull, the signals agent sees the reques
   await rows(`select agent_run_finish($1, 'ok')`, [start.run_id])
 })
 
+test('0031: an event sits on the content calendar with a type and a time, and counts once towards events_held when held', async () => {
+  await owner(async () => {
+    const [e] = await rows(`insert into content_items (kind, topic, topic_key, status, planned_for, event_type, event_time) values ('event', 'PMM breakfast on pricing pages', 'pmm breakfast on pricing pages', 'planned', current_date + 6, 'breakfast', '08:30') returning id`)
+    assert.match(await refused(`update content_items set event_type = 'gala' where id = '${e.id}'`), /check constraint/)
+    assert.match(await refused(`update content_items set event_time = '8.30am' where id = '${e.id}'`), /check constraint/)
+    await db.query(`update content_items set status = 'posted' where id = $1`, [e.id])
+    await db.query(`update content_items set impressions = 1 where id = $1`, [e.id])
+    assert.equal(await count(`kpi_events where kpi = 'events_held' and source_id = '${e.id}'`), 1)
+    assert.match(await refused(`insert into content_items (kind, topic, topic_key) values ('gala', 'x', 'x')`), /check constraint/)
+  })
+})
+
 // ---------------------------------------------------------------- run
 
 let failed = 0
