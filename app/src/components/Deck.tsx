@@ -9,7 +9,7 @@ import { TickMeter } from './TickMeter'
 
 export type DeckItem = { id: string }
 
-export type DeckAction = 'primary' | 'bin' | 'snooze'
+export type DeckAction = 'primary' | 'bin' | 'snooze' | 'extra'
 
 export type DeckChoice = { label: string; value: string }
 
@@ -31,6 +31,8 @@ type Props<T extends DeckItem> = {
   snoozeChoices?: DeckChoice[]
   /** Called when the owner clicks Undo within 8 seconds of an action (INBX-2). */
   onUndo?: (item: T, action: DeckAction) => void
+  /** Other ways to deal with the item, as text links: Handled offline, No action needed (21.2). */
+  extraActions?: (item: T) => { label: string; onClick: (item: T) => void }[]
   /** Quiet links after the controls, such as Open source. */
   links?: (item: T) => ReactNode
   /** The List link in the corner. */
@@ -54,6 +56,7 @@ export function Deck<T extends DeckItem>({
   onSnooze,
   snoozeChoices,
   onUndo,
+  extraActions,
   links,
   onList,
   waiting,
@@ -233,6 +236,16 @@ export function Deck<T extends DeckItem>({
         <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2">
           <PillButton kind="primary" label={primaryAction.label(current)} onClick={primary} />
           {undo && <TextLink label="Undo" onClick={undoLast} />}
+          {extraActions?.(current).map((a) => (
+            <TextLink
+              key={a.label}
+              label={a.label}
+              onClick={() => {
+                a.onClick(current)
+                deal(current, 'extra')
+              }}
+            />
+          ))}
           <TextLink label="Skip" onClick={skip} />
           {onSnooze && <TextLink label="Snooze" onClick={snooze} active={asking === 'snooze'} />}
           {onBin && <TextLink label="Bin" onClick={bin} active={asking === 'bin'} />}

@@ -108,6 +108,28 @@ export type InboxItem = {
 /** What the primary button did, so Undo can put it back (INBX-2). */
 export type InboxAction = 'done' | 'approve' | 'bin' | 'snooze' | 'pass'
 
+export type FollowUpStatus = 'open' | 'sent' | 'done' | 'handled_offline' | 'snoozed' | 'closed'
+
+/** One next action owed to a person, or awaited from them (section 8.2). */
+export type FollowUp = {
+  id: string
+  personId: string | null
+  personName: string
+  company: string | null
+  kind: string
+  reason: string
+  source: string
+  direction: 'owed' | 'waiting'
+  /** Plain date */
+  dueOn: string
+  status: FollowUpStatus
+  snoozedUntil: string | null
+  /** The paired message, where one exists (21.3): its channel, level and draft. */
+  message: { id: string; channel: 'email' | 'linkedin'; level: 'automatic' | 'one_click' | 'draft_only'; body: string | null } | null
+  /** ISO timestamp */
+  createdAt: string
+}
+
 export type InboxActionExtra = {
   /** The draft as the owner left it, saved with the action (INBX-3). */
   draft?: string
@@ -152,6 +174,18 @@ export interface DataSource {
   undoInbox(item: InboxItem, action: InboxAction): Promise<void>
   /** INBX-5: bin every stale item in one go. */
   binStale(ids: string[]): Promise<void>
+
+  /** Every open or snoozed follow-up. The page orders them (21.4). */
+  followUps(): Promise<FollowUp[]>
+  /**
+   * Move a follow-up along its lifecycle (21.2). Completion dates, the
+   * on-time flag and the KPI event are set by the database (P1-30).
+   */
+  setFollowUpStatus(id: string, status: FollowUpStatus, extra?: { snoozedUntil?: string; draft?: string }): Promise<void>
+  /** T-FUP-5: at 90 minutes the rest of the Monday block moves to a date. */
+  redateFollowUps(ids: string[], dueOn: string): Promise<void>
+  /** 21.5: how long the Monday block took, on this week's review row. */
+  recordFollowUpBlock(minutes: number): Promise<void>
 }
 
 function fail(error: { message: string } | null): void {
@@ -393,6 +427,81 @@ const live: DataSource = {
     if (ids.length === 0) return
     const { error } = await supabase!.from('inbox_items').update({ status: 'binned', bin_reason: 'Old' }).in('id', ids)
     fail(error)
+  },
+
+  async followUps() {
+    const { data, error } = await supabase!
+      .from('follow_ups')
+      .select(
+        'id, person_id, person_name, company, kind, reason, source, direction, due_on, status, snoozed_until, created_at, ' +
+          'message:messages!message_id (id, channel, level_at_creation, body)',
+      )
+      .in('status', ['open', 'snoozed'])
+      .order('due_on', { ascending: true })
+    fail(error)
+    type Row = {
+      id: string
+      person_id: string | null
+      person_name: string
+      company: string | null
+      kind: string
+      reason: string
+      source: string
+      direction: 'owed' | 'waiting'
+      due_on: string
+      status: FollowUpStatus
+      snoozed_until: string | null
+      created_at: string
+      message: { id: string; channel: 'email' | 'linkedin'; level_at_creation: 'automatic' | 'one_click' | 'draft_only'; body: string | null } | null
+    }
+    return ((data ?? []) as unknown as Row[]).map((r) => ({
+      id: r.id,
+      personId: r.person_id,
+      personName: r.person_name,
+      company: r.company,
+      kind: r.kind,
+      reason: r.reason,
+      source: r.source,
+      direction: r.direction,
+      dueOn: r.due_on,
+      status: r.status,
+      snoozedUntil: r.snoozed_until,
+      message: r.message ? { id: r.message.id, channel: r.message.channel, level: r.message.level_at_creation, body: r.message.body } : null,
+      createdAt: r.created_at,
+    }))
+  },
+
+  async setFollowUpStatus(id, status, extra = {}) {
+    if (extra.draft !== undefined) {
+      // The edited draft lives on the paired message, which is still a draft.
+      const { data } = await supabase!.from('follow_ups').select('message_id').eq('id', id).single()
+      const messageId = (data as { message_id: string | null } | null)?.message_id
+      if (messageId) {
+        const { error } = await supabase!.from('messages').update({ body: extra.draft }).eq('id', messageId)
+        fail(error)
+      }
+    }
+    const change: Record<string, unknown> = { status }
+    if (status === 'snoozed') change.snoozed_until = extra.snoozedUntil
+    const { error } = await supabase!.from('follow_ups').update(change).eq('id', id)
+    fail(error)
+  },
+
+  async redateFollowUps(ids, dueOn) {
+    if (ids.length === 0) return
+    const { error } = await supabase!.from('follow_ups').update({ due_on: dueOn }).in('id', ids)
+    fail(error)
+  },
+
+  async recordFollowUpBlock(minutes) {
+    const week = ukClock(new Date()).date
+    const { data, error } = await supabase!.rpc('week_of', { ts: new Date().toISOString() })
+    fail(error)
+    const monday = (data as string | null) ?? week
+    const { error: e2 } = await supabase!
+      .from('weekly_reviews')
+      .upsert({ week: monday, followup_block_minutes: minutes }, { onConflict: 'owner_id,week' })
+    fail(e2)
   },
 }
 

@@ -10,6 +10,7 @@ import { landing, sectionFor, sections, settings, visibleSections, type Section 
 import { Gallery } from './routes/gallery/Gallery'
 import { Home } from './routes/home/Home'
 import { Inbox } from './routes/inbox/Inbox'
+import { FollowUps } from './routes/leads/FollowUps'
 import { Jobs } from './routes/leads/Jobs'
 import { SectionPage } from './routes/SectionPage'
 import { Profile } from './routes/settings/Profile'
@@ -18,6 +19,7 @@ import { SignIn } from './routes/SignIn'
 // The index pages built so far. Anything else shows the SectionPage placeholder.
 const built: Record<string, ReactNode> = {
   'leads/jobs': <Jobs />,
+  'leads/follow-ups': <FollowUps />,
 }
 
 function sectionRoutes(section: Section) {

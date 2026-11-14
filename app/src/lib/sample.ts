@@ -1,7 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { DataSource, InboxAction, InboxItem, JobLead } from './data'
+import type { DataSource, FollowUp, InboxAction, InboxItem, JobLead } from './data'
 import { inboxStatusAfter } from './data'
 import { ukClock } from './time'
 
@@ -286,6 +286,54 @@ export function resetSampleInbox() {
   sampleInbox = freshSampleInbox()
 }
 
+function fu(over: Partial<FollowUp> & Pick<FollowUp, 'id' | 'personName' | 'kind' | 'reason' | 'dueOn'>): FollowUp {
+  return {
+    personId: null,
+    company: null,
+    source: 'call',
+    direction: 'owed',
+    status: 'open',
+    snoozedUntil: null,
+    message: null,
+    createdAt: hoursAgo(30),
+    ...over,
+  }
+}
+
+// The sample week's follow-ups, mirroring db/seed/sample_week.sql with more
+// so the deck is worth working: three late, three due today, two later this
+// week, two the owner is waiting on, and one snoozed.
+export function freshSampleFollowUps(): FollowUp[] {
+  const monday = thisMonday()
+  const lastWeek = (d: number) => new Date(Date.parse(`${monday}T10:00:00Z`) - d * 86_400_000).toISOString()
+  return [
+    fu({ id: 'fu-ada', personName: 'Ada Example', company: 'Northwind Sample Co', kind: 'after_candidate_call', reason: 'Send the role outline you promised', dueOn: daysAgo(8), createdAt: lastWeek(4), message: { id: 'm-ada', channel: 'email', level: 'one_click', body: 'Hi Ada, good to speak. Here is the outline I promised.' } }),
+    fu({ id: 'fu-dev', personName: 'Dev Madeup', company: 'Globex Fiction', kind: 'after_candidate_call', reason: 'Share feedback from the first call', dueOn: daysAgo(7), createdAt: lastWeek(3) }),
+    fu({ id: 'fu-ben', personName: 'Ben Sample', company: 'Contoso Demo Inc', kind: 'after_coaching', reason: 'Send the two examples discussed', dueOn: daysAgo(6), createdAt: lastWeek(2), message: { id: 'm-ben', channel: 'email', level: 'one_click', body: 'Ben, the two examples we talked about are attached.' } }),
+    fu({ id: 'fu-gia', personName: 'Gia Imaginary', company: 'Initech Mock', kind: 'after_client_meeting', reason: 'Summarise what was agreed on fees', dueOn: daysAgo(0), createdAt: lastWeek(1), message: { id: 'm-gia', channel: 'email', level: 'draft_only', body: 'Gia, as agreed today: 22% on a retained basis, first shortlist in ten working days.' } }),
+    fu({ id: 'fu-hal', personName: 'Hal Hypothetical', company: 'Northwind Sample Co', kind: 'referral_thanks', reason: 'Thank them for the introduction to Eve', dueOn: daysAgo(0), createdAt: hoursAgo(50) }),
+    fu({ id: 'fu-ivy', personName: 'Ivy Invented', company: 'Umbrella Sample', kind: 'league_cadence', reason: 'Six weeks since you last spoke', dueOn: daysAgo(0), source: 'rule', createdAt: hoursAgo(10), message: { id: 'm-ivy', channel: 'linkedin', level: 'draft_only', body: 'Ivy, it has been a while. How is the new team settling in?' } }),
+    fu({ id: 'fu-finn', personName: 'Finn Fictional', company: 'Umbrella Sample', kind: 'after_submission', reason: 'Check in after the client reply', dueOn: plusDays(daysAgo(0), 3), source: 'rule' }),
+    fu({ id: 'fu-jo', personName: 'Jo Placeholder', company: 'Wonka Imaginary Ltd', kind: 'after_interview', reason: 'Call after the second interview', dueOn: plusDays(daysAgo(0), 1), createdAt: hoursAgo(5) }),
+    fu({ id: 'fu-cara', personName: 'Cara Placeholder', company: 'Fabrikam Test Ltd', kind: 'chase', reason: 'Waiting for feedback on two CVs', dueOn: daysAgo(1), source: 'email', direction: 'waiting', createdAt: hoursAgo(80) }),
+    fu({ id: 'fu-kit', personName: 'Kit Sample', company: 'Contoso Demo Inc', kind: 'chase', reason: 'Asked about the start date', dueOn: daysAgo(0), source: 'email', direction: 'waiting', createdAt: hoursAgo(40) }),
+    fu({ id: 'fu-lee', personName: 'Lee Example', company: 'Globex Fiction', kind: 'email_owed', reason: 'Reply about the salary band', dueOn: daysAgo(2), source: 'email', createdAt: hoursAgo(60), message: { id: 'm-lee', channel: 'email', level: 'draft_only', body: 'Lee, thanks for your patience. The band is as we discussed, with room above it for the right person.' } }),
+    fu({ id: 'fu-max', personName: 'Max Madeup', company: 'Initech Mock', kind: 'other', reason: 'Send the reading list', dueOn: plusDays(daysAgo(0), 7), status: 'snoozed', snoozedUntil: plusDays(daysAgo(0), 7), source: 'manual', createdAt: hoursAgo(100) }),
+  ]
+}
+
+function plusDays(date: string, n: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+}
+
+let sampleFollowUps = freshSampleFollowUps()
+
+export function resetSampleFollowUps() {
+  sampleFollowUps = freshSampleFollowUps()
+}
+
+let sampleBlockMinutes: number | null = null
+
 // Chased this week in the sample is eleven from earlier in the week plus the
 // sample leads chased since Monday, so a Chased on the page moves the number.
 const CHASED_BEFORE = 11
@@ -296,7 +344,15 @@ export const sampleSource: DataSource = {
     return sampleInbox.filter((i) => (i.status === 'new' || i.status === 'stale') && i.type !== 'auto_sent').length
   },
   async followUpsDue() {
-    return { due: 3, late: 3, lateFromDay: 'Monday' }
+    const today = ukClock(new Date()).date
+    const due = sampleFollowUps.filter((f) => f.status === 'open' && f.direction === 'owed' && f.dueOn <= today)
+    const late = due.filter((f) => f.dueOn < today).sort((a, b) => a.dueOn.localeCompare(b.dueOn))
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    return {
+      due: due.length,
+      late: late.length,
+      lateFromDay: late.length > 0 ? days[new Date(`${late[0].dueOn}T12:00:00Z`).getUTCDay()] : null,
+    }
   },
   async callsToday() {
     return [
@@ -382,4 +438,27 @@ export const sampleSource: DataSource = {
       }
     }
   },
+
+  async followUps() {
+    return sampleFollowUps.filter((f) => f.status === 'open' || f.status === 'snoozed').map((f) => ({ ...f, message: f.message ? { ...f.message } : null }))
+  },
+  async setFollowUpStatus(id, status, extra = {}) {
+    const found = sampleFollowUps.find((f) => f.id === id)
+    if (!found) throw new Error('No such follow-up')
+    if (status === 'snoozed' && !extra.snoozedUntil) throw new Error('A snooze needs a date')
+    found.status = status
+    found.snoozedUntil = status === 'snoozed' ? (extra.snoozedUntil ?? null) : null
+    if (extra.draft !== undefined && found.message) found.message.body = extra.draft
+  },
+  async redateFollowUps(ids, dueOn) {
+    for (const f of sampleFollowUps) if (ids.includes(f.id)) f.dueOn = dueOn
+  },
+  async recordFollowUpBlock(minutes) {
+    sampleBlockMinutes = minutes
+  },
+}
+
+/** Tests only. */
+export function sampleFollowUpBlockMinutes(): number | null {
+  return sampleBlockMinutes
 }

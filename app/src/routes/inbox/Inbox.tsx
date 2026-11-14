@@ -226,7 +226,7 @@ export function Inbox() {
         binReasons={(item) => binReasons[item.type]}
         onSnooze={(item, until) => void act(item, 'snooze', { snoozedUntil: until })}
         snoozeChoices={snoozeChoices(clock)}
-        onUndo={(item, action) => void undo(item, action === 'primary' ? actionFor(item) : action)}
+        onUndo={(item, action) => void undo(item, action === 'primary' || action === 'extra' ? actionFor(item) : action)}
         links={(item) => (
           <>
             {item.type === 'job_lead' && item.draft !== null && (
