@@ -4,6 +4,7 @@
 import type {
   ContentItem, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
+import { splitCopy, topicFrom } from './calendar'
 import type { SearchHit } from './capture'
 import { ukClock } from './time'
 
@@ -475,6 +476,7 @@ export function freshSampleContent(): ContentItem[] {
     { ...base, id: 'c3', runSource: 'pmm_community', angle: 'candidate', topic: 'What a PMM portfolio should show', hook: 'Your portfolio should show the decision, not the deck.', body: 'Show the decision you shaped, the evidence you used and what happened next. A deck is the artefact. The decision is the work.', closeLine: 'Lead with the decision.', dataPoint: 'Two in three PMM hiring managers ask for a portfolio', dataPointUrl: 'https://example.com/survey', formatOk: false, formatReason: 'body 32 words, under 40', rank: 40, createdAt: `${daysAgo(2)}T07:00:00Z` },
     { ...base, id: 'c4', topic: 'Three questions a CMO should ask before hiring a PMM', hook: 'Three questions a CMO should ask before hiring a PMM.', status: 'approved', rank: 60, createdAt: `${daysAgo(5)}T07:00:00Z` },
     { ...base, id: 'c5', topic: 'The best PMM hires this year', hook: 'The best PMM hires I see this year have one thing in common.', status: 'posted', postedOn: daysAgo(2), postUrl: 'https://example.com/post', impressions: 1200, comments: 14, inboundMessages: 3, rank: 70, createdAt: `${daysAgo(9)}T07:00:00Z` },
+    { ...base, id: 'c7', topic: 'Three questions a CMO should ask before hiring a PMM', hook: 'Three questions a CMO should ask before hiring a PMM.', status: 'planned', plannedFor: daysAgo(-1), rank: 55, createdAt: `${daysAgo(4)}T07:00:00Z` },
     { ...base, id: 'c6', kind: 'idea', runSource: 'manual', angle: null, topic: 'A post on levelling', body: null, closeLine: null, hashtags: [], status: 'idea', createdAt: `${daysAgo(3)}T07:00:00Z` },
   ]
 }
@@ -1204,6 +1206,16 @@ export const sampleSource: DataSource = {
 
   async contentItems() {
     return sampleContent.filter((c) => c.status !== 'binned').map((c) => ({ ...c })).sort((a, b) => b.rank - a.rank || b.createdAt.localeCompare(a.createdAt))
+  },
+  async addContent({ copy, plannedFor, status }) {
+    const parts = splitCopy(copy)
+    const made: ContentItem = {
+      id: `c-${Date.now()}`, kind: 'linkedin_post', runSource: 'manual', angle: null, topic: topicFrom(copy), hook: parts.hook, body: parts.body, closeLine: parts.closeLine, hashtags: [],
+      dataPoint: null, dataPointUrl: null, promptedBy: null, formatOk: true, formatReason: null, rank: 0, status, heldReason: null,
+      plannedFor, postedOn: status === 'posted' ? plannedFor : null, postUrl: null, impressions: null, comments: null, inboundMessages: null, createdAt: new Date().toISOString(),
+    }
+    sampleContent.push(made)
+    return { ...made }
   },
   async updateContent(id, patch) {
     const found = sampleContent.find((c) => c.id === id)

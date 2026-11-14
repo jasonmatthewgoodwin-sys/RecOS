@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { landing, sectionFor, settings, type Section } from '../lib/sections'
 import { FileTab } from './FileTab'
 import { Icon, sectionIcon } from './Icon'
+import { StatusFilter } from './StatusFilter'
 
 // The layout tree in section 25.2: Paper, FileTabs, Sheet. No other regions
 // exist. There is no sidebar, no top bar, no footer and no floating buttons.
@@ -108,6 +109,10 @@ export function FileTabs({ tabs, dots = {}, showSettings = true, onSearch, onCap
 export function Sheet({ children, fadeKey }: { children: ReactNode; fadeKey?: string }) {
   return (
     <main className="relative min-h-[40rem] rounded-sheet border border-ink bg-sheet">
+      {/* The colour key with its counts, the status filter, sits at the top right of the sheet (Mia, 14 November 2026). */}
+      <div className="absolute right-6 top-5 z-10 flex max-w-[60%] justify-end sm:right-12 sm:top-7">
+        <StatusFilter />
+      </div>
       <div key={fadeKey} className="animate-fade p-6 sm:p-16">
         {children}
       </div>

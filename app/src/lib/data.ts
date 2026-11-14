@@ -4,6 +4,7 @@
 
 import { sampleSource } from './sample'
 import { supabase } from './supabase'
+import { splitCopy, topicFrom, topicKey } from './calendar'
 import type { CaptureKind, SearchHit } from './capture'
 import { mondayOf, ukClock, weekdayOf } from './time'
 import type { Tone } from '../theme/tokens'
@@ -604,6 +605,8 @@ export interface DataSource {
   /** Content (31.2): everything not binned, highest rank first. */
   contentItems(): Promise<ContentItem[]>
   updateContent(id: string, patch: ContentPatch): Promise<void>
+  /** A post written by hand in the calendar's composer: a LinkedIn post from the owner, filed under its first line. */
+  addContent(input: { copy: string; plannedFor: string | null; status: ContentStatus }): Promise<ContentItem>
 
   signals(): Promise<Signal[]>
   setSignalStatus(id: string, status: SignalStatus): Promise<void>
@@ -1846,6 +1849,24 @@ const live: DataSource = {
       inboundMessages: r.inbound_messages,
       createdAt: r.created_at,
     }))
+  },
+
+  async addContent({ copy, plannedFor, status }) {
+    const parts = splitCopy(copy)
+    const topic = topicFrom(copy)
+    const { data, error } = await supabase!
+      .from('content_items')
+      .insert({
+        kind: 'linkedin_post', run_source: 'manual', topic, topic_key: topicKey(topic) || 'a post', hook: parts.hook, body: parts.body, close_line: parts.closeLine,
+        draft_original: copy, word_count: copy.trim().split(/\s+/).length, format_ok: true, status, planned_for: plannedFor, posted_on: status === 'posted' ? plannedFor : null,
+      })
+      .select('id')
+      .single()
+    fail(error)
+    const id = (data as { id: string }).id
+    const made = (await this.contentItems()).find((c) => c.id === id)
+    if (!made) throw new Error('The post did not come back')
+    return made
   },
 
   async updateContent(id, patch) {

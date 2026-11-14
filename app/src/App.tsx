@@ -12,6 +12,7 @@ import { useQuery } from './lib/query'
 import { applyTheme } from './lib/theme'
 import { landing, sectionFor, sections, settings, visibleSections, type Section } from './lib/sections'
 import { Gallery } from './routes/gallery/Gallery'
+import { Calendar } from './routes/content/Calendar'
 import { Drafts } from './routes/content/Drafts'
 import { Home } from './routes/home/Home'
 import { Inbox } from './routes/inbox/Inbox'
@@ -37,6 +38,7 @@ import { SignIn } from './routes/SignIn'
 // The index pages built so far. Anything else shows the SectionPage placeholder.
 function builtPages(session: Session): Record<string, ReactNode> {
   return {
+    'content/calendar': <Calendar />,
     'content/drafts': <Drafts />,
     'leads/jobs': <Jobs />,
     'leads/follow-ups': <FollowUps />,

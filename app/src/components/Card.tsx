@@ -19,6 +19,8 @@ type Props = {
   foot?: ReactNode
   /** The state the card is about, which tints its top edge: action, pending or clear. */
   tone?: Tone
+  /** Asked before the window closes. Return false to keep it open, such as over unsaved text. */
+  beforeClose?: () => boolean
   onClose: () => void
 }
 
@@ -32,7 +34,7 @@ function motionMs(ms: number): number {
 // behind stays put. Opens over 200 ms, closes the same way; Esc, the close
 // button, a click on the backdrop, the back button or a swipe down closes it.
 // On a phone it fills the sheet.
-export function Card({ label, title, sections = [], primaryAction, links, foot, tone, onClose }: Props) {
+export function Card({ label, title, sections = [], primaryAction, links, foot, tone, beforeClose, onClose }: Props) {
   const [closing, setClosing] = useState(false)
   const ref = useRef<HTMLElement>(null)
   const opener = useRef<Element | null>(null)
@@ -40,6 +42,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
 
   function close() {
     if (closing) return
+    if (beforeClose && !beforeClose()) return
     setClosing(true)
     setTimeout(onClose, motionMs(theme.motion.card))
   }
