@@ -406,6 +406,50 @@ test('P1-43: the quarter, output, follow-up and funnel views (14.2, 14.4, 14.7, 
   })
 })
 
+test('P1-45: a target changes from next Monday, a saved prompt is the one active version, the stop switch holds the queue (T-SET-1, T-SET-4, AGT-1)', async () => {
+  // A queued message, as the send engine would leave it (the app itself can only make drafts).
+  const [p] = await rows(`select id from people limit 1`)
+  await db.query(`insert into messages (owner_id, type, channel, person_id, to_name, created_by, level_at_creation, state) values ($1, 'thanks_after_call', 'email', $2, 'Ben Sample', 'send', 'one_click', 'queued')`, [ownerId, p.id])
+  await owner(async () => {
+    const [{ monday }] = await rows(`select (week_of(now()) + 7)::text as monday`)
+    const [{ from }] = await rows(`select set_target('posts_chased', 'week', 25)::text as from`)
+    assert.equal(from, monday)
+    // This week is still judged on the old target.
+    const [thisWeek] = await rows(`select target::int as target from kpi_this_week where kpi = 'posts_chased'`)
+    assert.equal(thisWeek.target, 20)
+    const targets = await rows(`select target::int as target, valid_from::text as valid_from, valid_to::text as valid_to from targets where kpi = 'posts_chased' order by valid_from`)
+    assert.equal(targets.length, 2)
+    assert.equal(targets[0].target, 20)
+    assert.ok(targets[0].valid_to < monday, JSON.stringify(targets))
+    assert.deepEqual([targets[1].target, targets[1].valid_from, targets[1].valid_to], [25, monday, null])
+    // A second change before that Monday replaces the waiting row, not adds another.
+    await rows(`select set_target('posts_chased', 'week', 22)`)
+    assert.equal(await count(`targets where kpi = 'posts_chased'`), 2)
+    assert.equal((await rows(`select 1 from audit_log where action = 'target changed'`)).length, 2)
+
+    const [{ v1 }] = await rows(`select save_agent_prompt('a3_jobs', 'Find PMM job posts.', null) as v1`)
+    const [{ v2 }] = await rows(`select save_agent_prompt('a3_jobs', 'Find PMM job posts in the US.', 'US only') as v2`)
+    assert.deepEqual([v1, v2], [1, 2])
+    assert.deepEqual(await rows(`select version, active from agent_prompts where agent = 'a3_jobs' order by version`), [{ version: 1, active: false }, { version: 2, active: true }])
+    await rows(`select activate_agent_prompt('a3_jobs', 1)`)
+    assert.deepEqual(await rows(`select version from agent_prompts where agent = 'a3_jobs' and active`), [{ version: 1 }])
+    assert.match(await refused(`select save_agent_prompt('a3_jobs', '   ', null)`), /needs some text/)
+
+    // T-SET-1: a queued message is held the moment sending is turned off.
+    await db.query(`update app_settings set all_sending_paused = true`)
+    assert.deepEqual(await rows(`select state, hold_reason from messages where to_name = 'Ben Sample' and type = 'thanks_after_call'`), [{ state: 'held', hold_reason: 'Sending is off' }])
+    await db.query(`update app_settings set all_sending_paused = false`)
+    assert.equal((await rows(`select 1 from audit_log where action in ('stop switch on', 'stop switch off')`)).length, 2)
+  })
+  await reviewer(async () => {
+    assert.match(await refused(`select set_target('posts_chased', 'week', 1)`), /Only the owner/)
+    assert.match(await refused(`select save_agent_prompt('a3_jobs', 'x', null)`), /Only the owner/)
+  })
+  await anon(async () => {
+    assert.match(await refused(`select set_target('posts_chased', 'week', 1)`), /permission denied/)
+  })
+})
+
 test('sign-in: the allow-list decides who gets a role, compared without case or spaces', async () => {
   const users = await rows(`select email, display_name, role from app_users`)
   assert.deepEqual(users, [{ email: OWNER_EMAIL, display_name: 'Jason Sample', role: 'owner' }])

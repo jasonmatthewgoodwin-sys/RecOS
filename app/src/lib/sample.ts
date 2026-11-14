@@ -1,7 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, Signal, Touch, WeeklyReview, WiderLead } from './data'
+import type { Agent, AgentPrompt, AgentRun, CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { ukClock } from './time'
 
@@ -507,6 +507,112 @@ export function resetSampleReviews() {
   sampleReviews = {}
 }
 
+// Settings (32.4): the seven agents as seeded, a few runs, the send policies
+// from 20.2, the seven targets from 9 November 2026. No keys, ever.
+function hoursAgoIso(h: number): string {
+  return new Date(Date.now() - h * 3_600_000).toISOString()
+}
+
+function freshSampleAgents(): Agent[] {
+  const a = (code: string, name: string, schedule: string, over: Partial<Agent> = {}): Agent => ({
+    code, name, schedule, enabled: true, modelTier: 'standard', monthlyBudget: 50, keyCreatedAt: daysAgo(10) + 'T09:00:00Z', consecutiveFailures: 0, lastRun: null, spentThisMonth: 0, ...over,
+  })
+  return [
+    a('a1_review', 'Weekly review', 'Monday 08:17', { lastRun: { startedAt: hoursAgoIso(30), status: 'ok', itemsCreated: 1 }, spentThisMonth: 1.2 }),
+    a('a2_content', 'Content engine', 'Monday 08:58 and 09:15, Thursday 09:30', { lastRun: { startedAt: hoursAgoIso(26), status: 'ok', itemsCreated: 3 }, spentThisMonth: 6.4 }),
+    a('a3_jobs', 'Jobs pipeline', 'Collect Tuesday and Friday 13:00. Match Wednesday 07:41', { lastRun: { startedAt: hoursAgoIso(5), status: 'ok', itemsCreated: 4 }, spentThisMonth: 12.4 }),
+    a('a4_signals', 'Relationship signals', 'Friday 12:47', { modelTier: 'light', monthlyBudget: 20, lastRun: { startedAt: hoursAgoIso(50), status: 'failed', itemsCreated: 0 }, consecutiveFailures: 1, spentThisMonth: 2.1 }),
+    a('a5_followups', 'Follow-up queue', 'Monday 07:30, Thursday 07:30, weekdays 08:45 for the calendar', { lastRun: { startedAt: hoursAgoIso(2), status: 'ok', itemsCreated: 2 }, spentThisMonth: 4.8 }),
+    a('a6_calls', 'Call-to-CRM', 'Monday to Thursday 19:30, Friday 16:30', { lastRun: { startedAt: hoursAgoIso(18), status: 'partial', itemsCreated: 1 }, spentThisMonth: 9.9 }),
+    a('a7_events', 'Event ideas', '1st of the month', { enabled: false, monthlyBudget: null, keyCreatedAt: null }),
+  ]
+}
+
+function freshSampleRuns(): Record<string, AgentRun[]> {
+  const r = (id: string, h: number, status: AgentRun['status'], itemsCreated: number, summary: string | null): AgentRun => ({ id, startedAt: hoursAgoIso(h), finishedAt: status === 'running' ? null : hoursAgoIso(h - 0.2), status, itemsCreated, itemsMerged: 0, summary })
+  return {
+    a3_jobs: [r('r1', 5, 'ok', 4, 'Sample week'), r('r2', 29, 'ok', 2, null), r('r3', 77, 'ok', 5, null), r('r4', 101, 'partial', 1, 'One source timed out'), r('r5', 149, 'ok', 3, null)],
+    a4_signals: [r('r6', 50, 'failed', 0, 'LinkedIn alerts not found'), r('r7', 218, 'ok', 5, null)],
+    a1_review: [r('r8', 30, 'ok', 1, null)],
+  }
+}
+
+function freshSamplePrompts(): Record<string, AgentPrompt[]> {
+  return {
+    a3_jobs: [
+      { version: 2, body: 'Find product marketing job posts in the US that fit the ICP. Score each for fit and name the poster.', active: true, note: 'US only', createdAt: daysAgo(3) + 'T10:00:00Z' },
+      { version: 1, body: 'Find product marketing job posts that fit the ICP.', active: false, note: null, createdAt: daysAgo(20) + 'T10:00:00Z' },
+    ],
+  }
+}
+
+function freshSamplePolicies(): SendPolicy[] {
+  const p = (type: string, label: string, channel: SendPolicy['channel'], level: SendPolicy['level'], maxLevel: SendPolicy['maxLevel'], dailyCap: number | null, weeklyCap: number | null, perRunCap: number | null, requiresTemplate: boolean, over: Partial<SendPolicy> = {}): SendPolicy => ({
+    type, label, channel, level, maxLevel, dailyCap, weeklyCap, perRunCap, minDaysBetweenSamePerson: 7, windowStart: '09:00', windowEnd: '17:30', requiresTemplate, paused: false, pausedReason: null, ...over,
+  })
+  return [
+    p('thanks_after_call', 'Thank-you after a call', 'email', 'automatic', 'automatic', 15, 60, null, true),
+    p('cv_request', 'CV request', 'email', 'automatic', 'automatic', 10, 40, null, true),
+    p('submitted_confirmation', 'Submitted confirmation', 'email', 'automatic', 'automatic', 10, 30, null, true),
+    p('interview_confirmation', 'Interview confirmation', 'email', 'one_click', 'automatic', 10, 30, null, true),
+    p('prep_pack', 'Prep pack', 'email', 'one_click', 'automatic', 10, 30, null, true),
+    p('aftercare_checkin', 'Aftercare check-in', 'email', 'one_click', 'one_click', 5, 10, null, true),
+    p('kpi_summary', 'Monday KPI summary', 'email', 'one_click', 'automatic', 1, 1, null, true),
+    p('coaching_followup', 'Coaching follow-up', 'email', 'one_click', 'one_click', 5, 15, null, true),
+    p('referral_thanks', 'Referral thanks', 'email', 'one_click', 'one_click', 5, 15, null, true),
+    p('client_nudge', 'Client nudge', 'email', 'one_click', 'one_click', 5, 10, null, true),
+    p('event_followup', 'Event follow-up', 'email', 'one_click', 'one_click', 30, 60, null, true),
+    p('intro_to_colleague', 'Intro to a colleague', 'email', 'one_click', 'one_click', 5, 10, null, false),
+    p('email_reply', 'Email reply', 'email', 'draft_only', 'draft_only', null, null, null, false),
+    p('league_cadence', 'League catch-up', 'email', 'draft_only', 'draft_only', null, null, null, false),
+    p('signal_congrats', 'Congratulations', 'either', 'draft_only', 'draft_only', null, null, null, false),
+    p('coaching_offer', 'Coaching offer', 'either', 'draft_only', 'draft_only', null, null, null, false),
+    p('speaker_invite', 'Speaker invite', 'email', 'draft_only', 'draft_only', null, null, null, false),
+    p('spec', 'Spec message', 'either', 'draft_only', 'draft_only', null, null, null, false),
+    p('job_chase', 'Job chase', 'either', 'draft_only', 'draft_only', null, null, null, false),
+    p('rejection', 'Rejection', 'email', 'draft_only', 'draft_only', null, null, null, false),
+    p('linkedin_connect', 'LinkedIn connection note', 'linkedin', 'automatic', 'automatic', 10, 20, 10, true, { paused: true, pausedReason: 'LinkedIn showed a warning on Tuesday' }),
+    p('linkedin_message', 'LinkedIn message', 'linkedin', 'draft_only', 'draft_only', null, null, null, false),
+    p('linkedin_post', 'LinkedIn post', 'linkedin', 'draft_only', 'draft_only', null, null, null, false),
+  ].sort((a, b) => a.label.localeCompare(b.label))
+}
+
+function freshSampleTargets(): Target[] {
+  const t = (kpi: string, period: Target['period'], target: number): Target => ({ id: `t-${kpi}`, kpi, period, target, validFrom: '2026-11-09', validTo: null })
+  return [t('posts_chased', 'week', 20), t('coaching_calls', 'week', 5), t('linkedin_posts', 'week', 2), t('new_a_star', 'week', 5), t('events_held', 'quarter', 1), t('blogs_published', 'quarter', 3), t('testimonials', 'quarter', 3)]
+}
+
+let sampleAgents = freshSampleAgents()
+let sampleRuns = freshSampleRuns()
+let samplePrompts = freshSamplePrompts()
+let samplePolicies = freshSamplePolicies()
+let sampleTargets = freshSampleTargets()
+let samplePaused = false
+let sampleHeld = 0
+
+export function resetSampleSettings() {
+  sampleAgents = freshSampleAgents()
+  sampleRuns = freshSampleRuns()
+  samplePrompts = freshSamplePrompts()
+  samplePolicies = freshSamplePolicies()
+  sampleTargets = freshSampleTargets()
+  samplePaused = false
+  sampleHeld = 0
+}
+
+/** For tests: pretend the send engine left some messages queued. */
+export function setSampleHeld(n: number) {
+  sampleHeld = n
+}
+
+/** The Monday after today, as a plain date. */
+function nextMonday(): string {
+  const c = ukClock(new Date())
+  const d = new Date(`${c.date}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + (8 - c.isoDay))
+  return d.toISOString().slice(0, 10)
+}
+
 function sampleKpiWeeks(): KpiWeek[] {
   return Object.entries(KPI_TARGETS).map(([kpi, target]) => {
     const rows = sampleKpiEvents[kpi] ?? []
@@ -729,6 +835,80 @@ export const sampleSource: DataSource = {
     sampleMembers.push(member({ id: `m-${id}`, personId: id, name: name.trim(), title: title.trim() || null, company: company.trim() || null, listId, tier, why: why.trim() || null, lastTouchOn: null }))
   },
 
+  async agents() {
+    return sampleAgents.map((a) => ({ ...a, lastRun: a.lastRun ? { ...a.lastRun } : null }))
+  },
+  async setAgentEnabled(code, enabled) {
+    const a = sampleAgents.find((x) => x.code === code)
+    if (!a) throw new Error('No such agent')
+    a.enabled = enabled
+  },
+  async agentRuns(code) {
+    return (sampleRuns[code] ?? []).map((r) => ({ ...r }))
+  },
+  async agentPrompts(code) {
+    return (samplePrompts[code] ?? []).map((p) => ({ ...p }))
+  },
+  async saveAgentPrompt(code, body, note) {
+    if (!body.trim()) throw new Error('A prompt needs some text')
+    const mine = (samplePrompts[code] ??= [])
+    const version = (mine[0]?.version ?? 0) + 1
+    for (const p of mine) p.active = false
+    mine.unshift({ version, body, active: true, note: note.trim() || null, createdAt: new Date().toISOString() })
+    return version
+  },
+  async activateAgentPrompt(code, version) {
+    const mine = samplePrompts[code] ?? []
+    if (!mine.some((p) => p.version === version)) throw new Error('No such version')
+    for (const p of mine) p.active = p.version === version
+  },
+  async sendingPaused() {
+    return samplePaused
+  },
+  async setSendingPaused(paused) {
+    samplePaused = paused
+  },
+  async heldMessages() {
+    return sampleHeld
+  },
+  async releaseHeld() {
+    sampleHeld = 0
+  },
+  async sendPolicies() {
+    return samplePolicies.map((p) => ({ ...p }))
+  },
+  async updateSendPolicy(type, patch) {
+    const p = samplePolicies.find((x) => x.type === type)
+    if (!p) throw new Error('No such type')
+    if (patch.level !== undefined) p.level = patch.level
+    if (patch.dailyCap !== undefined) p.dailyCap = patch.dailyCap
+    if (patch.weeklyCap !== undefined) p.weeklyCap = patch.weeklyCap
+    if (patch.perRunCap !== undefined) p.perRunCap = patch.perRunCap
+    if (patch.windowStart !== undefined) p.windowStart = patch.windowStart
+    if (patch.windowEnd !== undefined) p.windowEnd = patch.windowEnd
+    if (patch.paused !== undefined) {
+      p.paused = patch.paused
+      if (!patch.paused) p.pausedReason = null
+    }
+  },
+  async targets() {
+    return sampleTargets.map((t) => ({ ...t }))
+  },
+  async setTarget(kpi, period, target) {
+    const from = nextMonday()
+    const dayBefore = (() => {
+      const d = new Date(`${from}T12:00:00Z`)
+      d.setUTCDate(d.getUTCDate() - 1)
+      return d.toISOString().slice(0, 10)
+    })()
+    for (const t of sampleTargets) {
+      if (t.kpi === kpi && t.period === period && t.validFrom < from && (t.validTo === null || t.validTo >= from)) t.validTo = dayBefore
+    }
+    const waiting = sampleTargets.find((t) => t.kpi === kpi && t.period === period && t.validFrom === from)
+    if (waiting) waiting.target = target
+    else sampleTargets.push({ id: `t-${kpi}-${from}`, kpi, period, target, validFrom: from, validTo: null })
+    return from
+  },
   async kpiQuarter() {
     return freshSampleQuarter()
   },

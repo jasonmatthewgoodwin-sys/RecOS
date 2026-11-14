@@ -21,7 +21,11 @@ import { Coaching } from './routes/people/Coaching'
 import { PeopleList } from './routes/people/PeopleList'
 import { Signals } from './routes/people/Signals'
 import { SectionPage } from './routes/SectionPage'
+import { Agents } from './routes/settings/Agents'
 import { Profile } from './routes/settings/Profile'
+import { SendRules } from './routes/settings/SendRules'
+import { Targets } from './routes/settings/Targets'
+import { Templates } from './routes/settings/Templates'
 import { SignIn } from './routes/SignIn'
 
 // The index pages built so far. Anything else shows the SectionPage placeholder.
@@ -38,6 +42,10 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'numbers/this-week': <ThisWeek role={session.role} />,
     'numbers/quarter': <Quarter />,
     'numbers/review': <Review role={session.role} />,
+    'settings/agents': <Agents />,
+    'settings/send-rules': <SendRules />,
+    'settings/targets': <Targets />,
+    'settings/templates': <Templates />,
   }
 }
 

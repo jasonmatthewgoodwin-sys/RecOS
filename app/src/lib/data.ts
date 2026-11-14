@@ -249,6 +249,60 @@ export type WeeklyReview = {
 }
 export type ReviewFields = Pick<WeeklyReview, 'learned' | 'changes' | 'plan' | 'quarterlyFocus'>
 
+/** A background agent (13.4). The key itself is never readable; only when it was made. */
+export type Agent = {
+  code: string
+  name: string
+  schedule: string
+  enabled: boolean
+  modelTier: 'light' | 'standard'
+  monthlyBudget: number | null
+  keyCreatedAt: string | null
+  consecutiveFailures: number
+  lastRun: { startedAt: string; status: AgentRunStatus; itemsCreated: number } | null
+  /** Sum of cost estimates for runs this month. */
+  spentThisMonth: number
+}
+
+export type AgentRunStatus = 'running' | 'ok' | 'partial' | 'failed' | 'timed_out'
+
+export type AgentRun = {
+  id: string
+  startedAt: string
+  finishedAt: string | null
+  status: AgentRunStatus
+  itemsCreated: number
+  itemsMerged: number
+  summary: string | null
+}
+
+export type AgentPrompt = { version: number; body: string; active: boolean; note: string | null; createdAt: string }
+
+export type SendLevel = 'automatic' | 'one_click' | 'draft_only'
+
+/** One message type's rules (13.5, 20.2). */
+export type SendPolicy = {
+  type: string
+  label: string
+  channel: 'email' | 'linkedin' | 'either'
+  level: SendLevel
+  maxLevel: SendLevel
+  dailyCap: number | null
+  weeklyCap: number | null
+  perRunCap: number | null
+  minDaysBetweenSamePerson: number
+  windowStart: string
+  windowEnd: string
+  requiresTemplate: boolean
+  paused: boolean
+  pausedReason: string | null
+}
+
+export type SendPolicyPatch = Partial<Pick<SendPolicy, 'level' | 'dailyCap' | 'weeklyCap' | 'perRunCap' | 'windowStart' | 'windowEnd' | 'paused'>>
+
+/** One target row (13.2). A change adds a row from the next Monday. */
+export type Target = { id: string; kpi: string; period: 'week' | 'quarter' | 'year'; target: number; validFrom: string; validTo: string | null }
+
 /** One row behind a number this week (13.1). Labels name a role and company, never a person. */
 export type KpiEvent = {
   id: string
@@ -420,6 +474,26 @@ export interface DataSource {
   followUpsWeeks(): Promise<FollowUpsDone[]>
   weeklyReview(week: string): Promise<WeeklyReview | null>
   saveWeeklyReview(week: string, fields: ReviewFields): Promise<void>
+
+  /** Settings, Agents (32.4). */
+  agents(): Promise<Agent[]>
+  setAgentEnabled(code: string, enabled: boolean): Promise<void>
+  agentRuns(code: string): Promise<AgentRun[]>
+  agentPrompts(code: string): Promise<AgentPrompt[]>
+  /** Save as new version: the next number, made active in one transaction (AGT-1). */
+  saveAgentPrompt(code: string, body: string, note: string): Promise<number>
+  activateAgentPrompt(code: string, version: number): Promise<void>
+  /** Settings, Send rules (20.9, 32.4). */
+  sendingPaused(): Promise<boolean>
+  setSendingPaused(paused: boolean): Promise<void>
+  /** Messages held because sending was off. */
+  heldMessages(): Promise<number>
+  releaseHeld(to: 'send' | 'draft'): Promise<void>
+  sendPolicies(): Promise<SendPolicy[]>
+  updateSendPolicy(type: string, patch: SendPolicyPatch): Promise<void>
+  /** Settings, Targets (13.2). The change starts next Monday; the date is returned. */
+  targets(): Promise<Target[]>
+  setTarget(kpi: string, period: Target['period'], target: number): Promise<string>
 
   /** Numbers, This week (32.1). */
   kpiThisWeek(): Promise<KpiWeek[]>
@@ -1030,6 +1104,181 @@ const live: DataSource = {
     const personId = (data as { id: string }).id
     const { error: e2 } = await supabase!.from('league_members').insert({ person_id: personId, list_id: listId, tier, why: why.trim() || null, added_from: 'manual' })
     fail(e2)
+  },
+
+  async agents() {
+    const { data, error } = await supabase!
+      .from('agents')
+      .select('code, name, schedule, enabled, model_tier, monthly_budget, key_created_at, consecutive_failures')
+      .order('code')
+    fail(error)
+    type Row = { code: string; name: string; schedule: string; enabled: boolean; model_tier: 'light' | 'standard'; monthly_budget: number | null; key_created_at: string | null; consecutive_failures: number }
+    const rows = (data ?? []) as Row[]
+    const monthStart = new Date()
+    monthStart.setUTCDate(1)
+    monthStart.setUTCHours(0, 0, 0, 0)
+    const { data: runs, error: e2 } = await supabase!
+      .from('agent_runs')
+      .select('agent, started_at, status, items_created, cost_estimate')
+      .order('started_at', { ascending: false })
+      .limit(400)
+    fail(e2)
+    type Run = { agent: string; started_at: string; status: AgentRunStatus; items_created: number; cost_estimate: number | null }
+    const all = (runs ?? []) as Run[]
+    return rows.map((r) => {
+      const mine = all.filter((x) => x.agent === r.code)
+      const last = mine[0]
+      return {
+        code: r.code,
+        name: r.name,
+        schedule: r.schedule,
+        enabled: r.enabled,
+        modelTier: r.model_tier,
+        monthlyBudget: r.monthly_budget === null ? null : Number(r.monthly_budget),
+        keyCreatedAt: r.key_created_at,
+        consecutiveFailures: r.consecutive_failures,
+        lastRun: last ? { startedAt: last.started_at, status: last.status, itemsCreated: last.items_created } : null,
+        spentThisMonth: mine.filter((x) => x.started_at >= monthStart.toISOString()).reduce((n, x) => n + Number(x.cost_estimate ?? 0), 0),
+      }
+    })
+  },
+
+  async setAgentEnabled(code, enabled) {
+    const { error } = await supabase!.from('agents').update({ enabled }).eq('code', code)
+    fail(error)
+  },
+
+  async agentRuns(code) {
+    const { data, error } = await supabase!
+      .from('agent_runs')
+      .select('id, started_at, finished_at, status, items_created, items_merged, summary')
+      .eq('agent', code)
+      .order('started_at', { ascending: false })
+      .limit(5)
+    fail(error)
+    type Row = { id: string; started_at: string; finished_at: string | null; status: AgentRunStatus; items_created: number; items_merged: number; summary: string | null }
+    return ((data ?? []) as Row[]).map((r) => ({
+      id: r.id,
+      startedAt: r.started_at,
+      finishedAt: r.finished_at,
+      status: r.status,
+      itemsCreated: r.items_created,
+      itemsMerged: r.items_merged,
+      summary: r.summary,
+    }))
+  },
+
+  async agentPrompts(code) {
+    const { data, error } = await supabase!.from('agent_prompts').select('version, body, active, note, created_at').eq('agent', code).order('version', { ascending: false })
+    fail(error)
+    type Row = { version: number; body: string; active: boolean; note: string | null; created_at: string }
+    return ((data ?? []) as Row[]).map((r) => ({ version: r.version, body: r.body, active: r.active, note: r.note, createdAt: r.created_at }))
+  },
+
+  async saveAgentPrompt(code, body, note) {
+    const { data, error } = await supabase!.rpc('save_agent_prompt', { p_agent: code, p_body: body, p_note: note || null })
+    fail(error)
+    return Number(data)
+  },
+
+  async activateAgentPrompt(code, version) {
+    const { error } = await supabase!.rpc('activate_agent_prompt', { p_agent: code, p_version: version })
+    fail(error)
+  },
+
+  async sendingPaused() {
+    const { data, error } = await supabase!.from('app_settings').select('all_sending_paused').single()
+    fail(error)
+    return Boolean((data as { all_sending_paused: boolean }).all_sending_paused)
+  },
+
+  async setSendingPaused(paused) {
+    const { error } = await supabase!.from('app_settings').update({ all_sending_paused: paused }).eq('id', true)
+    fail(error)
+  },
+
+  async heldMessages() {
+    const { count, error } = await supabase!.from('messages').select('id', { count: 'exact', head: true }).eq('state', 'held').eq('hold_reason', 'Sending is off')
+    fail(error)
+    return count ?? 0
+  },
+
+  async releaseHeld(to) {
+    const { error } = await supabase!
+      .from('messages')
+      .update(to === 'send' ? { state: 'queued', hold_reason: null } : { state: 'draft', hold_reason: null })
+      .eq('state', 'held')
+      .eq('hold_reason', 'Sending is off')
+    fail(error)
+  },
+
+  async sendPolicies() {
+    const { data, error } = await supabase!
+      .from('send_policies')
+      .select('type, label, channel, level, max_level, daily_cap, weekly_cap, per_run_cap, min_days_between_same_person, send_window_start, send_window_end, requires_template, paused, paused_reason')
+      .order('label')
+    fail(error)
+    type Row = {
+      type: string
+      label: string
+      channel: 'email' | 'linkedin' | 'either'
+      level: SendLevel
+      max_level: SendLevel
+      daily_cap: number | null
+      weekly_cap: number | null
+      per_run_cap: number | null
+      min_days_between_same_person: number
+      send_window_start: string
+      send_window_end: string
+      requires_template: boolean
+      paused: boolean
+      paused_reason: string | null
+    }
+    return ((data ?? []) as Row[]).map((r) => ({
+      type: r.type,
+      label: r.label,
+      channel: r.channel,
+      level: r.level,
+      maxLevel: r.max_level,
+      dailyCap: r.daily_cap,
+      weeklyCap: r.weekly_cap,
+      perRunCap: r.per_run_cap,
+      minDaysBetweenSamePerson: r.min_days_between_same_person,
+      windowStart: r.send_window_start.slice(0, 5),
+      windowEnd: r.send_window_end.slice(0, 5),
+      requiresTemplate: r.requires_template,
+      paused: r.paused,
+      pausedReason: r.paused_reason,
+    }))
+  },
+
+  async updateSendPolicy(type, patch) {
+    const change: Record<string, unknown> = {}
+    if (patch.level !== undefined) change.level = patch.level
+    if (patch.dailyCap !== undefined) change.daily_cap = patch.dailyCap
+    if (patch.weeklyCap !== undefined) change.weekly_cap = patch.weeklyCap
+    if (patch.perRunCap !== undefined) change.per_run_cap = patch.perRunCap
+    if (patch.windowStart !== undefined) change.send_window_start = patch.windowStart
+    if (patch.windowEnd !== undefined) change.send_window_end = patch.windowEnd
+    if (patch.paused !== undefined) {
+      change.paused = patch.paused
+      if (!patch.paused) change.paused_reason = null
+    }
+    const { error } = await supabase!.from('send_policies').update(change).eq('type', type)
+    fail(error)
+  },
+
+  async targets() {
+    const { data, error } = await supabase!.from('targets').select('id, kpi, period, target, valid_from, valid_to').order('valid_from')
+    fail(error)
+    type Row = { id: string; kpi: string; period: 'week' | 'quarter' | 'year'; target: number; valid_from: string; valid_to: string | null }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, kpi: r.kpi, period: r.period, target: Number(r.target), validFrom: r.valid_from, validTo: r.valid_to }))
+  },
+
+  async setTarget(kpi, period, target) {
+    const { data, error } = await supabase!.rpc('set_target', { p_kpi: kpi, p_period: period, p_target: target })
+    fail(error)
+    return String(data)
   },
 
   async kpiQuarter() {
