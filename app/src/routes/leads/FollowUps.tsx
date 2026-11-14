@@ -222,6 +222,7 @@ export function FollowUps() {
         onUndo={(f) => void undo(f)}
         links={(f) => f.message?.body && <TextLink label="Copy" onClick={() => void navigator.clipboard?.writeText(draftOf(f))} />}
         onList={() => setView('list')}
+        tone={(f) => (f.direction === 'waiting' ? 'pending' : isLate(f, today) ? 'action' : 'new')}
         emptyText={focus && timeUp ? 'Time. The rest moves to Thursday.' : 'Nobody is waiting on you'}
       />
     )

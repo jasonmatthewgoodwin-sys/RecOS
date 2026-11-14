@@ -237,6 +237,7 @@ export function Inbox() {
           </>
         )}
         onList={() => setView('list')}
+        tone={(i) => inboxTone(i, clock.date)}
         emptyText="All clear"
       />
       {stale.length > 0 && deck.length > 0 && (
