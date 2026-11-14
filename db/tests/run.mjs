@@ -520,6 +520,55 @@ test('COA-2, REF-1, WID-1: coaching held, referral received and lead passed each
   })
 })
 
+test('FUP-2: completing a follow-up sets completed_at, on_time and purge_after; reopening clears them; on time counts once', async () => {
+  await owner(async () => {
+    const [{ id }] = await rows(
+      `insert into follow_ups (person_name, kind, reason, source, due_on, dedup_key)
+       values ('Gia Imaginary', 'after_coaching', 'Send the two examples', 'call', current_date, 'test:fu:ontime') returning id`,
+    )
+    assert.match(await refused(`update follow_ups set status = 'snoozed' where id = $1`, [id]), /follow_ups_snoozed_needs_date/)
+    const [done] = await rows(`update follow_ups set status = 'done' where id = $1 returning on_time, completed_at, purge_after`, [id])
+    assert.equal(done.on_time, true)
+    assert.ok(done.completed_at && done.purge_after)
+    const [reopened] = await rows(`update follow_ups set status = 'open' where id = $1 returning on_time, completed_at, purge_after`, [id])
+    assert.deepEqual(reopened, { on_time: null, completed_at: null, purge_after: null })
+    await db.query(`update follow_ups set status = 'handled_offline' where id = $1`, [id])
+    assert.equal(await count(`kpi_events where source_table = 'follow_ups' and source_id = '${id}'`), 1)
+    const [[e]] = [await rows(`select label from kpi_events where source_id = $1`, [id])]
+    assert.equal(e.label, 'Follow-up on time: after coaching')
+
+    // Late: due last week, done today. No event.
+    const [{ id: late }] = await rows(
+      `insert into follow_ups (person_name, kind, reason, source, due_on, dedup_key)
+       values ('Hal Hypothetical', 'chase', 'Chase the CV', 'email', current_date - 7, 'test:fu:late') returning id`,
+    )
+    const [l] = await rows(`update follow_ups set status = 'done' where id = $1 returning on_time`, [late])
+    assert.equal(l.on_time, false)
+    assert.equal(await count(`kpi_events where source_id = '${late}'`), 0)
+
+    // Closed with no action completes but never counts.
+    const [{ id: closed }] = await rows(
+      `insert into follow_ups (person_name, kind, reason, source, due_on, dedup_key)
+       values ('Ivy Invented', 'other', 'Nothing needed', 'manual', current_date, 'test:fu:closed') returning id`,
+    )
+    const [c] = await rows(`update follow_ups set status = 'closed' where id = $1 returning on_time, completed_at`, [closed])
+    assert.equal(c.on_time, true)
+    assert.ok(c.completed_at)
+    assert.equal(await count(`kpi_events where source_id = '${closed}'`), 0)
+
+    // A snooze keeps the due date and clears when it ends.
+    await db.query(`update follow_ups set status = 'snoozed', snoozed_until = current_date + 1 where id = $1`, [closed])
+    const [s] = await rows(`update follow_ups set status = 'open' where id = $1 returning snoozed_until, due_on::text as due`, [closed])
+    assert.equal(s.snoozed_until, null)
+    assert.ok(s.due)
+
+    const [v] = await rows(`select completed::int as completed, on_time::int as on_time from followups_week_view where week = week_of(now())`)
+    assert.deepEqual(v, { completed: 2, on_time: 1 })
+  })
+  await reviewer(async () => assert.equal(await refused(`select * from followups_week_view`), 'no rows'))
+  await anon(async () => assert.match(await refused(`select * from followups_week_view`), /permission denied/))
+})
+
 test('add_working_days skips weekends', async () => {
   const [r] = await rows(
     `select add_working_days('2026-11-12', 2)::text as thu, add_working_days('2026-11-13', 2)::text as fri,
