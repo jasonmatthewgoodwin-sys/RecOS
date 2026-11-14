@@ -36,6 +36,37 @@ export const night = {
   note: '#EFEDE8',
 } as const
 
+// The state colours added on 14 November 2026 at Mia's request (docs/decisions.md,
+// Pending Jason): light gradients that say what needs doing (action), what is
+// waiting (pending) and what is settled (clear). Each is a pair the gradient
+// runs between. Still read correctly in greyscale: the dot and the word stay.
+export const tone = {
+  actionA: '#F2A58A',
+  actionB: '#E8B4C8',
+  pendingA: '#F4D27A',
+  pendingB: '#F6B98D',
+  clearA: '#A9C8E8',
+  clearB: '#C9B8E8',
+  mistA: '#DDD9D2',
+  mistB: '#F6F4F0',
+  /** The window shadow: ink at 40 percent. */
+  shadow: '#1C1C1A66',
+} as const
+
+export const nightTone = {
+  actionA: '#B5674E',
+  actionB: '#9A6A8A',
+  pendingA: '#A88A3E',
+  pendingB: '#A87A52',
+  clearA: '#5E7FA3',
+  clearB: '#7A6AA3',
+  mistA: '#3A3936',
+  mistB: '#262624',
+  shadow: '#00000099',
+} as const
+
+export type Tone = 'action' | 'pending' | 'clear'
+
 export type ThemeName = 'paper' | 'night'
 
 const KEY = 'recos.theme'

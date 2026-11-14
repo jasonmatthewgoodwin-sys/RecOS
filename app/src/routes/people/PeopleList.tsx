@@ -200,7 +200,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
             <TextLink label="This week" active={filter === 'week'} onClick={() => setFilter('week')} />
             <TextLink label="All" active={filter === 'all'} onClick={() => setFilter('all')} />
           </nav>
-          <RowList
+          <RowList icon="user"
             rows={filter === 'week' ? weekRows : allRows}
             state={members.status}
             emptyText={filter === 'week' ? 'Everyone is on cadence' : 'Nobody on this list yet'}

@@ -250,7 +250,7 @@ export function Agents() {
   return (
     <div className="flex flex-col gap-12">
       <PageHeader title={settings.label} tabs={tabs} />
-      <RowList rows={rows} state={agents.status} emptyText="No agents yet" />
+      <RowList icon="sparkle" rows={rows} state={agents.status} emptyText="No agents yet" />
       {chosen && <AgentCard agent={chosen} onClose={closeCard} onNote={setNote} />}
       {note && <Note text={note} onClose={() => setNote(null)} />}
     </div>

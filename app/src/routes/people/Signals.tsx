@@ -178,7 +178,7 @@ export function Signals() {
         <HeroStat label="This week" value={signals.data ? twoDigits(all.length).text : undefined} />
       </div>
 
-      <RowList rows={rows} state={signals.status} emptyText="No signals this week. Arrives Friday" />
+      <RowList icon="sparkle" rows={rows} state={signals.status} emptyText="No signals this week. Arrives Friday" />
 
       {chosen && (
         <Card

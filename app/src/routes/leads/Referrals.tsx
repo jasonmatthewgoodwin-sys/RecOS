@@ -107,7 +107,7 @@ export function Referrals() {
         <HeroStat label="To contact" value={referrals.data ? twoDigits(fresh.length).text : undefined} />
       </div>
 
-      <RowList rows={rows} state={referrals.status} emptyText="No referrals waiting" />
+      <RowList icon="people" rows={rows} state={referrals.status} emptyText="No referrals waiting" />
 
       {chosen && (
         <Card

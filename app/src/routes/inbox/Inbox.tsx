@@ -289,7 +289,7 @@ export function Inbox() {
           <TextLink label="Sent for you" onClick={() => setView('sent')} />
         </div>
       </div>
-      <RowList rows={listRows} state={items.status} emptyText="All clear" />
+      <RowList icon="inbox" rows={listRows} state={items.status} emptyText="All clear" />
     </div>
   )
 
@@ -309,7 +309,7 @@ export function Inbox() {
         <TextLink label="Deck" onClick={() => setView('deck')} />
         <TextLink label="List" onClick={() => setView('list')} />
       </div>
-      <RowList rows={sentRows} state={sent.status} emptyText="Nothing sent automatically this week" />
+      <RowList icon="inbox" rows={sentRows} state={sent.status} emptyText="Nothing sent automatically this week" />
     </div>
   )
 

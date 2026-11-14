@@ -130,7 +130,7 @@ export function Wider() {
         <HeroStat label="Passed this quarter" value={leads.data ? twoDigits(passedThisQuarter(all, clock)).text : undefined} />
       </div>
 
-      <RowList rows={rows} state={leads.status} emptyText="Nothing to pass on" />
+      <RowList icon="flag" rows={rows} state={leads.status} emptyText="Nothing to pass on" />
 
       {chosen && (
         <Card

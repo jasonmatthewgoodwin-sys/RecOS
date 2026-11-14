@@ -209,7 +209,7 @@ export function Jobs() {
             <TextLink key={fl.value} label={fl.label} active={fl.value === filter} onClick={() => setFilter(fl.value)} />
           ))}
         </nav>
-        <RowList rows={rows} state={leads.status} emptyText={emptyWords[filter]} />
+        <RowList icon="briefcase" rows={rows} state={leads.status} emptyText={emptyWords[filter]} />
       </div>
 
       {leads.status === 'ready' && (

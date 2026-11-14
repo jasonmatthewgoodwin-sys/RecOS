@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { night, theme } from '../theme/tokens'
+import { night, nightTone, theme, tone } from '../theme/tokens'
 import { firstNameOf, problemInUrl, readClaims } from './auth'
 import { twoDigits } from './format'
 import { nextLine } from './nextLine'
@@ -131,12 +131,12 @@ describe('theme tokens', () => {
 
   it('matches the CSS, so the two can never drift', () => {
     const [paper, nightBlock] = css.split("[data-theme='night']")
-    for (const value of Object.values(theme.colour)) expect(paper).toContain(value.toLowerCase())
-    for (const value of Object.values(night)) expect(nightBlock).toContain(value.toLowerCase())
+    for (const value of [...Object.values(theme.colour), ...Object.values(tone)]) expect(paper).toContain(value.toLowerCase())
+    for (const value of [...Object.values(night), ...Object.values(nightTone)]) expect(nightBlock).toContain(value.toLowerCase())
   })
 
   it('T-FE-3: holds no colour outside the token list', () => {
-    const allowed = new Set([...Object.values(theme.colour), ...Object.values(night)].map((v) => v.toLowerCase()))
+    const allowed = new Set([...Object.values(theme.colour), ...Object.values(night), ...Object.values(tone), ...Object.values(nightTone)].map((v) => v.toLowerCase()))
     for (const found of css.match(/#[0-9a-f]{3,8}\b/g) ?? []) expect(allowed).toContain(found)
     expect(css).not.toMatch(/rgb|hsl|oklch/)
   })

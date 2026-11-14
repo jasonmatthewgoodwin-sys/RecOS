@@ -180,11 +180,11 @@ describe('Card', () => {
     return { close, action }
   }
 
-  it('is a dialog over the right half of the sheet with one primary button, and takes focus', () => {
+  it('is a dialog in a window over the sheet with one primary button, and takes focus', () => {
     card()
     const dialog = screen.getByRole('dialog', { name: 'Senior PMM at Northwind Sample Co' })
     expect(dialog).toHaveFocus()
-    expect(dialog.className).toContain('md:w-1/2')
+    expect(dialog.closest('[data-card-backdrop]')).not.toBeNull()
     expect(dialog.className).toContain('w-full')
     expect(within(dialog).getByText('Job')).toBeInTheDocument()
     expect(within(dialog).getByRole('heading', { level: 3, name: 'Why' })).toBeInTheDocument()

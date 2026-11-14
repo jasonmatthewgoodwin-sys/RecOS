@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
+import { Icon, type IconName } from './Icon'
 
-type Props = { label: string; route: string; hasDot?: boolean }
+type Props = { label: string; route: string; hasDot?: boolean; icon?: IconName }
 
 // A rounded tab on the top edge of the sheet. The active tab is joined to the
 // sheet with no line beneath it; the others sit behind, in grey.
 // A waiting tab shows one small dot, never a count (UX-8).
-export function FileTab({ label, route, hasDot }: Props) {
+export function FileTab({ label, route, hasDot, icon }: Props) {
   return (
     <NavLink
       to={route}
@@ -15,6 +16,7 @@ export function FileTab({ label, route, hasDot }: Props) {
         }`
       }
     >
+      {icon && <Icon name={icon} size={16} />}
       {label}
       {hasDot && (
         <span data-testid="tab-dot" role="img" aria-label="Something waiting" className="block size-1.5 rounded-pill bg-current" />

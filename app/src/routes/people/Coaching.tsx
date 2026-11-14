@@ -97,7 +97,7 @@ export function Coaching() {
         <HeroStat label="Booked" value={sessions.data ? twoDigits(booked).text : undefined} />
       </div>
 
-      <RowList rows={rows} state={sessions.status} emptyText="No sessions this week or last" />
+      <RowList icon="user" rows={rows} state={sessions.status} emptyText="No sessions this week or last" />
 
       {chosen && (
         <Card

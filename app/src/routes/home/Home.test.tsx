@@ -74,7 +74,8 @@ describe('Home', () => {
     expect(within(sheet).getByText('Wednesday 11 November')).toBeInTheDocument()
     expect(within(sheet).getByRole('heading')).toHaveTextContent('Morning, Jason')
     expect(sheet.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
-    expect(sheet.querySelectorAll('ul, ol, table, svg, canvas, img:not([role])')).toHaveLength(0)
+    // Icons are allowed (14 November 2026); charts, lists and tables are not.
+    expect(sheet.querySelectorAll('ul, ol, table, svg:not([data-icon]), canvas, img:not([role])')).toHaveLength(0)
     // Every piece of text on the sheet is accounted for.
     expect(sheet.querySelectorAll('p')).toHaveLength(2)
   })

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { HeroStat } from '../../components/HeroStat'
 import { PillButton } from '../../components/PillButton'
+import { toneForCount } from '../../lib/tone'
 import { data } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { nextLine } from '../../lib/nextLine'
@@ -86,13 +87,15 @@ export function Home({ firstName }: { firstName: string }) {
       </h1>
 
       <div className="mt-16 grid grid-cols-2 gap-x-8 gap-y-12 sm:mt-24 md:grid-cols-4">
-        <HeroStat label="Needs you" value={n1?.text} plus={n1?.plus} onClick={() => navigate('/inbox')} />
-        <HeroStat label="Follow-ups" value={n2?.text} plus={n2?.plus} onClick={() => navigate('/leads/follow-ups')} />
-        <HeroStat label="Calls today" value={n3?.text} plus={n3?.plus} onClick={() => openCard('calls')} />
+        <HeroStat label="Needs you" value={n1?.text} plus={n1?.plus} tone={toneForCount(needsYou.data, true)} icon="inbox" onClick={() => navigate('/inbox')} />
+        <HeroStat label="Follow-ups" value={n2?.text} plus={n2?.plus} tone={toneForCount(followUps.data?.due, (followUps.data?.late ?? 0) > 0)} icon="clock" onClick={() => navigate('/leads/follow-ups')} />
+        <HeroStat label="Calls today" value={n3?.text} plus={n3?.plus} tone={toneForCount(isWeekend(now) ? 0 : calls.data?.length)} icon="phone" onClick={() => openCard('calls')} />
         <HeroStat
           label="This week"
           value={week.data ? `${week.data.hit}/${week.data.total}` : undefined}
           meter={week.data ? { filled: week.data.hit, total: week.data.total } : undefined}
+          tone={week.data ? (week.data.hit >= week.data.total ? 'clear' : 'pending') : undefined}
+          icon="numbers"
           onClick={() => navigate('/numbers/this-week')}
         />
       </div>

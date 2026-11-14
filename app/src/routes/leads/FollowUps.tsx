@@ -248,7 +248,7 @@ export function FollowUps() {
         </nav>
         <TextLink label="Deck" onClick={() => setView('deck')} />
       </div>
-      <RowList rows={listRows} state={items.status} emptyText={filter === 'owed' ? 'Nobody is waiting on you' : 'Nothing to wait for'} />
+      <RowList icon="clock" rows={listRows} state={items.status} emptyText={filter === 'owed' ? 'Nobody is waiting on you' : 'Nothing to wait for'} />
     </div>
   )
 

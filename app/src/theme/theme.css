@@ -10,6 +10,16 @@
   --rule: #c9c6bf;
   --note: #262624;
   --note-text: #f6f4f0;
+  /* State gradients (14 November 2026): action, pending, clear, and a neutral mist. */
+  --tone-action-a: #f2a58a;
+  --tone-action-b: #e8b4c8;
+  --tone-pending-a: #f4d27a;
+  --tone-pending-b: #f6b98d;
+  --tone-clear-a: #a9c8e8;
+  --tone-clear-b: #c9b8e8;
+  --tone-mist-a: #ddd9d2;
+  --tone-mist-b: #f6f4f0;
+  --window-shadow: 0 24px 60px -24px #1c1c1a66;
   color-scheme: light;
 }
 
@@ -22,6 +32,15 @@
   --rule: #5e5d59;
   --note: #efede8;
   --note-text: #1c1c1a;
+  --tone-action-a: #b5674e;
+  --tone-action-b: #9a6a8a;
+  --tone-pending-a: #a88a3e;
+  --tone-pending-b: #a87a52;
+  --tone-clear-a: #5e7fa3;
+  --tone-clear-b: #7a6aa3;
+  --tone-mist-a: #3a3936;
+  --tone-mist-b: #262624;
+  --window-shadow: 0 24px 60px -24px #00000099;
   color-scheme: dark;
 }
 
@@ -54,6 +73,8 @@
   --animate-slide: slide 200ms ease-out;
   --animate-slide-out: slide-out 200ms ease-in forwards;
   --animate-quiet: quiet 1.2s ease-in-out 1;
+  --animate-rise: rise 200ms ease-out;
+  --animate-rise-out: rise-out 200ms ease-in forwards;
 
   @keyframes fade {
     from {
@@ -88,6 +109,25 @@
       transform: translateX(16px);
     }
   }
+
+  /* Windows rise over 200 ms. */
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes rise-out {
+    to {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+  }
 }
 
 @theme inline {
@@ -100,6 +140,11 @@
   --color-note: var(--note);
   --color-note-text: var(--note-text);
   --color-transparent: transparent;
+  --color-tone-action: var(--tone-action-a);
+  --color-tone-pending: var(--tone-pending-a);
+  --color-tone-clear: var(--tone-clear-a);
+  --color-tone-mist: var(--tone-mist-a);
+  --shadow-window: var(--window-shadow);
 }
 
 @layer base {
@@ -144,4 +189,33 @@
   line-height: 1.4;
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
+}
+
+/* A light gradient for each state, used as a fill. */
+@utility grad-action {
+  background-image: linear-gradient(135deg, var(--tone-action-a), var(--tone-action-b));
+}
+@utility grad-pending {
+  background-image: linear-gradient(135deg, var(--tone-pending-a), var(--tone-pending-b));
+}
+@utility grad-clear {
+  background-image: linear-gradient(135deg, var(--tone-clear-a), var(--tone-clear-b));
+}
+@utility grad-mist {
+  background-image: linear-gradient(135deg, var(--tone-mist-a), var(--tone-mist-b));
+}
+
+/* A soft orb, like a blurred sphere on paper: a radial gradient with a light
+   edge, used on tiles and the Home numbers. */
+@utility orb-action {
+  background-image: radial-gradient(circle at 35% 30%, var(--tone-action-b), var(--tone-action-a) 55%, var(--sheet) 100%);
+}
+@utility orb-pending {
+  background-image: radial-gradient(circle at 35% 30%, var(--tone-pending-a), var(--tone-pending-b) 55%, var(--sheet) 100%);
+}
+@utility orb-clear {
+  background-image: radial-gradient(circle at 35% 30%, var(--tone-clear-b), var(--tone-clear-a) 55%, var(--sheet) 100%);
+}
+@utility orb-mist {
+  background-image: radial-gradient(circle at 35% 30%, var(--tone-mist-b), var(--tone-mist-a) 60%, var(--sheet) 100%);
 }

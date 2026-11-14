@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { landing, sectionFor, settings, type Section } from '../lib/sections'
 import { FileTab } from './FileTab'
+import { Icon, sectionIcon } from './Icon'
 
 // The layout tree in section 25.2: Paper, FileTabs, Sheet. No other regions
 // exist. There is no sidebar, no top bar, no footer and no floating buttons.
@@ -39,7 +40,7 @@ export function FileTabs({ tabs, dots = {}, showSettings = true }: TabsProps) {
       {/* Laptop: the row of file tabs along the top edge of the sheet. */}
       <nav aria-label="Sections" className="relative z-10 -mb-px hidden items-end gap-1 pl-6 pr-4 md:flex">
         {tabs.map((s) => (
-          <FileTab key={s.key} label={s.label} route={s.path} hasDot={dots[s.key]} />
+          <FileTab key={s.key} label={s.label} route={s.path} hasDot={dots[s.key]} icon={sectionIcon[s.key]} />
         ))}
         <span className="flex-1" />
         {showSettings && (
@@ -63,6 +64,7 @@ export function FileTabs({ tabs, dots = {}, showSettings = true }: TabsProps) {
           onClick={() => setOpen((v) => !v)}
           className="inline-flex h-11 items-center gap-2 rounded-pill border border-ink bg-sheet px-6 text-body text-ink"
         >
+          {current && <Icon name={sectionIcon[current.key] ?? 'home'} size={16} />}
           {current?.label ?? 'RecOS'}
           <span aria-hidden className="text-ink-3">
             {open ? '–' : '+'}
@@ -77,7 +79,10 @@ export function FileTabs({ tabs, dots = {}, showSettings = true }: TabsProps) {
                   onClick={() => setOpen(false)}
                   className="flex min-h-11 items-center justify-between text-body text-ink"
                 >
-                  {s.label}
+                  <span className="flex items-center gap-3">
+                    <Icon name={sectionIcon[s.key] ?? 'home'} size={16} />
+                    {s.label}
+                  </span>
                   {dots[s.key] && <span role="img" aria-label="Something waiting" className="block size-1.5 rounded-pill bg-ink" />}
                 </Link>
               </li>

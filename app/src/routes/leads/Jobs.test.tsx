@@ -65,7 +65,7 @@ describe('Jobs', () => {
     expect(rows()).toHaveLength(7)
     expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument()
     expect(main.querySelectorAll('ul')).toHaveLength(1)
-    expect(main.querySelectorAll('svg, canvas, img')).toHaveLength(0)
+    expect(main.querySelectorAll('svg:not([data-icon]), canvas, img')).toHaveLength(0)
     expect(main.querySelectorAll('[data-kind="primary"]')).toHaveLength(0)
     // Highest fit first. The row carries the role, the company, the city and the days since first seen.
     expect(rows()[0]).toHaveTextContent('Senior PMM')
@@ -117,7 +117,7 @@ describe('Jobs', () => {
     expect(screen.queryByText(/of found were chased/)).not.toBeInTheDocument()
     await userEvent.click(within(line as HTMLElement).getByRole('button'))
     expect(screen.getByText(/17% of found were chased/)).toBeInTheDocument()
-    expect(screen.getByRole('main').querySelectorAll('svg, canvas')).toHaveLength(0)
+    expect(screen.getByRole('main').querySelectorAll('svg:not([data-icon]), canvas')).toHaveLength(0)
   })
 
   it('opens the card from a row by query string and closes it with Esc', async () => {
