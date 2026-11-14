@@ -469,6 +469,57 @@ test('REF-2 and WID-1: contacting a referral owes a thank-you in two working day
   })
 })
 
+test('T-KPI-1: a lead moved new, chased, new, chased writes one posts_chased event, and the owner cannot fake it', async () => {
+  await owner(async () => {
+    const [{ id }] = await rows(
+      `insert into job_leads (company, company_key, role, role_key, function) values ('Vandelay Pretend', 'vandelay pretend', 'Head of PMM', 'head of product marketing', 'pmm') returning id`,
+    )
+    for (const stage of ['chased', 'new', 'chased', 'replied', 'chased']) {
+      await db.query(`update job_leads set stage = $2 where id = $1`, [id, stage])
+    }
+    const events = await rows(`select label, is_pmm, week::text as week from kpi_events where source_table = 'job_leads' and source_id = $1`, [id])
+    assert.deepEqual(events, [{ label: 'Chased: Head of PMM at Vandelay Pretend', is_pmm: true, week: (await rows(`select week_of(now())::text as w`))[0].w }])
+    // A lead inserted already chased, as an import might be, counts nothing.
+    await db.query(`insert into job_leads (company, company_key, role, role_key, stage, chased_on) values ('Vandelay Pretend', 'vandelay pretend', 'PMM', 'product marketing manager', 'chased', current_date)`)
+    assert.equal(await count(`kpi_events where source_table = 'job_leads'`), 1)
+    // The browser still cannot write a KPI event itself (KPI-1).
+    assert.match(await refused(`insert into kpi_events (kpi, source_table, source_id) values ('posts_chased', 'job_leads', $1)`, [id]), /row-level security/)
+  })
+})
+
+test('COA-2, REF-1, WID-1: coaching held, referral received and lead passed each count once, with no name in the label', async () => {
+  await owner(async () => {
+    const [{ id: person }] = await rows(`select id from people where display_name = 'Finn Fictional'`)
+    const [{ id: session }] = await rows(`insert into coaching_sessions (person_id, booked_for, source) values ($1, now(), 'inbound') returning id`, [person])
+    assert.equal(await count(`kpi_events where source_id = '${session}'`), 0)
+    await db.query(`update coaching_sessions set status = 'held' where id = $1`, [session])
+    await db.query(`update coaching_sessions set status = 'booked' where id = $1`, [session])
+    await db.query(`update coaching_sessions set status = 'held' where id = $1`, [session])
+    const [held] = await rows(`select held_at from coaching_sessions where id = $1`, [session])
+    assert.ok(held.held_at, 'held_at set when the status reaches held')
+    assert.deepEqual(await rows(`select kpi, label from kpi_events where source_id = $1`, [session]), [{ kpi: 'coaching_calls', label: 'Coaching call held' }])
+    // A session inserted as held, as an import might be, counts too: it is the first time it is seen held.
+    const [{ id: imported }] = await rows(`insert into coaching_sessions (person_id, held_at, source, status) values ($1, now() - interval '3 days', 'league', 'held') returning id`, [person])
+    assert.equal(await count(`kpi_events where source_id = '${imported}'`), 1)
+
+    // The sample referral wrote its event on insert, dated the day it was received.
+    const [ref] = await rows(
+      `select e.label, e.happened_at::date::text as d, r.received_on::text as r from kpi_events e join referrals r on r.id = e.source_id where e.kpi = 'referrals_received'`,
+    )
+    assert.deepEqual(ref, { label: 'Referral received: person', d: ref.r, r: ref.r })
+
+    const [wl] = await rows(`select id from wider_leads where status = 'spotted'`)
+    await db.query(`update wider_leads set status = 'passed', passed_to = 'Sam Colleague' where id = $1`, [wl.id])
+    await db.query(`update wider_leads set status = 'spotted' where id = $1`, [wl.id])
+    await db.query(`update wider_leads set status = 'passed' where id = $1`, [wl.id])
+    assert.deepEqual(await rows(`select label, is_pmm from kpi_events where source_id = $1`, [wl.id]), [{ label: 'Passed: Account Executive at Fabrikam Test Ltd', is_pmm: false }])
+
+    // KPI-4: no label anywhere names a person from the sample week.
+    const [{ n }] = await rows(`select count(*)::int as n from kpi_events e join people p on e.label ilike '%' || p.display_name || '%'`)
+    assert.equal(n, 0)
+  })
+})
+
 test('add_working_days skips weekends', async () => {
   const [r] = await rows(
     `select add_working_days('2026-11-12', 2)::text as thu, add_working_days('2026-11-13', 2)::text as fri,
