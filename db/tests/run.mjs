@@ -48,11 +48,11 @@ await db.exec(`insert into auth.users (email, raw_user_meta_data) values ('  Own
 await db.exec(`insert into auth.users (email) values ('stranger@example.test')`)
 const ownerId = (await db.query(`select id from app_users where role = 'owner'`)).rows[0]?.id
 
-await db.exec(read('seed', 'targets.sql'))
-await db.exec(read('seed', 'sample_week.sql'))
-// Seeds must be safe to run twice.
-await db.exec(read('seed', 'targets.sql'))
-await db.exec(read('seed', 'sample_week.sql'))
+for (const file of ['targets.sql', 'lists.sql', 'sample_week.sql', 'sample_league.sql']) {
+  await db.exec(read('seed', file))
+  // Seeds must be safe to run twice.
+  await db.exec(read('seed', file))
+}
 
 // ---------------------------------------------------------------- helpers
 
@@ -567,6 +567,86 @@ test('FUP-2: completing a follow-up sets completed_at, on_time and purge_after; 
   })
   await reviewer(async () => assert.equal(await refused(`select * from followups_week_view`), 'no rows'))
   await anon(async () => assert.match(await refused(`select * from followups_week_view`), /permission denied/))
+})
+
+test('P1-37: two lists, six sample members, cadence dates set on insert (LEA-1) and reset by a touch (LEA-2)', async () => {
+  await owner(async () => {
+    assert.deepEqual(await rows(`select key, kind, seats from lists order by position`), [
+      { key: 'senior_network', kind: 'leader', seats: 50 },
+      { key: 'top_candidates', kind: 'a_star', seats: 50 },
+    ])
+    assert.equal(await count('league_members'), 6)
+    // Finn has no touch yet: due 7 days after being added. Ben, premier, last touched 4 days ago: due in 14.
+    const [finn] = await rows(`select (next_due_on - added_on) as d from league_members m join people p on p.id = m.person_id where p.name_key = 'finn fictional'`)
+    assert.equal(finn.d, 7)
+    const [ben] = await rows(`select (next_due_on - last_touch_on) as d, missed_cycles from league_members m join people p on p.id = m.person_id where p.name_key = 'ben sample'`)
+    assert.deepEqual(ben, { d: 18, missed_cycles: 0 })
+    // The view says who is late or due, with the strongest live signal.
+    const states = await rows(`select display_name, state, live_signal from league_due_view order by display_name`)
+    assert.deepEqual(states.find((s) => s.display_name === 'Ben Sample'), { display_name: 'Ben Sample', state: 'fine', live_signal: 'promoted' })
+    assert.equal(states.find((s) => s.display_name === 'Cara Placeholder').state, 'late')
+    assert.equal(states.find((s) => s.display_name === 'Eve Invented').state, 'due')
+    assert.equal(states.length, 6)
+
+    // A touch today resets Cara's cadence: one touch per person, day and kind (TOU-4).
+    const [{ id: cara }] = await rows(`select id from people where name_key = 'cara placeholder'`)
+    await db.query(`insert into touches (person_id, channel, kind, source) values ($1, 'linkedin', 'message_replied', 'manual')`, [cara])
+    assert.match(await refused(`insert into touches (person_id, channel, kind, source) values ($1, 'linkedin', 'message_replied', 'manual')`, [cara]), /touches_dedup_key_key/)
+    const [after] = await rows(`select (m.next_due_on - current_date) as d, m.missed_cycles, v.state from league_members m join league_due_view v on v.id = m.id where m.person_id = $1`, [cara])
+    assert.deepEqual(after, { d: 30, missed_cycles: 0, state: 'fine' })
+
+    // A tier change writes history (LEA-6); the owner reads it and cannot write it.
+    await db.query(`update league_members set tier = 'premier', why = 'Briefed a search' where person_id = $1`, [cara])
+    const hist = await rows(`select from_tier, to_tier, reason from league_history h join league_members m on m.id = h.member_id where m.person_id = $1`, [cara])
+    assert.deepEqual(hist, [{ from_tier: 'championship', to_tier: 'premier', reason: 'Briefed a search' }])
+    assert.match(await refused(`insert into league_history (owner_id, member_id) values (gen_random_uuid(), gen_random_uuid())`), /permission denied/)
+
+    // SIG-3: the out-of-ICP signal is stored as ignored and never new. SIG-4: expiry set by type.
+    const sig = await rows(`select status, (expires_on - seen_on) as days from signals where person_key = 'nobody relevant'`)
+    assert.deepEqual(sig, [{ status: 'ignored', days: 90 }])
+    const [hal] = await rows(`select (expires_on - seen_on) as days from signals where person_key = 'hal hypothetical'`)
+    assert.equal(hal.days, 30)
+  })
+})
+
+test('10.5: do not contact removes from the league, closes follow-ups and cancels drafts in one go; may_contact says no', async () => {
+  const [{ id: ben }] = await rows(`select id from people where name_key = 'ben sample'`)
+  await owner(async () => {
+    assert.equal((await rows(`select may_contact($1, 'contoso demo') as ok`, [ben]))[0].ok, true)
+    await db.query(`update people set do_not_contact = true where id = $1`, [ben])
+    assert.equal((await rows(`select may_contact($1, 'contoso demo') as ok`, [ben]))[0].ok, false)
+    const [m] = await rows(`select active, removed_reason, removed_on is not null as removed from league_members where person_id = $1`, [ben])
+    assert.deepEqual(m, { active: false, removed_reason: 'do_not_contact', removed: true })
+    assert.equal(await count(`follow_ups where person_id = '${ben}' and status = 'open'`), 0)
+    assert.equal(await count(`signals where person_id = '${ben}' and status = 'new'`), 0)
+    assert.equal(await count(`league_due_view where person_id = '${ben}'`), 0)
+    assert.equal(await count(`league_history h join league_members m on m.id = h.member_id where m.person_id = '${ben}' and h.reason = 'do_not_contact'`), 1)
+  })
+  // A company on the list blocks everyone at it.
+  await owner(async () => {
+    await db.query(`insert into do_not_contact (scope, company, reason) values ('company', 'Fabrikam Test Ltd', 'Asked us not to')`)
+    const [{ id: cara }] = await rows(`select id from people where name_key = 'cara placeholder'`)
+    assert.equal((await rows(`select may_contact($1, 'fabrikam test ltd') as ok`, [cara]))[0].ok, false)
+  })
+})
+
+test('nightly league and signal sweeps count cycles and expire signals, and the browser cannot run them', async () => {
+  // Finn was added 120 days ago and never touched: one window at a time, one run at a time.
+  const [{ n }] = await rows(`select league_missed_cycles() as n`)
+  assert.equal(n, 1)
+  // Both championship members (Cara and Dev) pushed 40 days back, plus Finn again.
+  await db.exec(`update league_members set next_due_on = current_date - 40 where tier = 'championship'`)
+  const [{ n: moved }] = await rows(`select league_missed_cycles() as n`)
+  assert.equal(moved, 3)
+  const [m] = await rows(`select missed_cycles from league_members where tier = 'championship' and missed_cycles > 0`)
+  assert.equal(m.missed_cycles, 1)
+  await db.exec(`update signals set expires_on = current_date - 1 where person_key = 'hal hypothetical'`)
+  const [{ n: expired }] = await rows(`select signals_expire() as n`)
+  assert.equal(expired, 1)
+  await owner(async () => {
+    assert.match(await refused(`select league_missed_cycles()`), /permission denied/)
+    assert.match(await refused(`select signals_expire()`), /permission denied/)
+  })
 })
 
 test('add_working_days skips weekends', async () => {

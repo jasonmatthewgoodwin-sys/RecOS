@@ -80,6 +80,7 @@ To look at the components without signing in, add a file `app/.env.gallery` hold
 | P1-19 KPI triggers for the BD tables | Done. Migration 0019 applied to the test project on 14 November |
 | P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
 | P1-30 Follow-up lifecycle | Done. Migration 0020 applied to the test project on 14 November |
+| P1-37, P1-38 Lists, league, touches, signals | Done locally: migration 0021, view `league_due_view`, seeds `lists.sql` and `sample_league.sql`. **Not applied to the test project** |
 | P1-34 Coaching, Referrals, Wider business | Done. `/people/coaching`, `/leads/referrals`, `/leads/wider`. Not yet seen on the test project's data |
 | P1-31 Follow-ups deck, list, Monday focus | Done. `/leads/follow-ups`, `?view=list`, `?focus=monday`. Not yet seen on the test project's data |
 | P1-22 Inbox deck and list | Done. `/inbox`, with `?view=list`, `?view=sent` and the card by `?card=item:id`. Not yet seen on the test project's data by Jason |

@@ -8,7 +8,9 @@ Everything the database needs, as plain SQL files.
 | `policies/` | Row-level security, one file per table | After migrations. Safe to run again |
 | `views/` | KPI views | After policies. Safe to run again |
 | `seed/targets.sql` | The seven starting targets | Once per project, after the owner's first sign-in |
+| `seed/lists.sql` | The two first lists under People | Once per project, after the owner's first sign-in |
 | `seed/sample_week.sql` | Invented sample data. **Test project only** | After `targets.sql`. Never on live |
+| `seed/sample_league.sql` | Invented league members, touches and signals. **Test project only** | After `lists.sql` and `sample_week.sql`. Never on live |
 | `tests/` | Checks for the access rules, triggers and Home counts | `npm install`, then `npm test` |
 
 ## Tests
