@@ -4,6 +4,7 @@ import { Card } from '../../components/Card'
 import { Draft } from '../../components/Draft'
 import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
+import { Steps } from '../../components/Steps'
 import { TextLink } from '../../components/TextLink'
 import type { JobLead, JobStage } from '../../lib/data'
 import { cityName, deadReasonWord, deadReasons, nextStage, primaryLabel, sourceWord, stagePills, stageWord } from '../../lib/leads'
@@ -164,7 +165,12 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onClose }: Props)
     {
       label: 'Stage',
       body: (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
+          <Steps
+            steps={['new', 'chased', 'replied', 'meeting_booked', 'job_won'].map((k) => ({ key: k, label: stageWord[k as JobStage] }))}
+            at={open ? lead.stage : 'job_won'}
+            tone={!open ? 'clear' : lead.stage === 'new' ? 'new' : lead.stage === 'replied' ? 'action' : 'pending'}
+          />
           <div className="flex flex-wrap gap-2" role="group" aria-label="Stage">
             {stagePills.map((s) => (
               <PillButton key={s} label={stageWord[s]} current={s === lead.stage} disabled={!open} onClick={() => pick(s)} />

@@ -10,6 +10,7 @@ import { PillButton } from '../../components/PillButton'
 import { Dots, EmptyLine } from '../../components/Quiet'
 import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
+import type { Tone } from '../../theme/tokens'
 import { data, type InboxAction, type InboxActionExtra, type InboxItem } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import {
@@ -264,6 +265,7 @@ export function Inbox() {
     .map((i) => ({
       id: i.id,
       dot: i.status === 'new' ? ('solid' as const) : ('hollow' as const),
+      tone: inboxTone(i, clock.date),
       title: i.title,
       detail: i.suggestedAction ?? undefined,
       meta: typeWord[i.type],
@@ -296,6 +298,7 @@ export function Inbox() {
   const sentRows = (sent.data ?? []).map((i) => ({
     id: i.id,
     dot: 'hollow' as const,
+    tone: 'clear' as const,
     title: i.title,
     detail: i.why ?? undefined,
     meta: ukTime(new Date(i.createdAt)),
@@ -396,4 +399,12 @@ export function Inbox() {
       {note && <Note text={note} onClose={() => setNote(null)} />}
     </div>
   )
+}
+
+/** The state colour of an inbox item: new, needs you when late or stale, waiting when snoozed, done otherwise. */
+function inboxTone(i: { status: string }, today: string): Tone {
+  if (i.status === 'done' || i.status === 'binned') return 'clear'
+  if (i.status === 'snoozed') return 'pending'
+  if (i.status === 'stale' || isLate(i as never, today)) return 'action'
+  return 'new'
 }

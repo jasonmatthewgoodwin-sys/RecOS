@@ -178,6 +178,7 @@ export function Jobs() {
     return {
       id: l.id,
       dot: l.stage === 'new' ? ('solid' as const) : ('hollow' as const),
+      tone: !open ? ('clear' as const) : l.stage === 'new' ? ('new' as const) : l.stage === 'replied' ? ('action' as const) : ('pending' as const),
       title: l.role,
       detail: l.company,
       detailWord: l.existingClient ? 'Existing client' : undefined,
@@ -209,7 +210,7 @@ export function Jobs() {
             <TextLink key={fl.value} label={fl.label} active={fl.value === filter} onClick={() => setFilter(fl.value)} />
           ))}
         </nav>
-        <RowList icon="briefcase" rows={rows} state={leads.status} emptyText={emptyWords[filter]} />
+        <RowList icon="briefcase" variant="band" rows={rows} state={leads.status} emptyText={emptyWords[filter]} />
       </div>
 
       {leads.status === 'ready' && (

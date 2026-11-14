@@ -11,6 +11,8 @@
   --note: #262624;
   --note-text: #f6f4f0;
   /* State gradients (14 November 2026): action, pending, clear, and a neutral mist. */
+  --tone-new-a: #bfe3d1;
+  --tone-new-b: #d6eef2;
   --tone-action-a: #f2a58a;
   --tone-action-b: #e8b4c8;
   --tone-pending-a: #f4d27a;
@@ -32,6 +34,8 @@
   --rule: #5e5d59;
   --note: #efede8;
   --note-text: #1c1c1a;
+  --tone-new-a: #4f8c70;
+  --tone-new-b: #4a7f8a;
   --tone-action-a: #b5674e;
   --tone-action-b: #9a6a8a;
   --tone-pending-a: #a88a3e;
@@ -140,6 +144,7 @@
   --color-note: var(--note);
   --color-note-text: var(--note-text);
   --color-transparent: transparent;
+  --color-tone-new: var(--tone-new-a);
   --color-tone-action: var(--tone-action-a);
   --color-tone-pending: var(--tone-pending-a);
   --color-tone-clear: var(--tone-clear-a);
@@ -218,4 +223,10 @@
 }
 @utility orb-mist {
   background-image: radial-gradient(circle at 35% 30%, var(--tone-mist-b), var(--tone-mist-a) 60%, var(--sheet) 100%);
+}
+@utility grad-new {
+  background-image: linear-gradient(135deg, var(--tone-new-a), var(--tone-new-b));
+}
+@utility orb-new {
+  background-image: radial-gradient(circle at 35% 30%, var(--tone-new-b), var(--tone-new-a) 55%, var(--sheet) 100%);
 }

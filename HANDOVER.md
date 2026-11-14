@@ -8,6 +8,8 @@ Week 1 is built and four week 2 tickets are done, the latest being the Leads Job
 
 ## Where everything is
 
+`docs/integrations.md` lists the outside services RecOS connects to (Microsoft, Outlook, Granola, the CRM, LinkedIn, the agents, Vercel, GitHub, the drive) with how each signs in and what is built.
+
 | Thing | Where |
 | --- | --- |
 | Code | `https://github.com/jasonmatthewgoodwin-sys/RecOS` (private, Jason's account). On Mia's computer it is at `C:\dev\recos` |

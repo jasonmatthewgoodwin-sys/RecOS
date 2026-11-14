@@ -240,6 +240,7 @@ export function Agents() {
   const rows = (agents.data ?? []).map((a) => ({
     id: a.code,
     dot: a.lastRun?.status === 'failed' || a.lastRun?.status === 'timed_out' ? ('solid' as const) : ('hollow' as const),
+    tone: !a.enabled ? ('pending' as const) : a.lastRun?.status === 'failed' || a.lastRun?.status === 'timed_out' ? ('action' as const) : ('clear' as const),
     title: a.name,
     detail: a.schedule,
     meta: agentMeta(a),

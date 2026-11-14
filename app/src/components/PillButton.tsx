@@ -1,5 +1,8 @@
+import { Icon, type IconName } from './Icon'
+
 type Props = {
   label: string
+  icon?: IconName
   kind?: 'primary' | 'plain'
   busy?: boolean
   disabled?: boolean
@@ -11,7 +14,7 @@ type Props = {
 
 // An outlined pill. The primary one is filled ink with sheet text.
 // One primary per screen (UX-5).
-export function PillButton({ label, kind = 'plain', busy, disabled, onClick, type = 'button', current }: Props) {
+export function PillButton({ label, kind = 'plain', busy, disabled, onClick, type = 'button', current, icon }: Props) {
   const look = current
     ? 'bg-ink text-sheet'
     : kind === 'primary'
@@ -27,7 +30,12 @@ export function PillButton({ label, kind = 'plain', busy, disabled, onClick, typ
       onClick={onClick}
       className={`inline-flex h-11 min-w-28 items-center justify-center rounded-pill border border-ink px-6 text-body transition-colors disabled:cursor-default ${current ? '' : 'disabled:opacity-40'} ${look}`}
     >
-      {busy ? '···' : label}
+      {busy ? '···' : (
+        <>
+          {icon && <Icon name={icon} size={14} className="mr-2" />}
+          {label}
+        </>
+      )}
     </button>
   )
 }

@@ -215,7 +215,7 @@ export function SendRules() {
         )}
       </section>
 
-      <RowList icon="mail" rows={rows} state={policies.status} emptyText="No message types" limit={rows.length || 7} />
+      <RowList icon="mail" view="rows" rows={rows} state={policies.status} emptyText="No message types" limit={rows.length || 7} />
 
       {chosen && <PolicyCard policy={chosen} onClose={closeCard} onNote={setNote} />}
       {note && <Note text={note} onClose={() => setNote(null)} />}

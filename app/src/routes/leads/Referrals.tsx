@@ -84,6 +84,7 @@ export function Referrals() {
     .map((r) => ({
       id: r.id,
       dot: r.stage === 'new' ? ('solid' as const) : ('hollow' as const),
+      tone: r.stage === 'new' ? ('new' as const) : r.stage === 'contacted' ? ('pending' as const) : ('clear' as const),
       title: r.referredName,
       detail: r.referredCompany ?? undefined,
       detailWord: `From ${r.referredByName}`,
@@ -107,7 +108,7 @@ export function Referrals() {
         <HeroStat label="To contact" value={referrals.data ? twoDigits(fresh.length).text : undefined} />
       </div>
 
-      <RowList icon="people" rows={rows} state={referrals.status} emptyText="No referrals waiting" />
+      <RowList icon="people" variant="avatar" rows={rows} state={referrals.status} emptyText="No referrals waiting" />
 
       {chosen && (
         <Card

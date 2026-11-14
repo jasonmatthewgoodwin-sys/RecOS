@@ -6,6 +6,8 @@ import { PillButton } from './PillButton'
 import { EmptyLine } from './Quiet'
 import { TextLink } from './TextLink'
 import { TickMeter } from './TickMeter'
+import { gradClass } from '../lib/tone'
+import type { Tone } from '../theme/tokens'
 
 export type DeckItem = { id: string }
 
@@ -35,6 +37,8 @@ type Props<T extends DeckItem> = {
   extraActions?: (item: T) => { label: string; onClick: (item: T) => void }[]
   /** Quiet links after the controls, such as Open source. */
   links?: (item: T) => ReactNode
+  /** The state colour of an item: a thin band above it (14 November 2026). */
+  tone?: (item: T) => Tone
   /** The List link in the corner. */
   onList?: () => void
   /** How many wait in all when more than fit in the deck (INBX-6). */
@@ -58,6 +62,7 @@ export function Deck<T extends DeckItem>({
   onUndo,
   extraActions,
   links,
+  tone,
   onList,
   waiting,
   emptyText = 'All clear',
@@ -217,11 +222,14 @@ export function Deck<T extends DeckItem>({
           {counter}
           {held}
         </p>
-        {onList && <TextLink label="List" onClick={onList} />}
+        {onList && <TextLink label="List" onClick={onList} icon="grid" />}
       </div>
 
       <div key={current.id} className="mt-8 flex-1 animate-fade">
-        {renderItem(current)}
+        <>
+          {tone && <span aria-hidden data-deck-tone={tone(current)} className={`mb-4 block h-1.5 w-24 rounded-pill ${gradClass[tone(current)]}`} />}
+          {renderItem(current)}
+        </>
       </div>
 
       {asking === 'primary' && primaryAction.step ? (
@@ -234,7 +242,7 @@ export function Deck<T extends DeckItem>({
         </div>
       ) : (
         <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2">
-          <PillButton kind="primary" label={primaryAction.label(current)} onClick={primary} />
+          <PillButton kind="primary" label={primaryAction.label(current)} onClick={primary} icon="check" />
           {undo && <TextLink label="Undo" onClick={undoLast} />}
           {extraActions?.(current).map((a) => (
             <TextLink
@@ -246,9 +254,9 @@ export function Deck<T extends DeckItem>({
               }}
             />
           ))}
-          <TextLink label="Skip" onClick={skip} />
-          {onSnooze && <TextLink label="Snooze" onClick={snooze} active={asking === 'snooze'} />}
-          {onBin && <TextLink label="Bin" onClick={bin} active={asking === 'bin'} />}
+          <TextLink label="Skip" onClick={skip} icon="arrow" />
+          {onSnooze && <TextLink label="Snooze" onClick={snooze} active={asking === 'snooze'} icon="snooze" />}
+          {onBin && <TextLink label="Bin" onClick={bin} active={asking === 'bin'} icon="bin" />}
           {links?.(current)}
         </div>
       )}

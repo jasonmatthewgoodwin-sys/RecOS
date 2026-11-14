@@ -232,6 +232,7 @@ export function FollowUps() {
     .map((f) => ({
       id: f.id,
       dot: f.direction === 'owed' ? ('solid' as const) : ('hollow' as const),
+      tone: f.direction === 'waiting' ? ('pending' as const) : isLate(f, today) ? ('action' as const) : ('new' as const),
       title: f.company ? `${f.personName}, ${f.company}` : f.personName,
       detail: f.reason,
       meta: dueWord(f, today),

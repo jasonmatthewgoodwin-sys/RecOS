@@ -41,6 +41,8 @@ export const night = {
 // waiting (pending) and what is settled (clear). Each is a pair the gradient
 // runs between. Still read correctly in greyscale: the dot and the word stay.
 export const tone = {
+  newA: '#BFE3D1',
+  newB: '#D6EEF2',
   actionA: '#F2A58A',
   actionB: '#E8B4C8',
   pendingA: '#F4D27A',
@@ -54,6 +56,8 @@ export const tone = {
 } as const
 
 export const nightTone = {
+  newA: '#4F8C70',
+  newB: '#4A7F8A',
   actionA: '#B5674E',
   actionB: '#9A6A8A',
   pendingA: '#A88A3E',
@@ -65,7 +69,7 @@ export const nightTone = {
   shadow: '#00000099',
 } as const
 
-export type Tone = 'action' | 'pending' | 'clear'
+export type Tone = 'new' | 'action' | 'pending' | 'clear'
 
 export type ThemeName = 'paper' | 'night'
 

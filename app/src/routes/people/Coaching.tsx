@@ -77,6 +77,7 @@ export function Coaching() {
   const rows = [...all].sort(bySessionOrder).map((s) => ({
     id: s.id,
     dot: s.status === 'held' && !s.followedUp ? ('solid' as const) : ('hollow' as const),
+    tone: s.status === 'held' ? (s.followedUp ? ('clear' as const) : ('action' as const)) : s.status === 'booked' ? ('pending' as const) : ('clear' as const),
     title: s.personName,
     detail: [s.personTitle, s.personCompany].filter(Boolean).join(', '),
     meta: sessionMeta(s),
@@ -97,7 +98,7 @@ export function Coaching() {
         <HeroStat label="Booked" value={sessions.data ? twoDigits(booked).text : undefined} />
       </div>
 
-      <RowList icon="user" rows={rows} state={sessions.status} emptyText="No sessions this week or last" />
+      <RowList icon="user" variant="avatar" rows={rows} state={sessions.status} emptyText="No sessions this week or last" />
 
       {chosen && (
         <Card

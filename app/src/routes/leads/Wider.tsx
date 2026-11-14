@@ -112,6 +112,7 @@ export function Wider() {
   const rows = [...all].sort(byWiderOrder).map((w) => ({
     id: w.id,
     dot: w.status === 'spotted' ? ('solid' as const) : ('hollow' as const),
+    tone: w.status === 'spotted' ? ('new' as const) : w.status === 'passed' || w.status === 'meeting_booked' ? ('pending' as const) : ('clear' as const),
     title: widerTitle(w),
     detail: `${w.company}, ${w.country}`,
     detailWord: w.existingClient ? 'Existing client' : undefined,
@@ -130,7 +131,7 @@ export function Wider() {
         <HeroStat label="Passed this quarter" value={leads.data ? twoDigits(passedThisQuarter(all, clock)).text : undefined} />
       </div>
 
-      <RowList icon="flag" rows={rows} state={leads.status} emptyText="Nothing to pass on" />
+      <RowList icon="flag" variant="band" rows={rows} state={leads.status} emptyText="Nothing to pass on" />
 
       {chosen && (
         <Card

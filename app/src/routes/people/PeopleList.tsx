@@ -154,6 +154,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
   const row = (m: Member) => ({
     id: m.id,
     dot: m.state === 'late' ? ('solid' as const) : ('hollow' as const),
+    tone: m.liveSignal ? ('new' as const) : m.state === 'late' ? ('action' as const) : m.state === 'fine' ? ('clear' as const) : ('pending' as const),
     title: m.name,
     detail: [m.title, m.company].filter(Boolean).join(', '),
     meta: `${tierShort[m.tier]} ${sinceWord(m.lastTouchOn, today)}`,
@@ -200,7 +201,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
             <TextLink label="This week" active={filter === 'week'} onClick={() => setFilter('week')} />
             <TextLink label="All" active={filter === 'all'} onClick={() => setFilter('all')} />
           </nav>
-          <RowList icon="user"
+          <RowList icon="user" variant="avatar"
             rows={filter === 'week' ? weekRows : allRows}
             state={members.status}
             emptyText={filter === 'week' ? 'Everyone is on cadence' : 'Nobody on this list yet'}

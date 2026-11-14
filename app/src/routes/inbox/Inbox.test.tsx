@@ -64,7 +64,7 @@ describe('Inbox deck', () => {
     expect(values()).toEqual(['12', '16'])
     const main = screen.getByRole('main')
     expect(main.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
-    expect(main.querySelectorAll('svg, canvas, img')).toHaveLength(0)
+    expect(main.querySelectorAll('svg:not([data-icon]), canvas, img')).toHaveLength(0)
     expect(title()).toBe('Outlook needs signing in again')
     expect(within(deck()).getByText('NOTICE')).toBeInTheDocument()
     expect(primary()).toHaveTextContent('Fix')

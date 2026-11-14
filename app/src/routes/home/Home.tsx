@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { HeroStat } from '../../components/HeroStat'
 import { PillButton } from '../../components/PillButton'
-import { toneForCount } from '../../lib/tone'
+import { gradClass, toneForCount } from '../../lib/tone'
 import { data } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { nextLine } from '../../lib/nextLine'
@@ -78,8 +78,11 @@ export function Home({ firstName }: { firstName: string }) {
   const n2 = followUps.data === undefined ? undefined : twoDigits(followUps.data.due)
   const n3 = calls.data === undefined || isWeekend(now) ? undefined : twoDigits(calls.data.length)
 
+  const dayTone = toneForCount(needsYou.data, (followUps.data?.late ?? 0) > 0 || (needsYou.data ?? 0) > 0)
+
   return (
     <div className="flex flex-col">
+      <div aria-hidden data-band={dayTone} className={`-mx-6 -mt-6 mb-8 h-28 rounded-t-sheet opacity-70 sm:-mx-16 sm:-mt-16 sm:mb-12 sm:h-40 ${gradClass[dayTone]}`} />
       <p className="label-caps text-ink-2">{dateLine(now)}</p>
       <h1 className="mt-2 text-title text-ink">
         {greeting(now)}

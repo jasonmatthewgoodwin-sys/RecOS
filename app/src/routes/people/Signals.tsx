@@ -160,6 +160,7 @@ export function Signals() {
   const rows = all.map((s) => ({
     id: s.id,
     dot: s.strength >= 3 ? ('solid' as const) : ('hollow' as const),
+    tone: 'new' as const,
     title: s.personName ?? s.company ?? 'Someone',
     detail: changeWords(s),
     meta: `${signalWord[s.signalType] ?? s.signalType} ${daysSince(s.seenOn, today)}d`,
