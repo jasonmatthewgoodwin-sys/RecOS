@@ -1,0 +1,119 @@
+/* Design tokens: section 3.6 to 3.8 and 25.9 of the low-level design.
+   These are the only colour values in the app (test T-FE-3). */
+
+:root {
+  --paper: #efede8;
+  --sheet: #f6f4f0;
+  --ink: #1c1c1a;
+  --ink-2: #5e5d59;
+  --ink-3: #9a9893;
+  --rule: #c9c6bf;
+  --note: #262624;
+  --note-text: #f6f4f0;
+  color-scheme: light;
+}
+
+:root[data-theme='night'] {
+  --paper: #1c1c1a;
+  --sheet: #262624;
+  --ink: #f6f4f0;
+  --ink-2: #c9c6bf;
+  --ink-3: #9a9893;
+  --rule: #5e5d59;
+  --note: #efede8;
+  --note-text: #1c1c1a;
+  color-scheme: dark;
+}
+
+@theme {
+  --color-*: initial;
+
+  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  --text-hero: 64px;
+  --text-hero--line-height: 1;
+  --text-hero-sm: 44px;
+  --text-hero-sm--line-height: 1;
+  --text-title: 30px;
+  --text-title--line-height: 1.2;
+  --text-body: 16px;
+  --text-body--line-height: 1.5;
+  --text-label: 12px;
+  --text-label--line-height: 1.4;
+
+  --radius-pill: 999px;
+  --radius-card: 20px;
+  --radius-sheet: 24px;
+  --radius-tab: 12px;
+
+  --tracking-label: 0.06em;
+
+  --animate-fade: fade 150ms ease-out;
+  --animate-quiet: quiet 1.2s ease-in-out 1;
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-note: var(--note);
+  --color-note-text: var(--note-text);
+  --color-transparent: transparent;
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-height: 100dvh;
+  }
+
+  /* Focus is always a 2 px ink outline (section 3.15). */
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  button,
+  a {
+    cursor: pointer;
+  }
+
+  /* Reduced motion switches all movement off (section 3.13). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+/* The small-capitals label used across the app. */
+@utility label-caps {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  line-height: 1.4;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
