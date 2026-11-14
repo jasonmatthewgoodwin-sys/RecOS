@@ -81,6 +81,7 @@ To look at the components without signing in, add a file `app/.env.gallery` hold
 | P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
 | P1-30 Follow-up lifecycle | Done. Migration 0020 applied to the test project on 14 November |
 | P1-37, P1-38 Lists, league, touches, signals | Done. Migration 0021, five policy files, `league_due_view`, `lists.sql` and `sample_league.sql` applied to the test project on 14 November |
+| P1-40 Signals page and card | Done. `/people/signals`, card by `?card=signal:id`. Not yet seen on the test project's data |
 | P1-39 People lists and person card | Done. `/people/senior-network`, `/people/top-candidates`, `?show=all`, card by `?card=person:id`. Not yet seen on the test project's data |
 | P1-34 Coaching, Referrals, Wider business | Done. `/people/coaching`, `/leads/referrals`, `/leads/wider`. Not yet seen on the test project's data |
 | P1-31 Follow-ups deck, list, Monday focus | Done. `/leads/follow-ups`, `?view=list`, `?focus=monday`. Not yet seen on the test project's data |
