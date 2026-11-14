@@ -1,122 +1,85 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Dots } from './components/Quiet'
+import { FileTabs, Paper, Sheet } from './components/Shell'
+import { AuthProvider, useAuth, type Session } from './lib/auth'
+import { data } from './lib/data'
+import { useTabKeys } from './lib/keyboard'
+import { useQuery } from './lib/query'
+import { landing, sectionFor, sections, settings, visibleSections, type Section } from './lib/sections'
+import { Gallery } from './routes/gallery/Gallery'
+import { Home } from './routes/home/Home'
+import { SectionPage } from './routes/SectionPage'
+import { SignIn } from './routes/SignIn'
 
-function App() {
-  const [count, setCount] = useState(0)
+function sectionRoutes(section: Section) {
+  if (section.pages.length === 0) {
+    return <Route key={section.key} path={`${section.path}/*`} element={<SectionPage section={section} />} />
+  }
+  return (
+    <Route key={section.key} path={section.path}>
+      <Route index element={<Navigate to={landing(section)} replace />} />
+      <Route path="*" element={<SectionPage section={section} />} />
+    </Route>
+  )
+}
+
+export function SignedIn({ session }: { session: Session }) {
+  const { pathname } = useLocation()
+  const tabs = visibleSections(session.role)
+  const owner = session.role === 'owner'
+  useTabKeys(tabs)
+
+  // Dots for Inbox and Leads share the Home counts (HOME-5). Fetched once on
+  // load and again after any action that could change them.
+  const needsYou = useQuery('home.needsYou', data.needsYou)
+  const followUps = useQuery('home.followUps', data.followUpsDue)
+  const dots: Record<string, boolean> = owner ? { inbox: (needsYou.data ?? 0) > 0, leads: (followUps.data?.due ?? 0) > 0 } : {}
+
+  const start = owner ? '/home' : '/numbers/this-week'
+  const allowed = owner ? [...sections, settings] : tabs
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+      <FileTabs tabs={tabs} dots={dots} showSettings={owner} />
+      <Sheet fadeKey={sectionFor(pathname)?.key}>
+        <Routes>
+          {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
+          {allowed.filter((s) => s.key !== 'home').map(sectionRoutes)}
+          {import.meta.env.DEV && <Route path="/gallery" element={<Gallery />} />}
+          <Route path="*" element={<Navigate to={start} replace />} />
+        </Routes>
+      </Sheet>
     </>
   )
 }
 
-export default App
+function Gate() {
+  const { state } = useAuth()
+  if (state.status === 'loading') {
+    return (
+      <Sheet>
+        <Dots />
+      </Sheet>
+    )
+  }
+  if (state.status === 'signed-out') {
+    return (
+      <Sheet>
+        <SignIn refused={state.refused} />
+      </Sheet>
+    )
+  }
+  return <SignedIn session={state.session} />
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Paper>
+          <Gate />
+        </Paper>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
