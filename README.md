@@ -39,7 +39,7 @@ With no `.env.local` file the app runs on invented sample data, so screens can b
 cd app
 npm test          # unit and screen tests
 npm run build     # type check and build
-npm run test:db   # database migrations, policies and SQL tests
+cd ../db && npm install && npm test   # migrations, policies and SQL tests, in a throwaway database
 ```
 
 ## Rules that never bend

@@ -104,7 +104,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       async signOut() {
-        await supabase?.auth.signOut()
+        if (!supabase) return
+        // AUTH-7: the sign-out is logged before the session ends. A failure to
+        // log never stops someone signing out.
+        await supabase.rpc('audit_sign_out').then(
+          () => {},
+          () => {},
+        )
+        // AUTH-6: ends the session on this device only.
+        await supabase.auth.signOut({ scope: 'local' })
       },
     }),
     [state],
