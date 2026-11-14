@@ -1,7 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, Member, PeopleList, Referral, Touch, WiderLead } from './data'
+import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, Member, PeopleList, Referral, Signal, Touch, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { ukClock } from './time'
 
@@ -440,6 +440,24 @@ export function resetSampleMembers() {
   sampleTouches = { 'p-ben': sampleTouches['p-ben'].slice(0, 2) }
 }
 
+// The week's signals (29.2), mirroring db/seed/sample_league.sql. Ben is
+// already on a list, so his card offers no Add to league (T-PEO-6).
+export function freshSampleSignals(): Signal[] {
+  return [
+    { id: 'sig-ben', personId: 'p-ben', personName: 'Ben Sample', company: 'Contoso Demo Inc', title: 'VP Product Marketing', city: 'boston', signalType: 'promoted', strength: 3, detail: 'Now VP. Likely to build a team.', source: 'linkedin_alert', sourceUrl: 'https://example.com/in/ben', seenOn: daysAgo(1), status: 'new', onList: true },
+    { id: 'sig-gia', personId: null, personName: 'Gia Imaginary', company: 'Initech Mock', title: 'Head of Marketing', city: 'san_francisco', signalType: 'new_role', strength: 3, detail: 'Started as Head of Marketing this month.', source: 'linkedin_alert', sourceUrl: 'https://example.com/in/gia', seenOn: daysAgo(3), status: 'new', onList: false },
+    { id: 'sig-sol', personId: null, personName: 'Sol Example', company: 'Stark Sample', title: 'CMO', city: null, signalType: 'company_raised', strength: 3, detail: 'Series C announced on Tuesday.', source: 'alex_leads', sourceUrl: null, seenOn: daysAgo(2), status: 'new', onList: false },
+    { id: 'sig-hal', personId: null, personName: 'Hal Hypothetical', company: 'Northwind Sample Co', title: 'Group PMM', city: 'new_york', signalType: 'open_to_work', strength: 2, detail: 'Open to work badge.', source: 'linkedin_alert', sourceUrl: null, seenOn: daysAgo(5), status: 'new', onList: false },
+    { id: 'sig-tam', personId: null, personName: 'Tam Placeholder', company: 'Wonka Imaginary Ltd', title: 'Director of PMM', city: 'london', signalType: 'left_company', strength: 2, detail: 'Left after four years.', source: 'linkedin_alert', sourceUrl: null, seenOn: daysAgo(9), status: 'new', onList: false },
+  ]
+}
+
+let sampleSignals = freshSampleSignals()
+
+export function resetSampleSignals() {
+  sampleSignals = freshSampleSignals()
+}
+
 // Chased this week in the sample is eleven from earlier in the week plus the
 // sample leads chased since Monday, so a Chased on the page moves the number.
 const CHASED_BEFORE = 11
@@ -646,6 +664,24 @@ export const sampleSource: DataSource = {
   async addPerson({ name, title, company, listId, tier, why }) {
     const id = `p-${name.toLowerCase().replace(/\s+/g, '-')}`
     sampleMembers.push(member({ id: `m-${id}`, personId: id, name: name.trim(), title: title.trim() || null, company: company.trim() || null, listId, tier, why: why.trim() || null, lastTouchOn: null }))
+  },
+
+  async signals() {
+    return sampleSignals.filter((s) => s.status === 'new').map((s) => ({ ...s }))
+  },
+  async setSignalStatus(id, status) {
+    const found = sampleSignals.find((s) => s.id === id)
+    if (!found) throw new Error('No such signal')
+    found.status = status
+  },
+  async addSignalToList(signal, listId) {
+    const found = sampleSignals.find((s) => s.id === signal.id)
+    if (!found) throw new Error('No such signal')
+    const personId = signal.personId ?? `p-${(signal.personName ?? 'unknown').toLowerCase().replace(/\s+/g, '-')}`
+    sampleMembers.push(member({ id: `m-${personId}`, personId, name: signal.personName ?? 'Unknown', title: signal.title, company: signal.company, city: signal.city, listId, tier: 'league_one', why: `Signal: ${signal.signalType.replace('_', ' ')}`, lastTouchOn: null, liveSignal: signal.signalType }))
+    found.status = 'added_to_league'
+    found.personId = personId
+    found.onList = true
   },
 }
 

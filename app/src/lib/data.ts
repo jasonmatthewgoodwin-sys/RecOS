@@ -186,6 +186,28 @@ export type Member = {
 
 export type Touch = { id: string; touchedOn: string; channel: string; kind: string; note: string | null }
 
+export type SignalStatus = 'new' | 'actioned' | 'added_to_league' | 'ignored' | 'expired'
+
+/** Something that changed for a person or their company (section 10.4). */
+export type Signal = {
+  id: string
+  personId: string | null
+  personName: string | null
+  company: string | null
+  title: string | null
+  city: string | null
+  signalType: string
+  strength: number
+  detail: string | null
+  source: string
+  sourceUrl: string | null
+  /** Plain date */
+  seenOn: string
+  status: SignalStatus
+  /** True when the person is already on a list (SIG-2, T-PEO-6). */
+  onList: boolean
+}
+
 /** A lead for the rest of the business (section 9.4). */
 export type WiderLead = {
   id: string
@@ -313,6 +335,16 @@ export interface DataSource {
   saveNotes(personId: string, notes: string): Promise<void>
   /** 29.4: by hand, from name, company, list and tier. A thin person row and a member row. */
   addPerson(input: { name: string; title: string; company: string; listId: string; tier: Tier; why: string }): Promise<void>
+
+  /** New signals, strongest first (29.2). */
+  signals(): Promise<Signal[]>
+  setSignalStatus(id: string, status: SignalStatus): Promise<void>
+  /**
+   * Add to league from a signal (29.4): a thin person row where none exists,
+   * a member row at League One with the signal as the reason, and the
+   * signal marked added_to_league.
+   */
+  addSignalToList(signal: Signal, listId: string): Promise<void>
 }
 
 function fail(error: { message: string } | null): void {
@@ -906,6 +938,83 @@ const live: DataSource = {
     const personId = (data as { id: string }).id
     const { error: e2 } = await supabase!.from('league_members').insert({ person_id: personId, list_id: listId, tier, why: why.trim() || null, added_from: 'manual' })
     fail(e2)
+  },
+
+  async signals() {
+    const { data, error } = await supabase!
+      .from('signals')
+      .select('id, person_id, person_name, company, title, city, signal_type, strength, detail, source, source_url, seen_on, status')
+      .eq('status', 'new')
+      .order('strength', { ascending: false })
+      .order('seen_on', { ascending: false })
+    fail(error)
+    type Row = {
+      id: string
+      person_id: string | null
+      person_name: string | null
+      company: string | null
+      title: string | null
+      city: string | null
+      signal_type: string
+      strength: number
+      detail: string | null
+      source: string
+      source_url: string | null
+      seen_on: string
+      status: SignalStatus
+    }
+    const rows = (data ?? []) as Row[]
+    const personIds = rows.map((r) => r.person_id).filter((id): id is string => id !== null)
+    let onList = new Set<string>()
+    if (personIds.length > 0) {
+      const { data: members, error: e2 } = await supabase!.from('league_members').select('person_id').in('person_id', personIds).eq('active', true)
+      fail(e2)
+      onList = new Set(((members ?? []) as { person_id: string }[]).map((m) => m.person_id))
+    }
+    return rows.map((r) => ({
+      id: r.id,
+      personId: r.person_id,
+      personName: r.person_name,
+      company: r.company,
+      title: r.title,
+      city: r.city,
+      signalType: r.signal_type,
+      strength: r.strength,
+      detail: r.detail,
+      source: r.source,
+      sourceUrl: r.source_url,
+      seenOn: r.seen_on,
+      status: r.status,
+      onList: r.person_id !== null && onList.has(r.person_id),
+    }))
+  },
+
+  async setSignalStatus(id, status) {
+    const { error } = await supabase!.from('signals').update({ status }).eq('id', id)
+    fail(error)
+  },
+
+  async addSignalToList(signal, listId) {
+    const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+    let personId = signal.personId
+    if (!personId) {
+      const name = signal.personName ?? 'Unknown'
+      const { data, error } = await supabase!
+        .from('people')
+        .insert({ display_name: name, name_key: key(name), display_title: signal.title, display_company: signal.company, company_key: signal.company ? key(signal.company) : null, city: signal.city, kind: 'leader' })
+        .select('id')
+        .single()
+      fail(error)
+      personId = (data as { id: string }).id
+      const { error: e1 } = await supabase!.from('signals').update({ person_id: personId }).eq('id', signal.id)
+      fail(e1)
+    }
+    const { error: e2 } = await supabase!
+      .from('league_members')
+      .insert({ person_id: personId, list_id: listId, tier: 'league_one', why: `Signal: ${signal.signalType.replace('_', ' ')}`, added_from: 'signal' })
+    fail(e2)
+    const { error: e3 } = await supabase!.from('signals').update({ status: 'added_to_league' }).eq('id', signal.id)
+    fail(e3)
   },
 }
 
