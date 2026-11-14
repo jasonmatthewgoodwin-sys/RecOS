@@ -152,6 +152,15 @@ Open the Vercel address, click Email me a sign-in link, and open the email on an
 
 After that, every push to `main` deploys on its own. The live project, when it exists, gets its own Vercel project with its own two values.
 
+## Structure changes on 14 November, all Pending Jason's yes
+
+Mia asked for these while directing the build; each is a row in `docs/decisions.md`:
+
+- The Leads tab is called Business development (route still `/leads`).
+- There are eight file tabs. Candidates has gone: its pages sit under Searches (Open, This week, In process, Warm specs, Placed), and the A-star feed under People.
+- People has a page per list: Senior network (the `leader` half of the league, people who are or could be hiring managers) and Top candidates (the `a_star` half, A-grade people placeable widely), then A-star, Signals, Accounts and Coaching. More lists later come from a `lists` table, to be built with the league.
+- In a search, candidates come from the CRM over its API: automatically where linked, or by Add candidate (search the CRM by name, or pick from a People list). Phase 2.
+
 ## Working habits that matter
 
 - The rules in `CLAUDE.md` under "Rules that are never broken" are binding. Thin person records, row-level security on every table, no secrets in the browser or repository, agents write through one endpoint, only the send engine sends, KPIs are events written by triggers.

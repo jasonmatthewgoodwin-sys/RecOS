@@ -34,30 +34,37 @@ export const sections: Section[] = [
     ],
   },
   {
+    // Restructured on 14 November 2026 at Mia's request (docs/decisions.md):
+    // the league's two halves are two named top-50 lists, each its own page,
+    // with room for more lists later. Coaching and the A-star feed live here.
     key: 'people',
     label: 'People',
     path: '/people',
     arrives: 'week 4',
     pages: [
-      { label: 'League', slug: 'league' },
+      { label: 'Senior network', slug: 'senior-network' },
+      { label: 'Top candidates', slug: 'top-candidates' },
+      { label: 'A-star', slug: 'a-star' },
       { label: 'Signals', slug: 'signals' },
       { label: 'Accounts', slug: 'accounts' },
+      { label: 'Coaching', slug: 'coaching' },
     ],
   },
-  { key: 'searches', label: 'Searches', path: '/searches', arrives: 'phase 2', pages: [], reviewer: true },
   {
-    key: 'candidates',
-    label: 'Candidates',
-    path: '/candidates',
+    // The Candidates tab went on 14 November 2026 (docs/decisions.md): the
+    // CRM is the record, and candidates are brought into a search from it.
+    // Its candidate-flow pages sit under Searches.
+    key: 'searches',
+    label: 'Searches',
+    path: '/searches',
     arrives: 'phase 2',
+    reviewer: true,
     pages: [
+      { label: 'Open', slug: 'open' },
       { label: 'This week', slug: 'this-week' },
-      { label: 'A-star', slug: 'a-star' },
-      { label: 'Warm specs', slug: 'warm-specs' },
       { label: 'In process', slug: 'in-process' },
+      { label: 'Warm specs', slug: 'warm-specs' },
       { label: 'Placed', slug: 'placed' },
-      // Moved here from Leads on 14 November 2026 at Mia's request (docs/decisions.md).
-      { label: 'Coaching', slug: 'coaching' },
     ],
   },
   {
