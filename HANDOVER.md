@@ -1,10 +1,10 @@
 # Handover: where the build stands
 
-Updated 14 November 2026, early afternoon. Written so the build can be picked up in a fresh Claude Code session, on this computer or another, under any Claude account.
+Updated 14 November 2026, mid afternoon. Written so the build can be picked up in a fresh Claude Code session, on this computer or another, under any Claude account.
 
 ## In one paragraph
 
-Most of week 1 is built. The app runs: Home shows its four numbers, the sentence and the Start button; the nine file tabs, routes and keyboard shortcuts work. The database is live in Jason's Supabase test project with access rules on every table. Jason has **not yet signed in**, so the targets and the sample week are not loaded and Home has not been seen on real data. Week 2 is not started.
+Most of week 1 is built. The app runs: Home shows its four numbers, the sentence and the Start button; the nine file tabs, routes and keyboard shortcuts work. The database is live in Jason's Supabase test project with access rules on every table. Jason has **not yet signed in**, so the targets and the sample week are not loaded and Home has not been seen on real data. Week 2 has started: the business-development tables and their KPI triggers (P1-18, P1-19) are built and tested locally but **not yet applied to the test project**.
 
 ## Where everything is
 
@@ -55,7 +55,7 @@ npm install
 npm test
 ```
 
-Both pass as of this note: 25 app tests, and 25 database tests run twice under two grant models.
+Both pass as of this note: 25 app tests, and 31 database tests run twice under two grant models.
 
 ## What is done
 
@@ -73,6 +73,8 @@ Both pass as of this note: 25 app tests, and 25 database tests run twice under t
 | P1-11 Import KPI log and inbox sheet | Not started. Needs the sheets from Jason |
 | P1-12 Shell | Done |
 | P1-13 Home | Done. T-HOME-1 to 7 pass. Seen only on sample data so far |
+| P1-18 Business development tables | Done locally: migration 0018 and six policy files. **Not applied to the test project** |
+| P1-19 KPI triggers for the BD tables | Done locally: migration 0019. **Not applied to the test project** |
 
 ## What was done in the Supabase dashboard
 
@@ -97,35 +99,40 @@ Supabase's free email service sends only about two emails an hour and the limit 
 
 What went wrong earlier, so it is not repeated: links were opened on another device, and repeat requests used up the hourly limit. The app shows "a link is on its way" whether or not an email was sent, by design, so it cannot be used to test addresses.
 
-### 2. Load the data, once Jason has signed in
+### 2. Apply the week 2 migrations to the test project
+
+In the Supabase SQL editor for the test project, run in this order: `db/migrations/0018_business_development.sql`, `db/migrations/0019_kpi_bd_triggers.sql`, then the six new files in `db/policies` (`job_leads`, `coaching_sessions`, `referrals`, `wider_leads`, `campaigns`, `target_companies`). This does not need Jason to have signed in. Do it before step 3: the sample week now writes to these tables.
+
+### 3. Load the data, once Jason has signed in
 
 In the Supabase SQL editor for the test project, run `db/seed/targets.sql`, then `db/seed/sample_week.sql`. Both need the owner to have signed in once. Home should then show 07, 03, the calls left today, and 2/4.
 
-### 3. Jason reviews Home
+### 4. Jason reviews Home
 
 Against the checklist in section 7 of `docs/build-instructions.md`. Is it calm? Could anything go?
 
-### 4. Tidy-ups Jason should decide
+### 5. Tidy-ups Jason should decide
 
 - Check the test project's region (Project Settings, General). The design asks for UK or EU. If it is in the US, recreate it now: `node db/bundle.mjs` rebuilds the one-file setup.
 - Rename the project `recos-test`, and create `recos-live` in the same region. Leave live empty.
 - Microsoft sign-in (section 6 of `docs/build-instructions.md`). Optional. The emailed link is the designed fallback.
 - The three rows still marked Pending in `docs/decisions.md`.
 
-### 5. Week 2
+### 6. The rest of week 2
 
-Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. A sensible order that needs nothing more from Jason at first:
+Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. P1-18 and P1-19 are done. A sensible order for the rest:
 
-1. P1-18 business-development tables (section 9), then P1-19 KPI triggers (section 22).
-2. P1-14 to P1-16 and P1-20: the agent endpoints and the write endpoint with its fit score (sections 15, 16, 23.1). These are Supabase Edge Functions. Deploying them needs the Supabase command line tool and Jason's login; no function has been written yet.
-3. P1-21 Deck and Card components, P1-22 Inbox, P1-23 Jobs page (sections 27, 28).
+1. P1-14 to P1-16 and P1-20: the agent endpoints and the write endpoint with its fit score (sections 15, 16, 23.1). These are Supabase Edge Functions. Deploying them needs the Supabase command line tool and Jason's login; no function has been written yet. They can be written and unit-tested without deploying.
+2. P1-21 Deck and Card components, P1-22 Inbox, P1-23 Jobs page (sections 27, 28). These need nothing from Jason and can run alongside item 1.
+3. P1-17 bridge sheet pull and P1-24 import need the sheets from Jason.
 
-New database changes are new numbered files in `db/migrations` (next is 0018), with a policy file for every new table. `npm test` in `db/` fails if a table has no policy file. Apply new files to the test project through the SQL editor.
+New database changes are new numbered files in `db/migrations` (next is 0020), with a policy file for every new table. `npm test` in `db/` fails if a table has no policy file. Apply new files to the test project through the SQL editor.
 
 ## Working habits that matter
 
 - The rules in `CLAUDE.md` under "Rules that are never broken" are binding. Thin person records, row-level security on every table, no secrets in the browser or repository, agents write through one endpoint, only the send engine sends, KPIs are events written by triggers.
 - One ticket, one commit, with the ticket ID in the message. Add a line to `docs/build-log.md` each time.
+- Mia and Jason both push to `main` from their own computers. Run `git pull` before starting and again before pushing. Keep commits small. Say which ticket you are on so two people do not build the same one.
 - Never ask for, paste or store the Supabase secret key, the service role key or a database password. Jason sets secrets himself.
 - Use invented names in seeds, fixtures and tests.
 - The brief says to stop at the end of each week's tickets for Jason's review. Mia asked for week 1 to be built in one sitting; that is recorded in `docs/decisions.md`.
@@ -135,7 +142,8 @@ New database changes are new numbered files in `db/migrations` (next is 0018), w
 - Signing in end to end. The hooks refuse strangers and accept Jason's address, but no session has been completed, so the role in the token and the owner's view of the data are untested on the real project.
 - Microsoft sign-in.
 - The night theme.
-- Anything from week 2 on.
+- Migrations 0018 and 0019 on a real Supabase project. They pass in the in-memory Postgres under both grant models.
+- Anything else from week 2 on.
 
 ## First message to paste into a new Claude Code session
 
