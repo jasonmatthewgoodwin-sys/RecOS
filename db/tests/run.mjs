@@ -28,7 +28,12 @@ async function apply(dir) {
 
 // ---------------------------------------------------------------- build
 
-await db.exec(read('tests', 'supabase-shim.sql'))
+// Run twice: once as an older Supabase project that grants the API roles
+// everything on new tables, and once (--strict) as a newer one that grants
+// nothing. The access rules must hold in both.
+const strict = process.argv.includes('--strict')
+const shim = read('tests', 'supabase-shim.sql')
+await db.exec(strict ? shim.split('-- DEFAULT GRANTS')[0] : shim)
 await apply('migrations')
 await apply('policies')
 await apply('views')

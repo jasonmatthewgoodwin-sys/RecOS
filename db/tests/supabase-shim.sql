@@ -36,7 +36,8 @@ $$;
 grant usage on schema public, auth to anon, authenticated, service_role;
 grant execute on all functions in schema auth to anon, authenticated, service_role;
 
--- Supabase grants everything on new public tables to the API roles and
+-- DEFAULT GRANTS (left out when the tests run with --strict)
+-- Supabase has granted everything on new public tables to the API roles and
 -- leaves row-level security to decide. The migrations take back what each
 -- table should not allow.
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;

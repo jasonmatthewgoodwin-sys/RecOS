@@ -5,7 +5,7 @@ Departures from the design, and choices the design left open. Newest last. Anyth
 | Date | Decision | Why | Affects | Agreed by |
 | --- | --- | --- | --- | --- |
 | 2026-11-14 | `react-router-dom` added as a dependency | Section 25.1 needs about 20 routes with query strings for cards. It is a router, not a state framework or component kit | `app/` | Pending |
-| 2026-11-14 | Default typefaces: Space Grotesk and Space Mono, self-hosted through `@fontsource` | Section 3.7 names them as defaults. Jason has not chosen yet | `app/src/theme` | Pending Jason's choice |
+| 2026-11-14 | Default typefaces: Space Grotesk and Space Mono, self-hosted through `@fontsource` | Section 3.7 names them as defaults. Jason has not chosen yet | `app/src/theme` | Jason, 2026-11-14 |
 | 2026-11-14 | With no Supabase settings the app runs on invented sample data from `app/src/lib/sample.ts` | Section 4.3: local uses seed data only. Lets screens be built before the projects exist | `app/src/lib` | Builder's choice |
 | 2026-11-14 | Week 1 tickets were built in one sitting, not one at a time with a stop after each | Mia asked for as much as possible before handing over to Jason. Each ticket still has its own commit | Whole of week 1 | Mia. Jason to review each screen against the calm rules |
 | 2026-11-14 | `send_policies.channel` also allows `either` | The seed table in 20.2 lists six types as "email or linkedin", which the check in 13.5 would refuse. All six are draft only | `db/migrations/0006` | Pending |
