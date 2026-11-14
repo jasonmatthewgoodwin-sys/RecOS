@@ -77,7 +77,13 @@ function DeckSample() {
       )}
       primaryAction={{ label: (item) => (item.type === 'JOB' ? 'Chased' : 'Done'), onClick: noop }}
       onBin={noop}
+      binReasons={() => ['Not a fit', 'Already known', 'Filled']}
       onSnooze={noop}
+      snoozeChoices={[
+        { label: 'Tomorrow', value: '1' },
+        { label: 'Thursday', value: '2' },
+        { label: 'Next Monday', value: '3' },
+      ]}
       links={() => <TextLink label="Open source" href="https://example.com" />}
       onList={noop}
     />

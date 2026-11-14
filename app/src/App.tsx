@@ -9,6 +9,7 @@ import { useQuery } from './lib/query'
 import { landing, sectionFor, sections, settings, visibleSections, type Section } from './lib/sections'
 import { Gallery } from './routes/gallery/Gallery'
 import { Home } from './routes/home/Home'
+import { Inbox } from './routes/inbox/Inbox'
 import { Jobs } from './routes/leads/Jobs'
 import { SectionPage } from './routes/SectionPage'
 import { Profile } from './routes/settings/Profile'
@@ -58,6 +59,7 @@ export function SignedIn({ session }: { session: Session }) {
         <Routes>
           {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
           {owner && <Route path="/settings/profile" element={<Profile />} />}
+          {owner && <Route path="/inbox" element={<Inbox />} />}
           {allowed.filter((s) => s.key !== 'home').map(sectionRoutes)}
           {import.meta.env.DEV && <Route path="/gallery" element={<Gallery />} />}
           <Route path="*" element={<Navigate to={start} replace />} />

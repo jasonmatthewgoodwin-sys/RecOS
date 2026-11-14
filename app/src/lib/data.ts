@@ -62,6 +62,64 @@ export type JobLead = {
 /** Hero 1 on the Jobs page: posts chased this week against the weekly target. */
 export type ChasedThisWeek = { total: number; target: number | null }
 
+export type InboxType =
+  | 'job_lead'
+  | 'signal'
+  | 'content_draft'
+  | 'event_idea'
+  | 'call_writeup'
+  | 'follow_up'
+  | 'referral'
+  | 'client_nudge'
+  | 'wider_lead'
+  | 'auto_sent'
+  | 'system_notice'
+
+export type InboxStatus = 'new' | 'approved' | 'done' | 'snoozed' | 'binned' | 'stale'
+
+/** One thing an agent found or a rule raised (section 8.1). The prompt to act, not the record. */
+export type InboxItem = {
+  id: string
+  type: InboxType
+  agent: string
+  title: string
+  personId: string | null
+  company: string | null
+  role: string | null
+  location: string | null
+  why: string | null
+  suggestedAction: string | null
+  draft: string | null
+  draftOriginal: string | null
+  source: string | null
+  sourceUrl: string | null
+  links: { label: string; url: string }[]
+  refTable: string | null
+  refId: string | null
+  rank: number
+  status: InboxStatus
+  binReason: string | null
+  snoozedUntil: string | null
+  dueOn: string | null
+  /** ISO timestamp */
+  createdAt: string
+}
+
+/** What the primary button did, so Undo can put it back (INBX-2). */
+export type InboxAction = 'done' | 'approve' | 'bin' | 'snooze' | 'pass'
+
+export type InboxActionExtra = {
+  /** The draft as the owner left it, saved with the action (INBX-3). */
+  draft?: string
+  binReason?: string
+  snoozedUntil?: string
+  /** Pass on: who takes the wider lead and the agreed split (WID-1, WID-2). */
+  colleague?: string
+  split?: string
+  /** Approve: the day a content draft is for. */
+  on?: string
+}
+
 export interface DataSource {
   needsYou(): Promise<number>
   followUpsDue(): Promise<FollowUpsDue>
@@ -79,6 +137,21 @@ export interface DataSource {
   setLeadStage(id: string, stage: JobStage, deadReason?: string): Promise<void>
   /** JOBS-2: hand the lead to a colleague. It becomes a wider lead and closes here. */
   passLead(lead: JobLead, colleague: string): Promise<void>
+
+  /** Everything new or stale that needs the owner, highest rank first. */
+  inboxItems(): Promise<InboxItem[]>
+  /** What the send engine sent on its own in the last 7 days (27.3). */
+  sentForYou(): Promise<InboxItem[]>
+  /**
+   * Act on an item: the record behind it moves where a mapping exists (22.3,
+   * INB-6), then the item's status changes. KPI events come from the database
+   * triggers on the record, never from here.
+   */
+  actOnInbox(item: InboxItem, action: InboxAction, extra?: InboxActionExtra): Promise<void>
+  /** Put an item back as it was, within the 8 seconds (INBX-2). */
+  undoInbox(item: InboxItem, action: InboxAction): Promise<void>
+  /** INBX-5: bin every stale item in one go. */
+  binStale(ids: string[]): Promise<void>
 }
 
 function fail(error: { message: string } | null): void {
@@ -243,6 +316,158 @@ const live: DataSource = {
     const { error: e2 } = await supabase!.from('job_leads').update({ stage: 'passed', wider_lead_id: wider }).eq('id', lead.id)
     fail(e2)
   },
+
+  async inboxItems() {
+    const { data, error } = await supabase!
+      .from('inbox_items')
+      .select(INBOX_COLUMNS)
+      .in('status', ['new', 'stale'])
+      .neq('type', 'auto_sent')
+      .order('rank', { ascending: false })
+    fail(error)
+    return ((data ?? []) as unknown as InboxRow[]).map(toInboxItem)
+  },
+
+  async sentForYou() {
+    const since = new Date(Date.now() - 7 * 86_400_000).toISOString()
+    const { data, error } = await supabase!
+      .from('inbox_items')
+      .select(INBOX_COLUMNS)
+      .eq('type', 'auto_sent')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+    fail(error)
+    return ((data ?? []) as unknown as InboxRow[]).map(toInboxItem)
+  },
+
+  async actOnInbox(item, action, extra = {}) {
+    // The record first, so the item never says done while the record is unchanged.
+    if (action === 'done' || action === 'pass') {
+      if (item.refTable === 'job_leads' && item.refId) {
+        const { error } = await supabase!.from('job_leads').update({ stage: 'chased' }).eq('id', item.refId).eq('stage', 'new')
+        fail(error)
+      } else if (item.refTable === 'referrals' && item.refId) {
+        const { error } = await supabase!.from('referrals').update({ stage: 'contacted' }).eq('id', item.refId).eq('stage', 'new')
+        fail(error)
+      } else if (item.refTable === 'wider_leads' && item.refId && action === 'pass') {
+        const { error } = await supabase!
+          .from('wider_leads')
+          .update({ status: 'passed', passed_to: extra.colleague, split_note: extra.split })
+          .eq('id', item.refId)
+        fail(error)
+      }
+    }
+    const change: Record<string, unknown> = { status: inboxStatusAfter(action) }
+    if (extra.draft !== undefined) change.draft = extra.draft
+    if (action === 'bin') change.bin_reason = extra.binReason ?? 'Other'
+    if (action === 'snooze') change.snoozed_until = extra.snoozedUntil
+    if (action === 'approve' && extra.on) change.due_on = extra.on
+    const { error } = await supabase!.from('inbox_items').update(change).eq('id', item.id)
+    fail(error)
+  },
+
+  async undoInbox(item, action) {
+    if (action === 'done' || action === 'pass') {
+      if (item.refTable === 'job_leads' && item.refId) {
+        const { error } = await supabase!.from('job_leads').update({ stage: 'new' }).eq('id', item.refId).eq('stage', 'chased')
+        fail(error)
+      } else if (item.refTable === 'referrals' && item.refId) {
+        const { error } = await supabase!.from('referrals').update({ stage: 'new' }).eq('id', item.refId).eq('stage', 'contacted')
+        fail(error)
+      } else if (item.refTable === 'wider_leads' && item.refId && action === 'pass') {
+        const { error } = await supabase!
+          .from('wider_leads')
+          .update({ status: 'spotted', passed_to: null, passed_on: null, split_note: null })
+          .eq('id', item.refId)
+        fail(error)
+      }
+    }
+    const { error } = await supabase!
+      .from('inbox_items')
+      .update({ status: item.status, bin_reason: null, snoozed_until: null })
+      .eq('id', item.id)
+    fail(error)
+  },
+
+  async binStale(ids) {
+    if (ids.length === 0) return
+    const { error } = await supabase!.from('inbox_items').update({ status: 'binned', bin_reason: 'Old' }).in('id', ids)
+    fail(error)
+  },
+}
+
+const INBOX_COLUMNS =
+  'id, type, agent, title, person_id, company, role, location, why, suggested_action, draft, draft_original, ' +
+  'source, source_url, links, ref_table, ref_id, rank, status, bin_reason, snoozed_until, due_on, created_at'
+
+type InboxRow = {
+  id: string
+  type: InboxType
+  agent: string
+  title: string
+  person_id: string | null
+  company: string | null
+  role: string | null
+  location: string | null
+  why: string | null
+  suggested_action: string | null
+  draft: string | null
+  draft_original: string | null
+  source: string | null
+  source_url: string | null
+  links: { label?: string; url?: string }[] | null
+  ref_table: string | null
+  ref_id: string | null
+  rank: number | string
+  status: InboxStatus
+  bin_reason: string | null
+  snoozed_until: string | null
+  due_on: string | null
+  created_at: string
+}
+
+function toInboxItem(r: InboxRow): InboxItem {
+  return {
+    id: r.id,
+    type: r.type,
+    agent: r.agent,
+    title: r.title,
+    personId: r.person_id,
+    company: r.company,
+    role: r.role,
+    location: r.location,
+    why: r.why,
+    suggestedAction: r.suggested_action,
+    draft: r.draft,
+    draftOriginal: r.draft_original,
+    source: r.source,
+    sourceUrl: r.source_url,
+    links: (Array.isArray(r.links) ? r.links : [])
+      .filter((l) => typeof l.label === 'string' && typeof l.url === 'string')
+      .map((l) => ({ label: l.label!, url: l.url! })),
+    refTable: r.ref_table,
+    refId: r.ref_id,
+    rank: Number(r.rank),
+    status: r.status,
+    binReason: r.bin_reason,
+    snoozedUntil: r.snoozed_until,
+    dueOn: r.due_on,
+    createdAt: r.created_at,
+  }
+}
+
+/** The item status each action leaves (7.4): done, approved, binned, snoozed. */
+export function inboxStatusAfter(action: InboxAction): InboxStatus {
+  switch (action) {
+    case 'approve':
+      return 'approved'
+    case 'bin':
+      return 'binned'
+    case 'snooze':
+      return 'snoozed'
+    default:
+      return 'done'
+  }
 }
 
 export const data: DataSource = supabase ? live : sampleSource
