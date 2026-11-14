@@ -130,7 +130,7 @@ test('anon holds no privilege on any table or view', async () => {
 
 test('T-AUTH-5 / anon: every table and view refuses a read', async () => {
   await anon(async () => {
-    for (const t of [...allTables, 'kpi_week_view', 'kpi_this_week', 'kpi_streak_view', 'kpi_quarter_view', 'kpi_output_week_view', 'followups_quarter_view', 'bd_funnel_view', 'system_week_view']) {
+    for (const t of [...allTables, 'kpi_week_view', 'kpi_this_week', 'kpi_streak_view', 'kpi_quarter_view', 'kpi_output_week_view', 'followups_quarter_view', 'bd_funnel_view', 'system_week_view', 'agent_requests', 'run_requests']) {
       const why = await refused(`select * from ${t}`)
       assert.match(String(why), /permission denied/, `${t} as anon`)
     }
@@ -850,6 +850,148 @@ for (const { name, fn } of tests) {
 console.log(`\n${tests.length - failed} passed, ${failed} failed, ${allTables.length} tables`)
 await db.close()
 process.exit(failed ? 1 : 0)
+
+test('P1-14, P1-15, P1-16: keys, run-start, the write contract with its merges and refusals, idempotency, context, run-finish', async () => {
+  // Keys (32.4): made by the owner, checked by the endpoint, never readable.
+  let key
+  await owner(async () => {
+    ;[{ key }] = await rows(`select agent_key_create('a3_jobs') as key`)
+    assert.match(key, /^[0-9a-f]{64}$/)
+    assert.match(await refused(`select key_hash from agents`), /permission denied/)
+  })
+  await reviewer(async () => {
+    assert.match(await refused(`select agent_key_create('a3_jobs')`), /Only the owner/)
+  })
+  assert.deepEqual(await rows(`select agent_authenticate('a3_jobs', $1) as ok`, [key]), [{ ok: true }])
+  assert.deepEqual(await rows(`select agent_authenticate('a3_jobs', 'wrong') as ok`), [{ ok: false }])
+
+  // Keys are built the same way for every agent (16.5).
+  assert.deepEqual(await rows(`select norm_company('The Fabrikam Test Ltd.') as c, norm_role('Sr. PMM (Remote) - New York') as r, norm_text('  Élan  O''Neil ') as n`),
+    [{ c: 'fabrikam test', r: 'senior product marketing manager', n: 'elan o neil' }])
+
+  // E1: a run opens with the prompt, the blocks, the lookback and the caps.
+  const [{ start }] = await rows(`select agent_run_start('a3_jobs', 'schedule', 'match') as start`)
+  assert.equal(start.enabled, true)
+  assert.ok(start.run_id)
+  assert.equal(start.prompt.version, 1)
+  assert.equal(start.settings.per_run_caps.linkedin_connect, 10)
+  assert.equal(start.paused.all_sending, false)
+  const run = start.run_id
+
+  // E2: a batch where each record stands on its own.
+  const batch = [
+    { kind: 'job_lead', data: { company: 'Fabrikam Test Ltd', role: 'Senior PMM', source: 'linkedin_post', source_url: 'https://example.com/jobs/1', poster_name: 'Nia Pretend', poster_title: 'VP Marketing', fit_score: 82, fit_reason: 'B2B SaaS, New York', city: 'new_york', spec_draft: 'Hi Nia, I saw the Senior PMM role.' } },
+    { kind: 'job_lead', data: { company: 'Fabrikam Test', role: 'Sr PMM', source: 'indeed', source_url: 'https://example.com/jobs/2' } },
+    { kind: 'job_lead', data: { company: 'Globex Fiction', role: 'Account Executive', function: 'sales', source: 'linkedin_post', source_url: 'https://example.com/jobs/3' } },
+    { kind: 'job_lead', data: { company: 'Initech Mock', role: 'PMM', source: 'linkedin_post' } },
+    { kind: 'job_lead', data: { company: 'Initech Mock', role: 'PMM', source: 'linkedin_post', source_url: 'https://example.com/jobs/4', salary: '200k' } },
+    { kind: 'signal', data: { person_name: 'Someone', signal_type: 'promoted', source: 'linkedin_alert' } },
+    { kind: 'content_draft', data: { hook: 'x' } },
+  ]
+  const [{ out }] = await rows(`select agent_write($1, $2) as out`, [run, JSON.stringify(batch)])
+  assert.deepEqual([out.created, out.merged, out.rejected], [2, 1, 4], JSON.stringify(out))
+  const r = out.results
+  assert.equal(r[0].outcome, 'created')
+  assert.ok(r[0].inbox_item_id)
+  assert.equal(r[1].outcome, 'merged')
+  assert.equal(r[1].id, r[0].id)
+  assert.equal(r[2].outcome, 'created')
+  assert.match(r[2].note, /wider lead/)
+  assert.deepEqual([r[3].code, r[3].field], ['invalid', 'source_url'])
+  assert.deepEqual([r[4].code, r[4].field], ['invalid', 'salary'])
+  assert.equal(r[5].code, 'not_allowed')
+  assert.match(r[6].message, /later phase/)
+  // The merged lead gained a source and there is one inbox item for it; the poster is a thin person row.
+  assert.deepEqual(await rows(`select sources, stage from job_leads where id = $1`, [r[0].id]), [{ sources: ['linkedin_post', 'indeed'], stage: 'new' }])
+  assert.equal(await count(`inbox_items where ref_table = 'job_leads' and ref_id = '${r[0].id}'`), 1)
+  assert.deepEqual(await rows(`select display_title, kind from people where name_key = 'nia pretend'`), [{ display_title: 'VP Marketing', kind: 'leader' }])
+  assert.deepEqual(await rows(`select items_created, items_merged, items_rejected from agent_runs where id = $1`, [run]), [{ items_created: 2, items_merged: 1, items_rejected: 4 }])
+
+  // AGW-1: the same batch with the same key returns the stored result.
+  const [{ once }] = await rows(`select agent_write_once($1, 'batch-1', $2) as once`, [run, JSON.stringify([{ kind: 'person', data: { display_name: 'Kit Invented', display_company: 'Hooli Sample', kind: 'leader' } }])])
+  assert.equal(once.created, 1)
+  const [{ again }] = await rows(`select agent_write_once($1, 'batch-1', $2) as again`, [run, JSON.stringify([{ kind: 'person', data: { display_name: 'Kit Invented' } }])])
+  assert.equal(again.repeated, true)
+  assert.equal(again.results[0].id, once.results[0].id)
+  assert.equal(await count(`people where name_key = 'kit invented'`), 1)
+
+  // E3: the run closes with its counts; a second close is refused.
+  const [{ fin }] = await rows(`select agent_run_finish($1, 'ok', '[]', 'Four found') as fin`, [run])
+  assert.deepEqual([fin.status, fin.created], ['ok', 3])
+  assert.match(await refusedPlain(`select agent_run_finish('${run}', 'ok')`), /already finished/)
+  assert.deepEqual(await rows(`select consecutive_failures, consecutive_empty from agents where code = 'a3_jobs'`), [{ consecutive_failures: 0, consecutive_empty: 0 }])
+
+  // Signals (A4): new, then merged within 30 days, and refused for the do-not-contact list.
+  await db.query(`insert into do_not_contact (owner_id, name, scope, reason) values ($1, 'Ray Pretend', 'person', 'Asked')`, [ownerId])
+  const [{ s4 }] = await rows(`select agent_run_start('a4_signals', 'schedule') as s4`)
+  const [{ sig }] = await rows(`select agent_write($1, $2) as sig`, [s4.run_id, JSON.stringify([
+    { kind: 'signal', data: { person_name: 'Gia Imaginary', company: 'Initech Mock', signal_type: 'new_role', strength: 3, source: 'linkedin_alert', source_url: 'https://example.com/in/gia', in_icp: true } },
+    { kind: 'signal', data: { person_name: 'Gia Imaginary', company: 'Initech Mock', signal_type: 'new_role', source: 'alex_leads' } },
+    { kind: 'signal', data: { person_name: 'Ray Pretend', signal_type: 'promoted', source: 'linkedin_alert' } },
+    { kind: 'message', data: { type: 'signal_congrats', channel: 'email', person_name: 'Gia Imaginary', body: 'Congratulations.', level: 'automatic' } },
+    { kind: 'message', data: { type: 'signal_congrats', channel: 'email', person_name: 'Gia Imaginary', body: 'Congratulations.', level: 'one_click' } },
+  ])])
+  assert.deepEqual(sig.results.map((x) => x.outcome), ['created', 'merged', 'rejected', 'rejected', 'created'], JSON.stringify(sig))
+  assert.equal(sig.results[2].code, 'policy_refused')
+  assert.equal(sig.results[3].code, 'policy_refused')
+  assert.match(sig.results[4].note, /draft only/)
+  assert.ok(sig.results[0].inbox_item_id)
+  assert.deepEqual(await rows(`select state, level_at_creation, created_by from messages where id = $1`, [sig.results[4].id]), [{ state: 'draft', level_at_creation: 'draft_only', created_by: 'a4_signals' }])
+
+  // Follow-ups, touches and the calendar (A5).
+  const [{ s5 }] = await rows(`select agent_run_start('a5_followups', 'schedule') as s5`)
+  const [{ fu }] = await rows(`select agent_write($1, $2) as fu`, [s5.run_id, JSON.stringify([
+    { kind: 'follow_up', data: { person_name: 'Ben Sample', company: 'Contoso Demo Inc', kind: 'chase', reason: 'Owes a reply on the Boston role', source: 'email', due_on: '2026-11-20', thread_ref: 'thread-1' } },
+    { kind: 'follow_up', data: { person_name: 'Ben Sample', kind: 'chase', reason: 'Same thread', source: 'email', due_on: '2026-11-17', thread_ref: 'thread-1' } },
+    { kind: 'follow_up', data: { person_name: 'Ben Sample', kind: 'chase', reason: 'No date', source: 'email' } },
+    { kind: 'touch', data: { person_name: 'Nobody Known', channel: 'email', kind: 'message_replied', source: 'email' } },
+    { kind: 'touch', data: { person_name: 'Ben Sample', company: 'Contoso Demo Inc', channel: 'email', kind: 'message_replied', source: 'email', touched_on: '2026-11-13' } },
+    { kind: 'calendar_today', data: { events: [{ event_ref: 'ev-1', starts_at: '2026-11-16T14:00:00Z', title: 'Candidate screen', call_type: 'candidate_screen', person_name: 'Ben Sample' }, { event_ref: 'ev-2', starts_at: '2026-11-16T16:00:00Z', title: 'Team catch-up', call_type: 'internal', is_external: false }] } },
+    { kind: 'kpi_event', data: { kpi: 'client_meetings', source_table: 'calendar', source_ref: 'ev-9', label: 'Client meeting: Contoso Demo Inc' } },
+    { kind: 'kpi_event', data: { kpi: 'client_meetings', source_table: 'calendar', source_ref: 'ev-9', label: 'Client meeting: Contoso Demo Inc' } },
+    { kind: 'kpi_event', data: { kpi: 'posts_chased', source_ref: 'x' } },
+  ])])
+  assert.deepEqual(fu.results.map((x) => x.outcome), ['created', 'merged', 'rejected', 'rejected', 'created', 'created', 'created', 'merged', 'rejected'], JSON.stringify(fu))
+  assert.deepEqual(await rows(`select due_on::text as due_on from follow_ups where id = $1`, [fu.results[0].id]), [{ due_on: '2026-11-17' }])
+  assert.equal(fu.results[3].code, 'not_found')
+  assert.equal(await count('calendar_today'), 2)
+  assert.equal(fu.results[8].code, 'not_allowed')
+
+  // Referrals (A6) count once through the trigger and land in the Inbox.
+  const [{ s6 }] = await rows(`select agent_run_start('a6_calls', 'after_call') as s6`)
+  const [{ ref }] = await rows(`select agent_write($1, $2) as ref`, [s6.run_id, JSON.stringify([
+    { kind: 'referral', data: { referred_name: 'Ivy Example', referred_company: 'Stark Sample', referred_by_name: 'Ben Sample', context: 'Mentioned on the call' } },
+    { kind: 'referral', data: { referred_name: 'Ivy Example', referred_company: 'Stark Sample', referred_by_name: 'Ben Sample' } },
+  ])])
+  assert.deepEqual(ref.results.map((x) => x.outcome), ['created', 'merged'])
+  assert.equal(await count(`kpi_events where kpi = 'referrals_received' and source_id = '${ref.results[0].id}'`), 1)
+  assert.equal(await count(`inbox_items where ref_table = 'referrals' and ref_id = '${ref.results[0].id}'`), 1)
+
+  // E4: an agent gets only what is listed against it (15.5).
+  const [{ ctx }] = await rows(`select agent_context('a3_jobs', array['pool', 'job_keys', 'dnc']) as ctx`)
+  assert.ok(Array.isArray(ctx.job_keys) && ctx.job_keys.some((k) => k.company_key === 'fabrikam test'))
+  assert.ok(Array.isArray(ctx.dnc) && ctx.dnc.some((d) => d.name === 'Ray Pretend'))
+  assert.ok(Array.isArray(ctx.pool))
+  assert.match(await refusedPlain(`select agent_context('a3_jobs', array['league'])`), /not_allowed/)
+  const [{ k1 }] = await rows(`select agent_context('a1_review', array['kpis']) as k1`)
+  assert.ok(Array.isArray(k1.kpis.lines))
+
+  // E9 and the browser: the owner may ask for a run and nothing else.
+  await owner(async () => {
+    const [{ id }] = await rows(`select request_run('a7_events') as id`)
+    assert.ok(id)
+    assert.equal(await count(`run_requests where agent = 'a7_events' and taken_at is null`), 1)
+    assert.match(await refused(`select agent_write('${run}', '[]')`), /permission denied/)
+    assert.match(await refused(`select agent_run_start('a3_jobs', 'manual')`), /permission denied/)
+    assert.match(await refused(`select agent_context('a3_jobs', array['dnc'])`), /permission denied/)
+    assert.match(await refused(`select * from agent_requests`), /permission denied/)
+  })
+  await rows(`select agent_run_start('a7_events', 'schedule')`)
+  assert.equal(await count(`run_requests where agent = 'a7_events' and taken_at is null`), 0)
+  await anon(async () => {
+    assert.match(await refused(`select agent_authenticate('a3_jobs', 'x')`), /permission denied/)
+  })
+})
 
 // Runs last: it moves rows on by date, which the tests above read as seeded.
 test('P1-47: the nightly job sweeps, retains and raises system notices; no browser role can run it (33.8, 34.5)', async () => {

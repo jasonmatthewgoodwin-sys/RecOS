@@ -513,6 +513,11 @@ export interface DataSource {
   /** Save as new version: the next number, made active in one transaction (AGT-1). */
   saveAgentPrompt(code: string, body: string, note: string): Promise<number>
   activateAgentPrompt(code: string, version: number): Promise<void>
+  /** Create new key (32.4): the plain key, shown once and never stored (34.3). */
+  createAgentKey(code: string): Promise<string>
+  revokeAgentKey(code: string): Promise<void>
+  /** E9: ask for a manual run. The agent picks it up at the top of its schedule. */
+  requestRun(code: string): Promise<void>
   /** Settings, Send rules (20.9, 32.4). */
   sendingPaused(): Promise<boolean>
   setSendingPaused(paused: boolean): Promise<void>
@@ -1380,6 +1385,22 @@ const live: DataSource = {
 
   async activateAgentPrompt(code, version) {
     const { error } = await supabase!.rpc('activate_agent_prompt', { p_agent: code, p_version: version })
+    fail(error)
+  },
+
+  async createAgentKey(code) {
+    const { data, error } = await supabase!.rpc('agent_key_create', { p_agent: code })
+    fail(error)
+    return String(data)
+  },
+
+  async revokeAgentKey(code) {
+    const { error } = await supabase!.rpc('agent_key_revoke', { p_agent: code })
+    fail(error)
+  },
+
+  async requestRun(code) {
+    const { error } = await supabase!.rpc('request_run', { p_agent: code })
     fail(error)
   },
 

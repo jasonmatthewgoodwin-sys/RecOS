@@ -81,6 +81,7 @@ To look at the components without signing in, add a file `app/.env.gallery` hold
 | P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
 | P1-30 Follow-up lifecycle | Done. Migration 0020 applied to the test project on 14 November |
 | P1-37, P1-38 Lists, league, touches, signals | Done. Migration 0021, five policy files, `league_due_view`, `lists.sql` and `sample_league.sql` applied to the test project on 14 November |
+| P1-14, P1-15, P1-16 Agent endpoints and the write contract | Done in the database (migration 0025, applied to the test project on 14 November) with thin edge functions in `functions/`. Not deployed: see `functions/README.md` |
 | P1-48 Phone layout for Home, Inbox, Follow-ups | Done. Other pages say Best on a laptop at phone width. Not yet seen on an iPhone |
 | P1-47 Retention job, nightly sweeps, monitoring checks | Done as `nightly()` in migration 0024, applied to the test project on 14 November. `db/jobs/schedule.sql` (pg_cron) still to run on the test project |
 | P1-46 Settings: Profile and Data, person find, export and delete | Done as database functions the page calls. Migration 0023 applied to the test project on 14 November |

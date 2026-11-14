@@ -15,7 +15,7 @@ function mock() {
   vi.spyOn(data, 'followUpsDue').mockResolvedValue({ due: 3, late: 3, lateFromDay: 'Monday' })
   vi.spyOn(data, 'callsToday').mockResolvedValue([])
   vi.spyOn(data, 'weekTargets').mockResolvedValue({ hit: 2, total: 4 })
-  for (const m of ['agents', 'setAgentEnabled', 'agentRuns', 'agentPrompts', 'saveAgentPrompt', 'activateAgentPrompt', 'sendingPaused', 'setSendingPaused', 'heldMessages', 'releaseHeld', 'sendPolicies', 'updateSendPolicy', 'targets', 'setTarget'] as const) {
+  for (const m of ['agents', 'setAgentEnabled', 'agentRuns', 'agentPrompts', 'saveAgentPrompt', 'activateAgentPrompt', 'createAgentKey', 'revokeAgentKey', 'requestRun', 'sendingPaused', 'setSendingPaused', 'heldMessages', 'releaseHeld', 'sendPolicies', 'updateSendPolicy', 'targets', 'setTarget'] as const) {
     vi.spyOn(data, m).mockImplementation(sampleSource[m] as never)
   }
 }
@@ -62,7 +62,14 @@ describe('Settings, Agents', () => {
     expect(within(card).getByText('12.40 of 50.00')).toBeInTheDocument()
     const prompt = await within(card).findByRole('textbox', { name: 'Version 2' })
     expect(prompt).toHaveValue('Find product marketing job posts in the US that fit the ICP. Score each for fit and name the poster.')
-    expect(within(card).getByText(/Create new key arrives/)).toBeInTheDocument()
+    // A key is shown once, then the card only says when it was made (34.3).
+    await userEvent.click(within(card).getByRole('button', { name: 'Create new key' }))
+    expect(await within(card).findByTestId('new-key')).toHaveTextContent(/^sample/)
+    await userEvent.click(within(card).getByRole('button', { name: 'Done' }))
+    expect(within(card).queryByTestId('new-key')).not.toBeInTheDocument()
+    expect(within(card).getByText(/Rotate every 90 days/)).toBeInTheDocument()
+    await userEvent.click(within(card).getByRole('button', { name: 'Ask for a run' }))
+    expect(await within(card).findByText(/Asked\./)).toBeInTheDocument()
 
     await userEvent.click(within(card).getByRole('switch', { name: 'On' }))
     await waitFor(() => expect(within(card).getByRole('switch', { name: 'Off' })).toHaveAttribute('aria-checked', 'false'))

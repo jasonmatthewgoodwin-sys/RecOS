@@ -29,6 +29,8 @@ function AgentCard({ agent, onClose, onNote }: { agent: Agent; onClose: () => vo
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [history, setHistory] = useState(false)
+  const [newKey, setNewKey] = useState<string | null>(null)
+  const [asked, setAsked] = useState(false)
 
   useEffect(() => {
     setBody(null)
@@ -62,6 +64,35 @@ function AgentCard({ agent, onClose, onNote }: { agent: Agent; onClose: () => vo
       onNote('That did not save. Try again.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function makeKey() {
+    try {
+      const key = await data.createAgentKey(agent.code)
+      setNewKey(key)
+      invalidate(KEY)
+    } catch {
+      onNote('That did not work. Try again.')
+    }
+  }
+
+  async function revokeKey() {
+    try {
+      await data.revokeAgentKey(agent.code)
+      setNewKey(null)
+      invalidate(KEY)
+    } catch {
+      onNote('That did not work. Try again.')
+    }
+  }
+
+  async function askForRun() {
+    try {
+      await data.requestRun(agent.code)
+      setAsked(true)
+    } catch {
+      onNote('That did not work. Try again.')
     }
   }
 
@@ -127,10 +158,41 @@ function AgentCard({ agent, onClose, onNote }: { agent: Agent; onClose: () => vo
         {
           label: 'Key',
           body: (
-            <p className="text-body text-ink-2">
-              {agent.keyCreatedAt ? `Made on ${agent.keyCreatedAt.slice(0, 10)}. ` : 'No key yet. '}
-              Create new key arrives with the agent endpoints.
-            </p>
+            <div className="flex flex-col gap-3">
+              {newKey ? (
+                <>
+                  <p className="text-body text-ink">Copy it now. It is shown once and never again.</p>
+                  <code className="break-all font-mono text-label text-ink" data-testid="new-key">
+                    {newKey}
+                  </code>
+                  <div className="flex gap-6">
+                    <TextLink label="Copy" onClick={() => void navigator.clipboard?.writeText(newKey)} />
+                    <TextLink label="Done" onClick={() => setNewKey(null)} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-body text-ink-2">{agent.keyCreatedAt ? `Made on ${agent.keyCreatedAt.slice(0, 10)}. Rotate every 90 days.` : 'No key yet. The agent cannot post until it has one.'}</p>
+                  <div className="flex gap-6">
+                    <TextLink label="Create new key" onClick={() => void makeKey()} />
+                    {agent.keyCreatedAt && <TextLink label="Revoke" onClick={() => void revokeKey()} />}
+                  </div>
+                </>
+              )}
+            </div>
+          ),
+        },
+        {
+          label: 'Run now',
+          body: asked ? (
+            <p className="text-body text-ink">Asked. The agent checks at the top of its schedule. For a faster run, start the task by hand in the Claude app.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-body text-ink-2">Agents run as scheduled tasks outside RecOS.</p>
+              <div>
+                <TextLink label="Ask for a run" onClick={() => void askForRun()} />
+              </div>
+            </div>
           ),
         },
       ]}

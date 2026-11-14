@@ -1008,6 +1008,20 @@ export const sampleSource: DataSource = {
     if (!mine.some((p) => p.version === version)) throw new Error('No such version')
     for (const p of mine) p.active = p.version === version
   },
+  async createAgentKey(code) {
+    const a = sampleAgents.find((x) => x.code === code)
+    if (!a) throw new Error('No such agent')
+    a.keyCreatedAt = new Date().toISOString()
+    return 'sample' + 'f'.repeat(58)
+  },
+  async revokeAgentKey(code) {
+    const a = sampleAgents.find((x) => x.code === code)
+    if (!a) throw new Error('No such agent')
+    a.keyCreatedAt = null
+  },
+  async requestRun(code) {
+    if (!sampleAgents.some((x) => x.code === code)) throw new Error('No such agent')
+  },
   async sendingPaused() {
     return samplePaused
   },
