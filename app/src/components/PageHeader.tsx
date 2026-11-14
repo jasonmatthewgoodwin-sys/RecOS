@@ -9,7 +9,7 @@ type Props = { title: string; tabs?: { label: string; route: string; tone?: Tone
 // at the top right of the sheet (14 November 2026).
 export function PageHeader({ title, tabs = [], aside }: Props) {
   return (
-    <header className="flex flex-col gap-8">
+    <header className="flex flex-col gap-5">
       <h1 className="text-title text-ink">{title}</h1>
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-2 border-b border-rule">
         <IndexTabs tabs={tabs} />

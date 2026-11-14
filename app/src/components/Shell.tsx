@@ -29,9 +29,9 @@ function Cog() {
   )
 }
 
-type TabsProps = { tabs: Section[]; dots?: Record<string, boolean>; showSettings?: boolean; onSearch?: () => void; onCapture?: () => void }
+type TabsProps = { tabs: Section[]; dots?: Record<string, boolean>; showSettings?: boolean; onSearch?: () => void; onCapture?: () => void; onReport?: () => void }
 
-export function FileTabs({ tabs, dots = {}, showSettings = true, onSearch, onCapture }: TabsProps) {
+export function FileTabs({ tabs, dots = {}, showSettings = true, onSearch, onCapture, onReport }: TabsProps) {
   const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
   const current = sectionFor(pathname)
@@ -52,6 +52,11 @@ export function FileTabs({ tabs, dots = {}, showSettings = true, onSearch, onCap
         {onCapture && (
           <button type="button" aria-label="Quick capture" title="Quick capture (c)" onClick={onCapture} className="mb-1 inline-flex size-10 items-center justify-center rounded-pill text-ink-3 hover:text-ink">
             <Icon name="plus" />
+          </button>
+        )}
+        {onReport && (
+          <button type="button" aria-label="Report a problem" title="Report a problem" onClick={onReport} className="mb-1 inline-flex size-10 items-center justify-center rounded-pill text-ink-3 hover:text-ink">
+            <Icon name="flag" />
           </button>
         )}
         {showSettings && (
@@ -108,12 +113,12 @@ export function FileTabs({ tabs, dots = {}, showSettings = true, onSearch, onCap
 // The single rounded sheet. Everything lives on it.
 export function Sheet({ children, fadeKey }: { children: ReactNode; fadeKey?: string }) {
   return (
-    <main className="relative min-h-[40rem] rounded-sheet border border-ink bg-sheet">
+    <main className="relative min-h-[32rem] rounded-sheet border border-ink bg-sheet">
       {/* The colour key with its counts, the status filter, sits at the top right of the sheet (Mia, 14 November 2026). */}
       <div className="absolute right-6 top-5 z-10 flex max-w-[60%] justify-end sm:right-12 sm:top-7">
         <StatusFilter />
       </div>
-      <div key={fadeKey} className="animate-fade p-6 sm:p-16">
+      <div key={fadeKey} className="animate-fade p-5 sm:px-10 sm:py-8">
         {children}
       </div>
     </main>

@@ -1136,6 +1136,65 @@ test('P1-44: content drafts and data points through the write contract, the form
   await db.query(`delete from agent_runs where id = $1`, [run])
 })
 
+test('0029: a problem report gets a sequential reference, resolving stamps the time and reopening clears it, notes attach once written, the reviewer sees nothing', async () => {
+  await owner(async () => {
+    const [r] = await rows(`insert into problem_reports (description, severity, reporter_name, route, user_agent, viewport, app_version) values ('Save does nothing on the calendar', 'high', 'Jason', '/content/calendar', 'TestBrowser/1', '1280x800', 'test') returning id, ref, status, resolved_at`)
+    assert.equal(r.status, 'new')
+    assert.ok(r.ref >= 1)
+    assert.equal(r.resolved_at, null)
+    const [r2] = await rows(`insert into problem_reports (description) values ('A second one') returning ref`)
+    assert.equal(r2.ref, r.ref + 1)
+    await db.query(`insert into problem_notes (report_id, author, body) values ($1, 'Jason', 'Seen it again on Thursday')`, [r.id])
+    assert.equal(await count(`problem_notes where report_id = '${r.id}'`), 1)
+    assert.match(await refused(`update problem_notes set body = 'changed'`), /permission denied/, 'notes are never edited')
+    await db.query(`update problem_reports set status = 'resolved', resolution = 'Fixed in 0029' where id = $1`, [r.id])
+    assert.notEqual((await rows(`select resolved_at from problem_reports where id = $1`, [r.id]))[0].resolved_at, null)
+    await db.query(`update problem_reports set status = 'closed' where id = $1`, [r.id])
+    assert.notEqual((await rows(`select resolved_at from problem_reports where id = $1`, [r.id]))[0].resolved_at, null)
+    await db.query(`update problem_reports set status = 'new' where id = $1`, [r.id])
+    assert.equal((await rows(`select resolved_at from problem_reports where id = $1`, [r.id]))[0].resolved_at, null)
+    assert.match(await refused(`insert into problem_reports (description) values ('   ')`), /check constraint/)
+    assert.match(await refused(`update problem_reports set severity = 'urgent' where id = '${r.id}'`), /check constraint/)
+    assert.match(await refused(`delete from problem_reports where id = '${r.id}'`), /permission denied/)
+    assert.match(await refused(`delete from problem_notes where report_id = '${r.id}'`), /permission denied/)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('problem_reports'), 0)
+    assert.equal(await count('problem_notes'), 0)
+    assert.ok(await refused(`insert into problem_reports (description) values ('x')`))
+  })
+})
+
+test('0030: the owner asks for a profile pull, the signals agent sees the request at run-start and writes a short summary back; long or contact-bearing summaries are refused', async () => {
+  const [{ pid }] = await rows(`select id as pid from people where name_key = 'nia pretend'`)
+  let reqId
+  await owner(async () => {
+    ;[{ reqId }] = await rows(`select request_run('a4_signals', $1) as "reqId"`, [`profile:${pid}`])
+    assert.ok(reqId)
+    // The same ask twice is one request.
+    assert.deepEqual(await rows(`select request_run('a4_signals', $1) = $2::uuid as same`, [`profile:${pid}`, reqId]), [{ same: true }])
+  })
+  // The owner block rolled back, so the request is planted as the database would hold it.
+  await db.query(`insert into run_requests (agent, requested_by, note) values ('a4_signals', 'owner', $1)`, [`profile:${pid}`])
+  const [{ start }] = await rows(`select agent_run_start('a4_signals', 'manual') as start`)
+  assert.deepEqual(start.requests, [`profile:${pid}`])
+  assert.equal(await count(`run_requests where agent = 'a4_signals' and taken_at is null`), 0)
+  const [{ out }] = await rows(`select agent_write($1, $2) as out`, [start.run_id, JSON.stringify([
+    { kind: 'person', data: { display_name: 'Nia Pretend', display_company: 'Fabrikam Test Ltd', profile_summary: 'VP Marketing at Fabrikam Test. Ten years in B2B SaaS product marketing, New York. Posts about positioning and pricing.' } },
+    { kind: 'person', data: { display_name: 'Nia Pretend', profile_summary: 'x'.repeat(601) } },
+    { kind: 'person', data: { display_name: 'Nia Pretend', profile_summary: 'Reach her on nia@example.com' } },
+  ])])
+  assert.deepEqual([out.results[0].outcome, out.results[0].id], ['merged', pid])
+  assert.deepEqual([out.results[1].code, out.results[1].field], ['invalid', 'profile_summary'])
+  assert.equal(out.results[2].code, 'policy_refused')
+  const [p] = await rows(`select profile_summary, profile_pulled_at from people where id = $1`, [pid])
+  assert.match(p.profile_summary, /^VP Marketing at Fabrikam Test/)
+  assert.notEqual(p.profile_pulled_at, null)
+  const [{ ctx }] = await rows(`select agent_context('a4_signals', array['league']) as ctx`)
+  assert.ok(Array.isArray(ctx.league))
+  await rows(`select agent_run_finish($1, 'ok')`, [start.run_id])
+})
+
 // ---------------------------------------------------------------- run
 
 let failed = 0

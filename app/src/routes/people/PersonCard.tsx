@@ -17,9 +17,16 @@ type Props = {
   onReply: () => void
   onTier: (tier: Tier, reason: string) => void
   onNotes: (notes: string) => void
+  onProfile: (text: string) => void
+  onPull: () => void
   onRemove: (reason: string) => void
   onDoNotContact: () => void
   onClose: () => void
+}
+
+/** A LinkedIn people search by name and company, for a person with no link held. */
+export function linkedInSearch(m: Pick<Member, 'name' | 'company'>): string {
+  return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent([m.name, m.company].filter(Boolean).join(' '))}`
 }
 
 const kindWord: Record<string, string> = {
@@ -37,11 +44,13 @@ const kindWord: Record<string, string> = {
 // The person card (29.1): header, list and tier, next contact, the live
 // signal, history, value, one primary and the quiet links. Never an email
 // address or phone number (PEO-4): those are one click away in the CRM.
-export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, onRemove, onDoNotContact, onClose }: Props) {
+export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, onProfile, onPull, onRemove, onDoNotContact, onClose }: Props) {
   const [mode, setMode] = useState<Mode>('view')
   const [tier, setTier] = useState<Tier>(m.tier)
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState(m.notesForNextContact ?? '')
+  const [summary, setSummary] = useState(m.profileSummary ?? '')
+  const [asked, setAsked] = useState(false)
   const [problem, setProblem] = useState<string | undefined>()
   const [showAll, setShowAll] = useState(false)
   const touches = useQuery(`people.touches.${m.personId}`, () => data.touches(m.personId, 20))
@@ -89,8 +98,9 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
             <div className="flex flex-col gap-2">
               {header && <p className="text-ink-2">{header}</p>}
               <p className="flex flex-wrap gap-x-6">
-                {m.crmUrl && <TextLink label="Open in CRM" href={m.crmUrl} />}
-                {m.profileUrl && <TextLink label="Open profile" href={m.profileUrl} />}
+                {m.crmUrl && <TextLink label="Open in CRM" href={m.crmUrl} icon="open" />}
+                {/* Every person has a way to their LinkedIn profile (14 November 2026): the link held, or a search by name and company. */}
+                <TextLink label={m.profileUrl ? 'LinkedIn profile' : 'Find on LinkedIn'} href={m.profileUrl ?? linkedInSearch(m)} icon="open" />
               </p>
             </div>
           ),
@@ -145,6 +155,30 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
                   </div>
                 </form>
               )}
+            </div>
+          ),
+        },
+        {
+          label: 'Profile',
+          body: (
+            <div className="flex flex-col gap-3">
+              <Field label="In a few lines" kind="lines" rows={3} value={summary} onChange={setSummary} placeholder="Nothing pulled in yet. Ask below, or write it." />
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+                {summary !== (m.profileSummary ?? '') && <TextLink label="Save profile" onClick={() => onProfile(summary)} />}
+                {!asked && (
+                  <TextLink
+                    label="Pull in from LinkedIn"
+                    icon="sparkle"
+                    onClick={() => {
+                      setAsked(true)
+                      onPull()
+                    }}
+                  />
+                )}
+                <span className="font-mono text-label text-ink-3">
+                  {asked ? 'Asked the signals agent. It fills this in on its next run.' : m.profilePulledAt ? `Pulled in ${m.profilePulledAt.slice(0, 10)}` : ''}
+                </span>
+              </div>
             </div>
           ),
         },

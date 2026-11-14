@@ -88,7 +88,7 @@ export function Review({ role }: { role: Role }) {
   const loading = weeks.status === 'loading' && !weeks.data
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-start justify-between gap-6">
         <PageHeader title={tab.label} tabs={tabs} />
         <Switch on={allWork} label="All work" onChange={setAllWork} />

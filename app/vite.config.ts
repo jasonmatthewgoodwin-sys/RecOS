@@ -10,5 +10,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     css: false,
     include: ['src/**/*.test.{ts,tsx}'],
+    // The first test of a file can take a while when every file starts at once on a laptop.
+    testTimeout: 15000,
   },
 })

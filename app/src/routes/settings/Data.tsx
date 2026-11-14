@@ -263,10 +263,10 @@ export function Data() {
   }
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={settings.label} tabs={tabs} />
 
-      <div className="flex max-w-prose flex-col gap-12">
+      <div className="flex max-w-prose flex-col gap-8">
         <FindPerson onNote={setNote} />
         <BlockList onNote={setNote} />
 

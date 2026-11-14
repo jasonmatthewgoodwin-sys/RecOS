@@ -7,7 +7,7 @@ import { settings } from '../../lib/sections'
 export function Templates() {
   const tabs = settings.pages.map((p) => ({ label: p.label, route: `${settings.path}/${p.slug}` }))
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={settings.label} tabs={tabs} />
       <EmptyLine text="Templates arrive with the send engine. Until then every message is written by hand" />
     </div>

@@ -216,7 +216,7 @@ export function Deck<T extends DeckItem>({
   const held = waiting !== undefined && waiting > total ? `, ${waiting} waiting` : ''
 
   return (
-    <section ref={root} aria-label="Deck" data-deck className="flex min-h-96 flex-col">
+    <section ref={root} aria-label="Deck" data-deck className="flex min-h-72 flex-col">
       <div className="flex items-center justify-between">
         <p className="font-mono text-label tabular-nums text-ink-2" data-testid="deck-counter">
           {counter}
@@ -225,7 +225,7 @@ export function Deck<T extends DeckItem>({
         {onList && <TextLink label="List" onClick={onList} icon="grid" />}
       </div>
 
-      <div key={current.id} className="mt-8 flex-1 animate-fade">
+      <div key={current.id} className="mt-6 flex-1 animate-fade">
         <>
           {tone && <span aria-hidden data-deck-tone={tone(current)} className={`mb-4 block h-1.5 w-24 rounded-pill ${gradClass[tone(current)]}`} />}
           {renderItem(current)}
@@ -233,7 +233,7 @@ export function Deck<T extends DeckItem>({
       </div>
 
       {asking === 'primary' && primaryAction.step ? (
-        <div className="mt-8" data-deck-step>
+        <div className="mt-6" data-deck-step>
           {primaryAction.step(
             current,
             () => deal(current, 'primary'),
@@ -241,7 +241,7 @@ export function Deck<T extends DeckItem>({
           )}
         </div>
       ) : (
-        <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
           <PillButton kind="primary" label={primaryAction.label(current)} onClick={primary} icon="check" />
           {undo && <TextLink label="Undo" onClick={undoLast} />}
           {extraActions?.(current).map((a) => (
@@ -298,7 +298,7 @@ export function Deck<T extends DeckItem>({
         </div>
       )}
 
-      <div className="mt-16">
+      <div className="mt-10">
         <TickMeter filled={cleared} total={total} />
       </div>
     </section>

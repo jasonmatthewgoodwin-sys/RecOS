@@ -7,7 +7,7 @@ import type { Section } from '../lib/sections'
 export function SectionPage({ section }: { section: Section }) {
   const tabs = section.pages.map((p) => ({ label: p.label, route: `${section.path}/${p.slug}` }))
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={section.label} tabs={tabs} />
       <EmptyLine text={`Not built yet. Arrives in ${section.arrives}.`} />
     </div>

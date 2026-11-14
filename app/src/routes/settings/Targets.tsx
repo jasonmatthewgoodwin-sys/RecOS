@@ -56,7 +56,7 @@ export function Targets() {
   }
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={settings.label} tabs={tabs} />
 
       {targets.status === 'error' && !targets.data && <EmptyLine text="The targets did not load. Try again in a moment" />}

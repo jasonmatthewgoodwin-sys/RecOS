@@ -149,6 +149,14 @@ Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. P1-18, P1-
 
 New database changes are new numbered files in `db/migrations` (next is 0020), with a policy file for every new table. `npm test` in `db/` fails if a table has no policy file. Apply new files to the test project through the SQL editor.
 
+## Added on the evening of 14 November (Mia's asks)
+
+- **Content.** Drafts deck (P1-44) and a month calendar with a composer window. Migration 0028 is applied to the test project. Ideas and Testimonials still say Not built yet.
+- **Problems.** The flag at the top right of the tabs raises a problem report from any page; Settings, Problems is the queue. Migration 0029 is applied.
+- **Profile summary.** Every person card links to LinkedIn and can ask the signals agent to pull in a short summary. Migration 0030 is applied. The agent's prompt needs one more instruction: read `requests` from run-start, and for each `profile:<person id>` write a `person` record with `profile_summary` (600 characters at most, no contact details).
+- **Look.** Sunset sky on Home, the status key at the sheet's top right, a tighter density everywhere, windows that fit without scrolling.
+- **Business development.** Jason's spoken notes are written up in `docs/business-development-brief.md` with a suggested order and the decisions needed first. Nothing from it is built yet.
+
 ## Hosting on Vercel, so Jason can sign in from a web address
 
 Mia chose Vercel on 14 November, in Jason's own Vercel account, so the address belongs to him like the repository and the database. Nothing is deployed yet. `app/vercel.json` is in place so every route serves the app. The app sends sign-in links back to whatever address it runs on, so no code changes with the host.

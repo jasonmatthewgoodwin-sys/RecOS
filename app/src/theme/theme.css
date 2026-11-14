@@ -61,11 +61,11 @@
   --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Space Mono', ui-monospace, 'Cascadia Mono', monospace;
 
-  --text-hero: 64px;
+  --text-hero: 52px;
   --text-hero--line-height: 1;
-  --text-hero-sm: 44px;
+  --text-hero-sm: 36px;
   --text-hero-sm--line-height: 1;
-  --text-title: 30px;
+  --text-title: 24px;
   --text-title--line-height: 1.2;
   --text-body: 16px;
   --text-body--line-height: 1.5;

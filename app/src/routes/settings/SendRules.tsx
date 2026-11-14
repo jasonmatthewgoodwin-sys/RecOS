@@ -188,7 +188,7 @@ export function SendRules() {
     }))
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={settings.label} tabs={tabs} />
 
       <section className="flex flex-col gap-4" aria-label="Stop switch">

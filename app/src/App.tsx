@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Capture } from './components/Capture'
 import { PhoneGate } from './components/PhoneGate'
+import { Report } from './components/Report'
 import { Search } from './components/Search'
 import { Dots } from './components/Quiet'
 import { FileTabs, Paper, Sheet } from './components/Shell'
@@ -29,6 +30,7 @@ import { Signals } from './routes/people/Signals'
 import { SectionPage } from './routes/SectionPage'
 import { Agents } from './routes/settings/Agents'
 import { Data } from './routes/settings/Data'
+import { Problems } from './routes/settings/Problems'
 import { Profile } from './routes/settings/Profile'
 import { SendRules } from './routes/settings/SendRules'
 import { Targets } from './routes/settings/Targets'
@@ -56,6 +58,7 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'settings/targets': <Targets />,
     'settings/templates': <Templates />,
     'settings/data': <Data />,
+    'settings/problems': <Problems me={session.firstName} />,
   }
 }
 
@@ -101,7 +104,7 @@ export function SignedIn({ session }: { session: Session }) {
   }, [owner, prefs.data])
 
   // Search and quick capture (25.7): windows in the centre, by key or by the icons on the tab row.
-  const [window_, setWindow] = useState<'search' | 'capture' | null>(null)
+  const [window_, setWindow] = useState<'search' | 'capture' | 'report' | null>(null)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || window_ !== null) return
@@ -121,7 +124,7 @@ export function SignedIn({ session }: { session: Session }) {
 
   return (
     <>
-      <FileTabs tabs={tabs} dots={dots} showSettings={owner} onSearch={() => setWindow('search')} onCapture={owner ? () => setWindow('capture') : undefined} />
+      <FileTabs tabs={tabs} dots={dots} showSettings={owner} onSearch={() => setWindow('search')} onCapture={owner ? () => setWindow('capture') : undefined} onReport={owner ? () => setWindow('report') : undefined} />
       <Sheet fadeKey={sectionFor(pathname)?.key}>
         <Routes>
           {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
@@ -133,6 +136,7 @@ export function SignedIn({ session }: { session: Session }) {
         </Routes>
         {window_ === 'search' && <Search onClose={() => setWindow(null)} />}
         {window_ === 'capture' && <Capture onClose={() => setWindow(null)} />}
+        {window_ === 'report' && <Report reporter={session.firstName} onClose={() => setWindow(null)} />}
       </Sheet>
     </>
   )

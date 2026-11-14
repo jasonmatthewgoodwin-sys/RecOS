@@ -31,7 +31,7 @@ export function Tile({ dot, title, detail, meta, word, detailWord, done, actions
   const shown = actions.slice(0, 2)
   const orb = done ? orbClass.mist : orbClass[t]
   return (
-    <li className="group relative flex min-h-40 flex-col overflow-hidden rounded-card border border-rule bg-sheet p-4 transition-shadow hover:shadow-window" data-tone={t} data-variant={variant}>
+    <li className="group relative flex min-h-32 flex-col overflow-hidden rounded-card border border-rule bg-sheet p-3 transition-shadow hover:shadow-window" data-tone={t} data-variant={variant}>
       {variant === 'band' && <span aria-hidden className={`absolute inset-x-0 top-0 h-2 ${done ? gradClass.mist : gradClass[t]}`} />}
       <button
         type="button"
@@ -39,11 +39,11 @@ export function Tile({ dot, title, detail, meta, word, detailWord, done, actions
         data-row
         data-lead-id={leadId}
         data-done={done || undefined}
-        className="flex min-w-0 flex-1 flex-col items-start gap-3 text-left"
+        className="flex min-w-0 flex-1 flex-col items-start gap-2 text-left"
       >
         <span className="flex w-full items-center justify-between">
           {variant === 'avatar' ? (
-            <span aria-hidden className={`flex size-14 items-center justify-center rounded-pill ${orb} font-mono text-label text-ink`}>
+            <span aria-hidden className={`flex size-11 items-center justify-center rounded-pill ${orb} font-mono text-label text-ink`}>
               {initials(title) || (icon ? <Icon name={icon} size={16} /> : null)}
             </span>
           ) : variant === 'band' ? (

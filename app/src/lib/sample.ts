@@ -2,7 +2,9 @@
 // Local). Every name here is made up. Nothing in this file is real.
 
 import type {
-  ContentItem, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
+  ContentItem,
+  Problem,
+  ProblemNote, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { splitCopy, topicFrom } from './calendar'
 import type { SearchHit } from './capture'
@@ -393,6 +395,8 @@ function member(over: Partial<Member> & Pick<Member, 'id' | 'personId' | 'name' 
     city: null,
     crmUrl: null,
     profileUrl: null,
+    profileSummary: null,
+    profilePulledAt: null,
     why: null,
     groupName: null,
     daysLate,
@@ -420,7 +424,7 @@ export function freshSampleMembers(): Member[] {
     member({ id: 'm-lee', personId: 'p-lee', name: 'Lee Example', title: 'VP Marketing', company: 'Globex Fiction', listId: 'list-senior', tier: 'championship', why: 'Hiring again in the new year', lastTouchOn: daysAgo(25) }),
     member({ id: 'm-max', personId: 'p-max', name: 'Max Madeup', title: 'Head of Growth', company: 'Stark Sample', listId: 'list-senior', tier: 'championship', why: 'Met at the pricing breakfast', lastTouchOn: daysAgo(29) }),
     member({ id: 'm-nia', personId: 'p-nia', name: 'Nia Pretend', title: 'Director of Marketing', company: 'Hooli Pretend', listId: 'list-senior', tier: 'league_one', why: 'Former client', lastTouchOn: daysAgo(60), missedCycles: 1 }),
-    member({ id: 'm-ada', personId: 'p-ada', name: 'Ada Example', title: 'Senior PMM', company: 'Northwind Sample Co', city: 'new_york', listId: 'list-top', tier: 'premier', why: 'Senior PMM, open to a move', lastTouchOn: daysAgo(2), profileUrl: 'https://example.com/in/ada' }),
+    member({ id: 'm-ada', personId: 'p-ada', name: 'Ada Example', title: 'Senior PMM', company: 'Northwind Sample Co', city: 'new_york', listId: 'list-top', tier: 'premier', why: 'Senior PMM, open to a move', lastTouchOn: daysAgo(2), profileUrl: 'https://example.com/in/ada', profileSummary: 'Senior PMM at Northwind Sample Co, New York. Eight years in B2B SaaS, launches and pricing. Posts about positioning.', profilePulledAt: `${daysAgo(3)}T07:00:00Z` }),
     member({ id: 'm-dev', personId: 'p-dev', name: 'Dev Madeup', title: 'Product Marketing Manager', company: 'Globex Fiction', city: 'remote_us', listId: 'list-top', tier: 'championship', why: 'Strong on launches', lastTouchOn: daysAgo(31) }),
     member({ id: 'm-finn', personId: 'p-finn', name: 'Finn Fictional', title: 'PMM Lead', company: 'Umbrella Sample', city: 'new_york', listId: 'list-top', tier: 'league_one', why: 'Placed once, keeps in touch', lastTouchOn: null, addedOn: daysAgo(120), missedCycles: 2 }),
     member({ id: 'm-oli', personId: 'p-oli', name: 'Oli Fictional', title: 'Product Marketing Manager', company: 'Hooli Pretend', listId: 'list-top', tier: 'championship', why: 'Coached, very sharp', lastTouchOn: daysAgo(9) }),
@@ -431,6 +435,8 @@ export function freshSampleMembers(): Member[] {
 }
 
 let sampleMembers = freshSampleMembers()
+/** Profile pulls asked for, for tests. */
+export const pullsAsked: string[] = []
 function freshSampleTouches(): Record<string, Touch[]> {
   return {
     'p-ben': [
@@ -481,6 +487,23 @@ export function freshSampleContent(): ContentItem[] {
   ]
 }
 let sampleContent = freshSampleContent()
+
+// Problem reports: one closed, one being worked, one new.
+const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+export function freshSampleProblems(): Problem[] {
+  const base: Problem = { id: '', ref: 0, title: null, description: '', severity: 'medium', status: 'new', reporterName: 'Jason', assignee: null, route: '/home', userAgent: chrome, viewport: '1440x900', appVersion: 'sample', resolution: null, createdAt: `${daysAgo(0)}T08:00:00Z`, updatedAt: `${daysAgo(0)}T08:00:00Z`, resolvedAt: null }
+  return [
+    { ...base, id: 'p1', ref: 1, title: 'Greeting said Morning at noon', description: 'At 12:05 the greeting still said Morning.', severity: 'low', status: 'closed', resolution: 'Afternoon starts at 12:00 now', createdAt: `${daysAgo(6)}T11:00:00Z`, resolvedAt: `${daysAgo(5)}T09:00:00Z` },
+    { ...base, id: 'p2', ref: 2, description: 'The Ignore link on a signal row is cut off on the laptop.\nOnly on the signals list.', status: 'in_progress', route: '/people/signals', createdAt: `${daysAgo(2)}T15:30:00Z` },
+    { ...base, id: 'p3', ref: 3, title: 'Save does nothing on the calendar', description: 'Wrote a post for Tuesday, pressed Save, nothing happened.', severity: 'high', route: '/content/calendar', createdAt: `${daysAgo(0)}T08:00:00Z` },
+  ]
+}
+let sampleProblems = freshSampleProblems()
+let sampleProblemNotes: ProblemNote[] = [{ id: 'n1', reportId: 'p2', author: 'Jason', body: 'Can reproduce on the laptop, not on the phone.', createdAt: `${daysAgo(1)}T09:00:00Z` }]
+export function resetSampleProblems() {
+  sampleProblems = freshSampleProblems()
+  sampleProblemNotes = [{ id: 'n1', reportId: 'p2', author: 'Jason', body: 'Can reproduce on the laptop, not on the phone.', createdAt: `${daysAgo(1)}T09:00:00Z` }]
+}
 export function resetSampleContent() {
   sampleContent = freshSampleContent()
 }
@@ -956,6 +979,12 @@ export const sampleSource: DataSource = {
     sampleMembers = sampleMembers.filter((m) => m.personId !== personId)
     for (const f of sampleFollowUps) if (f.personId === personId && (f.status === 'open' || f.status === 'snoozed')) f.status = 'closed'
   },
+  async saveProfileSummary(personId, text) {
+    for (const m of sampleMembers) if (m.personId === personId) m.profileSummary = text.trim() || null
+  },
+  async askProfilePull(personId) {
+    pullsAsked.push(personId)
+  },
   async saveNotes(personId, notes) {
     const m = sampleMembers.find((x) => x.personId === personId)
     if (m) m.notesForNextContact = notes
@@ -1204,6 +1233,29 @@ export const sampleSource: DataSource = {
     rows.push({ id: `${kpi}-m${rows.length + 1}`, label: 'Correction', amount, manual: true, reason: reason.trim(), isPmm: true, happenedAt: new Date().toISOString() })
   },
 
+  async problems() {
+    return sampleProblems.map((p) => ({ ...p })).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  },
+  async reportProblem(input) {
+    const now = new Date().toISOString()
+    const made: Problem = { id: `p-${Date.now()}`, ref: Math.max(0, ...sampleProblems.map((p) => p.ref)) + 1, title: input.title, description: input.description, severity: input.severity, status: 'new', reporterName: input.reporterName, assignee: null, route: input.route, userAgent: input.userAgent, viewport: input.viewport, appVersion: input.appVersion, resolution: null, createdAt: now, updatedAt: now, resolvedAt: null }
+    sampleProblems.push(made)
+    return { ...made }
+  },
+  async updateProblem(id, patch) {
+    const found = sampleProblems.find((p) => p.id === id)
+    if (!found) throw new Error('No such report')
+    Object.assign(found, patch, { updatedAt: new Date().toISOString() })
+    found.resolvedAt = found.status === 'new' || found.status === 'in_progress' ? null : (found.resolvedAt ?? new Date().toISOString())
+  },
+  async problemNotes(id) {
+    return sampleProblemNotes.filter((n) => n.reportId === id).map((n) => ({ ...n }))
+  },
+  async addProblemNote(id, body, author) {
+    const made: ProblemNote = { id: `n-${Date.now()}`, reportId: id, author, body, createdAt: new Date().toISOString() }
+    sampleProblemNotes.push(made)
+    return { ...made }
+  },
   async contentItems() {
     return sampleContent.filter((c) => c.status !== 'binned').map((c) => ({ ...c })).sort((a, b) => b.rank - a.rank || b.createdAt.localeCompare(a.createdAt))
   },

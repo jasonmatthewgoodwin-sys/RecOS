@@ -22,7 +22,7 @@ export type RowProps = {
 export function Row({ dot, title, detail, meta, word, detailWord, done, actions = [], onOpen, leadId }: RowProps) {
   const shown = actions.slice(0, 2)
   return (
-    <li className="group flex min-h-12 items-center gap-4 border-b border-rule">
+    <li className="group flex min-h-11 items-center gap-4 border-b border-rule">
       <button
         type="button"
         onClick={onOpen}

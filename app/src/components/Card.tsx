@@ -92,7 +92,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
         onTouchEnd={() => {
           touchStart.current = null
         }}
-        className={`relative flex max-h-full w-full flex-col overflow-y-auto rounded-sheet border border-rule bg-sheet p-6 shadow-window outline-none sm:w-[40rem] sm:p-10 ${
+        className={`relative flex max-h-full w-full flex-col overflow-y-auto rounded-sheet border border-rule bg-sheet p-5 shadow-window outline-none sm:w-[46rem] sm:p-7 ${
           closing ? 'animate-rise-out' : 'animate-rise'
         }`}
       >
@@ -110,15 +110,26 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
         </div>
         <h2 className="text-title text-ink">{title}</h2>
 
-        {sections.map((s, i) => (
-          <section key={i} className="mt-6 border-t border-rule pt-6">
-            {s.label && <h3 className="label-caps mb-2 text-ink-2">{s.label}</h3>}
+        {/* Everything fits the window without scrolling (14 November 2026): tight sections, and from three sections on the rest sit in two columns on a laptop. */}
+        {sections.slice(0, 1).map((s, i) => (
+          <section key={i} className="mt-4 border-t border-rule pt-4">
+            {s.label && <h3 className="label-caps mb-1 text-ink-2">{s.label}</h3>}
             <div className="text-body text-ink">{s.body}</div>
           </section>
         ))}
+        {sections.length > 1 && (
+          <div className={sections.length >= 3 ? 'sm:grid sm:grid-cols-2 sm:gap-x-8' : ''}>
+            {sections.slice(1).map((s, i) => (
+              <section key={i + 1} className="mt-4 border-t border-rule pt-4">
+                {s.label && <h3 className="label-caps mb-1 text-ink-2">{s.label}</h3>}
+                <div className="text-body text-ink">{s.body}</div>
+              </section>
+            ))}
+          </div>
+        )}
 
         {(primaryAction || links) && (
-          <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
             {primaryAction && (
               <PillButton kind="primary" label={primaryAction.label} busy={primaryAction.busy} onClick={primaryAction.onClick} />
             )}
@@ -126,7 +137,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
           </div>
         )}
 
-        {foot && <p className="mt-auto pt-8 font-mono text-label text-ink-3">{foot}</p>}
+        {foot && <p className="mt-auto pt-5 font-mono text-label text-ink-3">{foot}</p>}
       </aside>
     </div>
   )

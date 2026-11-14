@@ -107,6 +107,7 @@ export const settings: Section = {
     { label: 'Templates', slug: 'templates' },
     { label: 'Profile', slug: 'profile' },
     { label: 'Data', slug: 'data' },
+    { label: 'Problems', slug: 'problems' },
   ],
 }
 

@@ -173,10 +173,10 @@ export function Signals() {
   }))
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={tab.label} tabs={tabs} />
 
-      <div className="grid grid-cols-2 gap-x-8 gap-y-12 md:flex md:gap-x-16">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:flex md:gap-x-16">
         <HeroStat label="This week" value={signals.data ? twoDigits(all.length).text : undefined} />
       </div>
 

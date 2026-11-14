@@ -3,26 +3,26 @@ import { useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Field } from '../../components/Field'
 import { HeroStat } from '../../components/HeroStat'
-import { Icon } from '../../components/Icon'
 import { Note } from '../../components/Note'
 import { PageHeader } from '../../components/PageHeader'
 import { PillButton } from '../../components/PillButton'
 import { Dots, EmptyLine } from '../../components/Quiet'
 import { Row } from '../../components/Row'
 import { TextLink } from '../../components/TextLink'
-import { composerStates, copyOf, dayLabel, dayTitle, daysBetween, postedInWeek, postsOn, readyDrafts, splitCopy, stateWord, visibleDays, weekDates } from '../../lib/calendar'
+import { DAY_NAMES, composerStates, copyOf, dayTitle, daysBetween, monthGrid, monthOf, monthTitle, postedInWeek, postsOn, readyDrafts, shiftMonth, splitCopy, stateWord } from '../../lib/calendar'
 import { data, type ContentItem, type ContentPatch, type ContentStatus } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { sections } from '../../lib/sections'
-import { mondayOf, shiftDate, ukClock } from '../../lib/time'
+import { mondayOf, ukClock } from '../../lib/time'
 import { KEY } from './Drafts'
 
-// Content, Calendar (31.2, and the calendar handover of 14 November 2026 in
-// the RecOS look): two numbers, one row per weekday of one week, a dash where
-// nothing sits. A day opens a composer window over the sheet: the day, the
-// post, its state, Save; Bin with a confirm step; a guard on unsaved text.
-// Last week, This week and Next week are text links. There is no month view.
+// Content, Calendar (the calendar handover of 14 November 2026 in the RecOS
+// look; Mia asked for a month, not a week): two numbers, then a month grid,
+// Monday to Sunday, today marked, the other months' days dimmed, a post as a
+// quiet chip on its day. A day opens a composer window over the sheet: the
+// day, the post, its state, Save; Bin with a confirm step; a guard on unsaved
+// text. Last month, This month and Next month are text links.
 
 type Composer = { kind: 'day'; date: string } | { kind: 'post'; id: string }
 
@@ -33,8 +33,8 @@ export function Calendar() {
   const items = useQuery(KEY, data.contentItems)
   const today = ukClock(new Date()).date
   const thisMonday = mondayOf(new Date())
-  const offset = Number(params.get('week') ?? '0') || 0
-  const monday = shiftDate(thisMonday, offset * 7)
+  const thisMonth = monthOf(today)
+  const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '') ? (params.get('month') as string) : thisMonth
   const all = items.data ?? []
   const [note, setNote] = useState<string | null>(null)
 
@@ -45,10 +45,10 @@ export function Calendar() {
   const tab = sections.find((s) => s.key === 'content')!
   const tabs = tab.pages.map((p) => ({ label: p.label, route: `${tab.path}/${p.slug}` }))
 
-  function setWeek(next: number) {
+  function setMonth(next: string) {
     setParams((p) => {
-      if (next === 0) p.delete('week')
-      else p.set('week', String(next))
+      if (next === thisMonth) p.delete('month')
+      else p.set('month', next)
       p.delete('card')
       return p
     })
@@ -76,8 +76,8 @@ export function Calendar() {
   }
 
   const ready = readyDrafts(all)
-  const posted = postedInWeek(all, monday)
-  const dates = weekDates(monday)
+  const posted = postedInWeek(all, thisMonday)
+  const dates = monthGrid(month)
 
   const body =
     items.status === 'loading' ? (
@@ -85,71 +85,65 @@ export function Calendar() {
     ) : items.status === 'error' ? (
       <EmptyLine text="Could not load. Try again." />
     ) : (
-      <div className="flex flex-col" data-week={monday}>
-        {visibleDays(all, monday).map((date) => {
-          const posts = postsOn(all, date)
-          const index = dates.indexOf(date)
-          return (
-            <div key={date} data-day={date} className={`flex items-start gap-6 ${date === today ? 'font-medium' : ''}`}>
-              <span className={`label-caps mt-3.5 w-16 shrink-0 font-mono ${date === today ? 'text-ink' : 'text-ink-2'}`} aria-label={dayTitle(date)}>
-                {dayLabel(date, index)}
-              </span>
-              <ul className="flex min-w-0 flex-1 flex-col">
-                {posts.length === 0 ? (
-                  <li className="flex min-h-12 items-center border-b border-rule">
-                    <button
-                      type="button"
-                      aria-label={`Add a post on ${dayTitle(date)}`}
-                      onClick={() => openComposer({ kind: 'day', date })}
-                      className="min-h-11 min-w-11 text-left text-body text-ink-3 hover:text-ink"
-                    >
-                      -
-                    </button>
-                  </li>
-                ) : (
-                  posts.map((c) => (
-                    <Row
-                      key={c.id}
-                      dot={c.status === 'posted' ? 'solid' : 'hollow'}
-                      done={c.status === 'posted'}
-                      title={c.hook ?? c.topic}
-                      word={stateWord[c.status]}
-                      meta={c.status === 'posted' && c.inboundMessages !== null ? `${c.inboundMessages} messages` : undefined}
-                      actions={c.status === 'posted' ? [] : [{ label: 'Posted', onClick: () => void patch(c, { status: 'posted', postedOn: date }) }]}
-                      onOpen={() => openComposer({ kind: 'post', id: c.id })}
-                    />
-                  ))
-                )}
-              </ul>
-              {posts.length > 0 && (
+      <div className="flex flex-col gap-3" data-month={month}>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+          <h2 className="font-mono text-body text-ink">{monthTitle(month)}</h2>
+          <p className="flex flex-wrap items-center gap-6">
+            <TextLink label="Last month" onClick={() => setMonth(shiftMonth(month, -1))} />
+            {month !== thisMonth && <TextLink label="This month" onClick={() => setMonth(thisMonth)} />}
+            <TextLink label="Next month" onClick={() => setMonth(shiftMonth(month, 1))} />
+          </p>
+        </div>
+        <div className="grid grid-cols-7 border-l border-t border-rule" role="grid" aria-label={monthTitle(month)}>
+          {DAY_NAMES.map((d) => (
+            <div key={d} role="columnheader" className="label-caps border-b border-r border-rule px-2 py-1.5 font-mono text-ink-2">
+              {d}
+            </div>
+          ))}
+          {dates.map((date) => {
+            const posts = postsOn(all, date)
+            const inMonth = monthOf(date) === month
+            const isToday = date === today
+            return (
+              <div key={date} role="gridcell" data-day={date} data-today={isToday || undefined} className={`flex min-h-20 flex-col gap-1 border-b border-r border-rule p-1.5 ${inMonth ? '' : 'bg-paper/50'}`}>
                 <button
                   type="button"
-                  aria-label={`Add another post on ${dayTitle(date)}`}
+                  aria-label={`Add a post on ${dayTitle(date)}`}
                   onClick={() => openComposer({ kind: 'day', date })}
-                  className="mt-1 inline-flex size-10 shrink-0 items-center justify-center rounded-pill text-ink-3 hover:text-ink"
+                  className={`flex h-7 w-full items-center gap-1.5 rounded-pill px-1 text-left font-mono text-label hover:bg-paper ${isToday ? 'text-ink' : inMonth ? 'text-ink-2' : 'text-ink-3'}`}
                 >
-                  <Icon name="plus" size={14} />
+                  {isToday && <span aria-hidden className="block size-2 rounded-pill bg-ink" />}
+                  {date.slice(8, 10)}
                 </button>
-              )}
-            </div>
-          )
-        })}
+                {posts.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    data-row
+                    onClick={() => openComposer({ kind: 'post', id: c.id })}
+                    title={`${c.hook ?? c.topic}. ${stateWord[c.status]}`}
+                    className={`flex min-h-7 w-full items-start gap-1.5 rounded-card px-1 text-left text-label hover:bg-paper ${c.status === 'posted' ? 'text-ink-3' : 'text-ink'}`}
+                  >
+                    <span aria-hidden data-dot={c.status === 'posted' ? 'solid' : 'hollow'} className={`mt-1.5 block size-2 shrink-0 rounded-pill border border-ink ${c.status === 'posted' ? 'bg-ink' : 'bg-transparent'}`} />
+                    <span className="line-clamp-2">{c.hook ?? c.topic}</span>
+                    <span className="sr-only">. {stateWord[c.status]}</span>
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+        </div>
       </div>
     )
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Content" tabs={tabs} />
-      <div className="grid grid-cols-2 gap-x-8 gap-y-12">
-        <HeroStat label={offset === 0 ? 'This week' : offset === 1 ? 'Next week' : offset === -1 ? 'Last week' : 'That week'} value={`${posted}/${POSTS_A_WEEK}`} meter={{ filled: posted, total: POSTS_A_WEEK }} tone={posted >= POSTS_A_WEEK ? 'clear' : 'pending'} icon="pen" />
+      <div className="grid grid-cols-2 gap-x-8 gap-y-8">
+        <HeroStat label="This week" value={`${posted}/${POSTS_A_WEEK}`} meter={{ filled: posted, total: POSTS_A_WEEK }} tone={posted >= POSTS_A_WEEK ? 'clear' : 'pending'} icon="pen" />
         <HeroStat label="Ready" value={twoDigits(ready.length).text} tone={ready.length > 0 ? 'new' : undefined} icon="check" />
       </div>
       {body}
-      <div className="flex flex-wrap items-center gap-6">
-        <TextLink label="Last week" onClick={() => setWeek(offset - 1)} />
-        {offset !== 0 && <TextLink label="This week" onClick={() => setWeek(0)} />}
-        <TextLink label="Next week" onClick={() => setWeek(offset + 1)} />
-      </div>
       {composer && (composer.kind === 'day' || editing) && (
         <ComposerCard
           key={card}

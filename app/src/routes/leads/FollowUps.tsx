@@ -255,7 +255,7 @@ export function FollowUps() {
   )
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <div className="flex items-start justify-between gap-4">
         <PageHeader title={leadsTab.label} tabs={tabs} />
         {focus && (
@@ -265,7 +265,7 @@ export function FollowUps() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-x-8 gap-y-12 md:flex md:gap-x-16">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:flex md:gap-x-16">
         <HeroStat label="Due" value={due?.text} plus={due?.plus} onClick={() => setView('list', 'owed')} />
         <HeroStat label="Waiting on" value={waitingCount?.text} plus={waitingCount?.plus} onClick={() => setView('list', 'waiting')} />
       </div>

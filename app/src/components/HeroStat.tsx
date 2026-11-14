@@ -23,8 +23,8 @@ export function HeroStat({ label, value, plus, mark, meter, onClick, tone, icon 
   const body = (
     <>
       {tone && (
-        <span aria-hidden data-orb={tone} className={`mb-4 flex size-12 items-center justify-center rounded-pill ${orbClass[tone]} text-ink`}>
-          {icon && <Icon name={icon} size={18} />}
+        <span aria-hidden data-orb={tone} className={`mb-3 flex size-9 items-center justify-center rounded-pill ${orbClass[tone]} text-ink`}>
+          {icon && <Icon name={icon} size={15} />}
         </span>
       )}
       <span className="block font-mono text-hero-sm tabular-nums text-ink sm:text-hero" data-testid="hero-value">
@@ -36,7 +36,7 @@ export function HeroStat({ label, value, plus, mark, meter, onClick, tone, icon 
           </span>
         )}
       </span>
-      <span className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <span className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="label-caps text-ink-2">{label}</span>
         {meter && value !== undefined && <TickMeter filled={meter.filled} total={meter.total} />}
       </span>

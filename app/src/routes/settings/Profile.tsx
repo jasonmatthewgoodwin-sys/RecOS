@@ -149,10 +149,10 @@ export function Profile() {
 
   if (!form) {
     return (
-      <div className="flex flex-col gap-12">
+      <div className="flex flex-col gap-8">
         <PageHeader title={settings.label} tabs={tabs} />
         {prefs.status === 'error' ? <EmptyLine text="The settings did not load. Try again in a moment" /> : <Dots />}
-        <div className="flex max-w-prose flex-col gap-12">
+        <div className="flex max-w-prose flex-col gap-8">
           <Password />
         </div>
       </div>
@@ -165,10 +165,10 @@ export function Profile() {
   const split = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={settings.label} tabs={tabs} />
 
-      <div className="flex max-w-prose flex-col gap-12">
+      <div className="flex max-w-prose flex-col gap-8">
         <section className="flex flex-col gap-4">
           <Heading text="Theme" />
           <Pills

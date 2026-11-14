@@ -116,6 +116,16 @@ export function PeopleList({ listKey }: { listKey: string }) {
     void run(before, () => data.moveTier(m.id, tier, reason), 'That did not save. Try again.')
   }
 
+  function saveProfile(m: Member, text: string) {
+    const before = members.data
+    patch(m.id, { profileSummary: text.trim() || null })
+    void run(before, () => data.saveProfileSummary(m.personId, text), 'That did not save. Try again.')
+  }
+
+  function askPull(m: Member) {
+    void run(members.data, () => data.askProfilePull(m.personId), 'Could not ask the agent. Try again.')
+  }
+
   function saveNotes(m: Member, notes: string) {
     const before = members.data
     patch(m.id, { notesForNextContact: notes })
@@ -180,10 +190,10 @@ export function PeopleList({ listKey }: { listKey: string }) {
   const empty = members.status === 'ready' && mine.length === 0
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={tab.label} tabs={tabs} aside={<TextLink label="Edit tabs" icon="pen" onClick={() => setEditing(true)} />} />
 
-      <div className="grid grid-cols-2 gap-x-8 gap-y-12 md:flex md:gap-x-16">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:flex md:gap-x-16">
         <HeroStat label="Due" value={members.data ? twoDigits(due).text : undefined} onClick={() => setFilter('week')} />
         <HeroStat
           label="On cadence"
@@ -247,6 +257,8 @@ export function PeopleList({ listKey }: { listKey: string }) {
           onReply={() => reply(chosen)}
           onTier={(tier, reason) => moveTier(chosen, tier, reason)}
           onNotes={(notes) => saveNotes(chosen, notes)}
+          onProfile={(text) => saveProfile(chosen, text)}
+          onPull={() => askPull(chosen)}
           onRemove={(reason) => remove(chosen, reason)}
           onDoNotContact={() => doNotContact(chosen)}
           onClose={closeCard}

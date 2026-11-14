@@ -102,6 +102,42 @@ export function dayLabel(date: string, index: number): string {
   return `${DAY_NAMES[index]} ${date.slice(8, 10)}`
 }
 
+/** 2026-11 for a plain date. */
+export function monthOf(date: string): string {
+  return date.slice(0, 7)
+}
+
+export function shiftMonth(ym: string, n: number): string {
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + n, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+/** November 2026. */
+export function monthTitle(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  return `${MONTHS[m - 1]} ${y}`
+}
+
+/**
+ * The month grid: whole weeks from the Monday on or before the 1st to the
+ * Sunday on or after the last day, so 35 or 42 dates, 7 to a row.
+ */
+export function monthGrid(ym: string): string[] {
+  const first = `${ym}-01`
+  const dow = new Date(`${first}T12:00:00Z`).getUTCDay()
+  const start = shiftDate(first, -((dow + 6) % 7))
+  const [y, m] = ym.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const lastDate = `${ym}-${String(last).padStart(2, '0')}`
+  const dates: string[] = []
+  for (let d = start; ; d = shiftDate(d, 1)) {
+    dates.push(d)
+    if (d >= lastDate && dates.length % 7 === 0) break
+  }
+  return dates
+}
+
 /** Whole days between two plain dates. */
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SignedIn } from '../../App'
-import { copyOf, dayTitle, splitCopy, topicFrom, visibleDays } from '../../lib/calendar'
+import { copyOf, dayTitle, monthGrid, shiftMonth, splitCopy, topicFrom } from '../../lib/calendar'
 import { data } from '../../lib/data'
 import { freshSampleContent, resetSampleContent, sampleSource } from '../../lib/sample'
 
@@ -50,7 +50,7 @@ afterEach(() => {
 })
 
 describe('Content calendar', () => {
-  it('shows this week as 1/2 with a meter, one ready draft, the posted post on Monday, the planned one on Thursday and dashes elsewhere', async () => {
+  it('shows this week as 1/2 with a meter, one ready draft, and a month grid with the posted post on Monday and the planned one on Thursday', async () => {
     mock()
     open()
     await waitFor(() => expect(values()).toEqual(['1/2', '01']))
@@ -58,7 +58,11 @@ describe('Content calendar', () => {
     expect(within(day('2026-11-09')).getByRole('button', { name: /^The best PMM hires/ }).textContent).toContain('Posted')
     expect(within(day('2026-11-12')).getByRole('button', { name: /^Three questions a CMO/ }).textContent).toContain('Planned')
     expect(within(day('2026-11-10')).getByRole('button', { name: 'Add a post on Tuesday 10 November' })).toBeInTheDocument()
-    expect(document.querySelectorAll('[data-day]')).toHaveLength(5)
+    // November 2026 starts on a Sunday, so the grid runs from Monday 26 October to Sunday 6 December.
+    expect(document.querySelectorAll('[data-day]')).toHaveLength(42)
+    expect(document.querySelector('[data-day="2026-10-26"]')).toBeInTheDocument()
+    expect(day('2026-11-11')).toHaveAttribute('data-today', 'true')
+    expect(screen.getByRole('grid', { name: 'November 2026' })).toBeInTheDocument()
   })
 
   it('a dash opens the composer for that day, offers the ready draft, and a saved post appears on the day at once', async () => {
@@ -90,7 +94,7 @@ describe('Content calendar', () => {
     expect(values()).toEqual(['1/2', '00'])
   })
 
-  it('a post reopens prefilled, can be moved to another day and edited, and Posted on the row asks for nothing', async () => {
+  it('a post reopens prefilled, can be moved to another day and edited, and marked posted from its state', async () => {
     const { update } = mock()
     open()
     await waitFor(() => expect(values()).toEqual(['1/2', '01']))
@@ -106,8 +110,11 @@ describe('Content calendar', () => {
     expect(id).toBe('c7')
     expect(change).toMatchObject({ plannedFor: '2026-11-13', status: 'planned', closeLine: 'Fix the brief first. Really.' })
     await waitFor(() => expect(within(day('2026-11-13')).getByRole('button', { name: /^Three questions a CMO/ })).toBeInTheDocument())
-    await userEvent.click(within(day('2026-11-13')).getByRole('button', { name: 'Posted' }))
-    await waitFor(() => expect(update).toHaveBeenLastCalledWith('c7', { status: 'posted', postedOn: '2026-11-13' }))
+    await userEvent.click(within(day('2026-11-13')).getByRole('button', { name: /^Three questions a CMO/ }))
+    const again = dialog('Friday 13 November')
+    await userEvent.selectOptions(within(again).getByLabelText('State'), 'posted')
+    await userEvent.click(within(again).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenLastCalledWith('c7', expect.objectContaining({ status: 'posted', postedOn: '2026-11-13' })))
     await waitFor(() => expect(values()).toEqual(['2/2', '01']))
   })
 
@@ -135,16 +142,16 @@ describe('Content calendar', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
-  it('Next week moves the rows forward a week and This week comes back', async () => {
+  it('Next month moves the grid on a month and This month comes back', async () => {
     mock()
     open()
     await waitFor(() => expect(values()).toEqual(['1/2', '01']))
-    await userEvent.click(screen.getByRole('button', { name: 'Next week' }))
-    await waitFor(() => expect(document.querySelector('[data-week]')).toHaveAttribute('data-week', '2026-11-16'))
-    expect(values()[0]).toBe('0/2')
-    expect(screen.getByText('Mon 16')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'This week' }))
-    await waitFor(() => expect(document.querySelector('[data-week]')).toHaveAttribute('data-week', '2026-11-09'))
+    await userEvent.click(screen.getByRole('button', { name: 'Next month' }))
+    await waitFor(() => expect(document.querySelector('[data-month]')).toHaveAttribute('data-month', '2026-12'))
+    expect(screen.getByRole('grid', { name: 'December 2026' })).toBeInTheDocument()
+    expect(values()[0]).toBe('1/2')
+    await userEvent.click(screen.getByRole('button', { name: 'This month' }))
+    await waitFor(() => expect(document.querySelector('[data-month]')).toHaveAttribute('data-month', '2026-11'))
   })
 })
 
@@ -160,10 +167,15 @@ describe('calendar helpers', () => {
     expect(topicFrom('x'.repeat(90))).toHaveLength(80)
   })
 
-  it('shows Monday to Friday, and a weekend day only when a post sits on it', () => {
-    const items = freshSampleContent()
-    expect(visibleDays(items, '2026-11-09')).toHaveLength(5)
-    const planned = { ...items[3], id: 'w', status: 'planned' as const, plannedFor: '2026-11-14' }
-    expect(visibleDays([...items, planned], '2026-11-09')).toEqual(['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14'])
+  it('lays a month out in whole weeks from Monday, and steps months across a year end', () => {
+    const nov = monthGrid('2026-11')
+    expect(nov).toHaveLength(42)
+    expect(nov[0]).toBe('2026-10-26')
+    expect(nov[41]).toBe('2026-12-06')
+    const jun = monthGrid('2026-06')
+    expect(jun[0]).toBe('2026-06-01')
+    expect(jun).toHaveLength(35)
+    expect(shiftMonth('2026-12', 1)).toBe('2027-01')
+    expect(shiftMonth('2026-01', -1)).toBe('2025-12')
   })
 })

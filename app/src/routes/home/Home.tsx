@@ -83,14 +83,14 @@ export function Home({ firstName }: { firstName: string }) {
   return (
     <div className="flex flex-col">
       {/* The sky: a tall soft band across the top of the sheet, the day's state as its warm core, the plain sheet below (26). */}
-      <div aria-hidden data-band={dayTone} className={`-mx-6 -mt-6 mb-10 h-56 rounded-t-sheet sm:-mx-16 sm:-mt-16 sm:mb-14 sm:h-80 ${skyClass[dayTone]}`} />
+      <div aria-hidden data-band={dayTone} className={`-mx-5 -mt-5 mb-8 h-44 rounded-t-sheet sm:-mx-10 sm:-mt-8 sm:mb-10 sm:h-64 ${skyClass[dayTone]}`} />
       <p className="label-caps text-ink-2">{dateLine(now)}</p>
       <h1 className="mt-2 text-title text-ink">
         {greeting(now)}
         {firstName ? `, ${firstName}` : ''}
       </h1>
 
-      <div className="mt-16 grid grid-cols-2 gap-x-8 gap-y-12 sm:mt-24 md:grid-cols-4">
+      <div className="mt-10 grid grid-cols-2 gap-x-8 gap-y-8 sm:mt-14 md:grid-cols-4">
         <HeroStat label="Needs you" value={n1?.text} plus={n1?.plus} tone={toneForCount(needsYou.data, true)} icon="inbox" onClick={() => navigate('/inbox')} />
         <HeroStat label="Follow-ups" value={n2?.text} plus={n2?.plus} tone={toneForCount(followUps.data?.due, (followUps.data?.late ?? 0) > 0)} icon="clock" onClick={() => navigate('/leads/follow-ups')} />
         <HeroStat label="Calls today" value={n3?.text} plus={n3?.plus} tone={toneForCount(isWeekend(now) ? 0 : calls.data?.length)} icon="phone" onClick={() => openCard('calls')} />
@@ -104,9 +104,9 @@ export function Home({ firstName }: { firstName: string }) {
         />
       </div>
 
-      <hr className="mt-16 border-rule" />
+      <hr className="mt-10 border-rule" />
 
-      <div className="mt-8 flex min-h-11 flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-6 flex min-h-11 flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-body text-ink" data-testid="next-line">
           {line?.text ?? ''}
         </p>
@@ -114,7 +114,7 @@ export function Home({ firstName }: { firstName: string }) {
       </div>
 
       {/* The lower third of the sheet is empty, on purpose. */}
-      <div aria-hidden className="h-24 sm:h-40" />
+      <div aria-hidden className="h-10 sm:h-16" />
 
       {callsOpen && <CallsCard calls={calls.data ?? []} onPrep={(id) => openCard(`prep:${id}`)} onClose={closeCard} />}
       {prepId && <PrepFor id={prepId} onClose={closeCard} />}

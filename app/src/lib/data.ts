@@ -184,6 +184,9 @@ export type Member = {
   missedCycles: number
   liveSignal: string | null
   notesForNextContact: string | null
+  /** A short description pulled in from their LinkedIn profile by the signals agent, or written by hand (14 November 2026). */
+  profileSummary: string | null
+  profilePulledAt: string | null
   jobsBriefed: number
   referralsGiven: number
   introsMade: number
@@ -423,6 +426,32 @@ export type ContentItem = {
 }
 export type ContentPatch = Partial<Pick<ContentItem, 'status' | 'hook' | 'body' | 'closeLine' | 'heldReason' | 'plannedFor' | 'postedOn' | 'postUrl' | 'impressions' | 'comments' | 'inboundMessages'>>
 
+/** A problem report (the bug handover of 14 November 2026): raised from any page, worked under Settings. */
+export type ProblemSeverity = 'low' | 'medium' | 'high'
+export type ProblemStatus = 'new' | 'in_progress' | 'resolved' | 'closed' | 'wont_fix'
+export type Problem = {
+  id: string
+  /** Shown as BUG-12. */
+  ref: number
+  title: string | null
+  description: string
+  severity: ProblemSeverity
+  status: ProblemStatus
+  reporterName: string | null
+  assignee: string | null
+  route: string | null
+  userAgent: string | null
+  viewport: string | null
+  appVersion: string | null
+  resolution: string | null
+  createdAt: string
+  updatedAt: string
+  resolvedAt: string | null
+}
+export type ProblemNote = { id: string; reportId: string; author: string | null; body: string; createdAt: string }
+export type ProblemReport = Pick<Problem, 'title' | 'description' | 'severity' | 'reporterName'> & { route: string; userAgent: string; viewport: string; appVersion: string }
+export type ProblemPatch = Partial<Pick<Problem, 'status' | 'severity' | 'assignee' | 'resolution' | 'title'>>
+
 export type FollowUp = {
   id: string
   personId: string | null
@@ -531,6 +560,10 @@ export interface DataSource {
   setDoNotContact(personId: string): Promise<void>
   /** Notes for next contact, editable in place on the card. */
   saveNotes(personId: string, notes: string): Promise<void>
+  /** The profile summary, written by hand; 600 characters at most. */
+  saveProfileSummary(personId: string, text: string): Promise<void>
+  /** Ask the signals agent to read the profile and write a summary back on its next run. */
+  askProfilePull(personId: string): Promise<void>
   /** 29.4: by hand, from name, company, list and tier. A thin person row and a member row. */
   addPerson(input: { name: string; title: string; company: string; listId: string; tier: Tier; why: string }): Promise<void>
 
@@ -607,6 +640,13 @@ export interface DataSource {
   updateContent(id: string, patch: ContentPatch): Promise<void>
   /** A post written by hand in the calendar's composer: a LinkedIn post from the owner, filed under its first line. */
   addContent(input: { copy: string; plannedFor: string | null; status: ContentStatus }): Promise<ContentItem>
+
+  /** Problem reports: every one, newest first; the queue narrows them. */
+  problems(): Promise<Problem[]>
+  reportProblem(input: ProblemReport): Promise<Problem>
+  updateProblem(id: string, patch: ProblemPatch): Promise<void>
+  problemNotes(id: string): Promise<ProblemNote[]>
+  addProblemNote(id: string, body: string, author: string | null): Promise<ProblemNote>
 
   signals(): Promise<Signal[]>
   setSignalStatus(id: string, status: SignalStatus): Promise<void>
@@ -1135,7 +1175,7 @@ const live: DataSource = {
     if (views.length === 0) return []
     const { data: extra, error: e2 } = await supabase!
       .from('league_members')
-      .select('id, why, group_name, jobs_briefed, referrals_given, intros_made, person:people!person_id (city, crm_url, linkedin_url, notes_for_next_contact)')
+      .select('id, why, group_name, jobs_briefed, referrals_given, intros_made, person:people!person_id (city, crm_url, linkedin_url, notes_for_next_contact, profile_summary, profile_pulled_at)')
       .in('id', views.map((v) => v.id))
     fail(e2)
     type Extra = {
@@ -1145,7 +1185,7 @@ const live: DataSource = {
       jobs_briefed: number
       referrals_given: number
       intros_made: number
-      person: { city: string | null; crm_url: string | null; linkedin_url: string | null; notes_for_next_contact: string | null } | null
+      person: { city: string | null; crm_url: string | null; linkedin_url: string | null; notes_for_next_contact: string | null; profile_summary: string | null; profile_pulled_at: string | null } | null
     }
     const byId = new Map(((extra ?? []) as unknown as Extra[]).map((e) => [e.id, e]))
     return views.map((v) => {
@@ -1170,6 +1210,8 @@ const live: DataSource = {
         missedCycles: v.missed_cycles,
         liveSignal: v.live_signal,
         notesForNextContact: e?.person?.notes_for_next_contact ?? null,
+        profileSummary: e?.person?.profile_summary ?? null,
+        profilePulledAt: e?.person?.profile_pulled_at ?? null,
         jobsBriefed: e?.jobs_briefed ?? 0,
         referralsGiven: e?.referrals_given ?? 0,
         introsMade: e?.intros_made ?? 0,
@@ -1212,6 +1254,16 @@ const live: DataSource = {
 
   async saveNotes(personId, notes) {
     const { error } = await supabase!.from('people').update({ notes_for_next_contact: notes }).eq('id', personId)
+    fail(error)
+  },
+
+  async saveProfileSummary(personId, text) {
+    const { error } = await supabase!.from('people').update({ profile_summary: text.trim() || null }).eq('id', personId)
+    fail(error)
+  },
+
+  async askProfilePull(personId) {
+    const { error } = await supabase!.rpc('request_run', { p_agent: 'a4_signals', p_note: `profile:${personId}` })
     fail(error)
   },
 
@@ -1789,6 +1841,46 @@ const live: DataSource = {
     fail(error)
   },
 
+  async problems() {
+    const { data, error } = await supabase!.from('problem_reports').select('*').order('created_at', { ascending: false })
+    fail(error)
+    return ((data ?? []) as ProblemRow[]).map(problemFrom)
+  },
+
+  async reportProblem(input) {
+    const { data, error } = await supabase!
+      .from('problem_reports')
+      .insert({ title: input.title, description: input.description, severity: input.severity, reporter_name: input.reporterName, route: input.route, user_agent: input.userAgent, viewport: input.viewport, app_version: input.appVersion })
+      .select('*')
+      .single()
+    fail(error)
+    return problemFrom(data as ProblemRow)
+  },
+
+  async updateProblem(id, patch) {
+    const row: Record<string, unknown> = {}
+    if (patch.status !== undefined) row.status = patch.status
+    if (patch.severity !== undefined) row.severity = patch.severity
+    if (patch.assignee !== undefined) row.assignee = patch.assignee
+    if (patch.resolution !== undefined) row.resolution = patch.resolution
+    if (patch.title !== undefined) row.title = patch.title
+    const { error } = await supabase!.from('problem_reports').update(row).eq('id', id)
+    fail(error)
+  },
+
+  async problemNotes(id) {
+    const { data, error } = await supabase!.from('problem_notes').select('id, report_id, author, body, created_at').eq('report_id', id).order('created_at')
+    fail(error)
+    return ((data ?? []) as { id: string; report_id: string; author: string | null; body: string; created_at: string }[]).map((n) => ({ id: n.id, reportId: n.report_id, author: n.author, body: n.body, createdAt: n.created_at }))
+  },
+
+  async addProblemNote(id, body, author) {
+    const { data, error } = await supabase!.from('problem_notes').insert({ report_id: id, author, body }).select('id, report_id, author, body, created_at').single()
+    fail(error)
+    const n = data as { id: string; report_id: string; author: string | null; body: string; created_at: string }
+    return { id: n.id, reportId: n.report_id, author: n.author, body: n.body, createdAt: n.created_at }
+  },
+
   async contentItems() {
     const { data, error } = await supabase!
       .from('content_items')
@@ -2035,6 +2127,31 @@ export function inboxStatusAfter(action: InboxAction): InboxStatus {
       return 'snoozed'
     default:
       return 'done'
+  }
+}
+
+type ProblemRow = {
+  id: string
+  ref: number
+  title: string | null
+  description: string
+  severity: ProblemSeverity
+  status: ProblemStatus
+  reporter_name: string | null
+  assignee: string | null
+  route: string | null
+  user_agent: string | null
+  viewport: string | null
+  app_version: string | null
+  resolution: string | null
+  created_at: string
+  updated_at: string
+  resolved_at: string | null
+}
+function problemFrom(r: ProblemRow): Problem {
+  return {
+    id: r.id, ref: r.ref, title: r.title, description: r.description, severity: r.severity, status: r.status, reporterName: r.reporter_name, assignee: r.assignee,
+    route: r.route, userAgent: r.user_agent, viewport: r.viewport, appVersion: r.app_version, resolution: r.resolution, createdAt: r.created_at, updatedAt: r.updated_at, resolvedAt: r.resolved_at,
   }
 }
 

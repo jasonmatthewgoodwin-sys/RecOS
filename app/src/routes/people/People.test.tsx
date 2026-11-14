@@ -26,6 +26,8 @@ function mock() {
     dnc: vi.spyOn(data, 'setDoNotContact').mockResolvedValue(),
     notes: vi.spyOn(data, 'saveNotes').mockResolvedValue(),
     add: vi.spyOn(data, 'addPerson').mockResolvedValue(),
+    profile: vi.spyOn(data, 'saveProfileSummary').mockResolvedValue(),
+    pull: vi.spyOn(data, 'askProfilePull').mockResolvedValue(),
   }
 }
 
@@ -118,6 +120,32 @@ describe('People, Senior network', () => {
     await userEvent.type(within(card).getByLabelText('Why'), 'Gone quiet since the move')
     await userEvent.click(within(card).getByRole('button', { name: 'Move to Championship' }))
     expect(tier).toHaveBeenCalledWith('m-ben', 'championship', 'Gone quiet since the move')
+  })
+
+  it('every person has a way to LinkedIn, and the profile summary can be written or pulled in by the signals agent (14 November 2026)', async () => {
+    const { profile, pull } = mock()
+    open('/people/senior-network?card=person:p-ben')
+    const card = await screen.findByRole('dialog', { name: 'Ben Sample' })
+    // Ben has no link held, so the way in is a search by name and company.
+    expect(within(card).getByRole('link', { name: 'Find on LinkedIn' })).toHaveAttribute('href', expect.stringContaining('linkedin.com/search/results/people/?keywords=Ben%20Sample'))
+    const field = within(card).getByLabelText('In a few lines')
+    expect(field).toHaveValue('')
+    await userEvent.type(field, 'Director of PMM, Boston.')
+    await userEvent.click(within(card).getByRole('button', { name: 'Save profile' }))
+    expect(profile).toHaveBeenCalledWith('p-ben', 'Director of PMM, Boston.')
+    await userEvent.click(within(card).getByRole('button', { name: 'Pull in from LinkedIn' }))
+    expect(pull).toHaveBeenCalledWith('p-ben')
+    expect(within(card).getByText('Asked the signals agent. It fills this in on its next run.')).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: 'Pull in from LinkedIn' })).not.toBeInTheDocument()
+  })
+
+  it('a held LinkedIn link opens as it is, and a pulled-in summary says when', async () => {
+    mock()
+    open('/people/top-candidates?card=person:p-ada')
+    const ada = await screen.findByRole('dialog', { name: 'Ada Example' })
+    expect(within(ada).getByRole('link', { name: 'LinkedIn profile' })).toHaveAttribute('href', 'https://example.com/in/ada')
+    expect((within(ada).getByLabelText('In a few lines') as HTMLTextAreaElement).value).toContain('Senior PMM at Northwind Sample Co')
+    expect(within(ada).getByText(/^Pulled in 2026-11-/)).toBeInTheDocument()
   })
 
   it('T-PEO-4 Do not contact asks once, then removes them from the list', async () => {

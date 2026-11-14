@@ -386,10 +386,10 @@ export function Inbox() {
   )
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Inbox" />
 
-      <div className="grid grid-cols-2 gap-x-8 gap-y-12 md:flex md:gap-x-16">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:flex md:gap-x-16">
         <HeroStat label="Waiting" value={waitingCount?.text} plus={waitingCount?.plus} onClick={() => setView('list')} />
         {oldest !== null && oldest > 7 && <HeroStat label="Oldest" value={twoDigits(oldest).text} plus={twoDigits(oldest).plus} />}
       </div>

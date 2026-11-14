@@ -196,10 +196,10 @@ export function Jobs() {
   const f = funnel(all, today)
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title={leadsTab.label} tabs={tabs} />
 
-      <div className="grid grid-cols-2 gap-x-8 gap-y-12 md:flex md:gap-x-16">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:flex md:gap-x-16">
         <HeroStat label="Chased this week" value={chasedText} meter={meter} onClick={() => setFilter('chased')} />
         <HeroStat label="New" value={newCount?.text} plus={newCount?.plus} onClick={() => setFilter('new')} />
       </div>

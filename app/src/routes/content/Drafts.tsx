@@ -154,7 +154,7 @@ export function Drafts() {
   const insight = insightLine(all)
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-8">
       <PageHeader title="Content" tabs={tabs} aside={view === 'list' ? <TextLink label="Deck" onClick={() => setView('deck')} icon="inbox" /> : undefined} />
       {view === 'deck' ? deckView : <RowList rows={listRows} state={items.status === 'error' ? 'error' : items.status === 'loading' ? 'loading' : 'ready'} emptyText="Nothing to review" />}
       {insight && <p className="text-body text-ink-2">{insight}</p>}
