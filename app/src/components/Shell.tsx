@@ -3,7 +3,6 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { landing, sectionFor, settings, type Section } from '../lib/sections'
 import { FileTab } from './FileTab'
 import { Icon, sectionIcon } from './Icon'
-import { StateKey } from './StateKey'
 
 // The layout tree in section 25.2: Paper, FileTabs, Sheet. No other regions
 // exist. There is no sidebar, no top bar, no footer and no floating buttons.
@@ -44,9 +43,6 @@ export function FileTabs({ tabs, dots = {}, showSettings = true, onSearch, onCap
           <FileTab key={s.key} label={s.label} route={s.path} hasDot={dots[s.key]} icon={sectionIcon[s.key]} />
         ))}
         <span className="flex-1" />
-        <span className="mb-3 mr-4">
-          <StateKey />
-        </span>
         {onSearch && (
           <button type="button" aria-label="Search" title="Search (/)" onClick={onSearch} className="mb-1 inline-flex size-10 items-center justify-center rounded-pill text-ink-3 hover:text-ink">
             <Icon name="search" />
