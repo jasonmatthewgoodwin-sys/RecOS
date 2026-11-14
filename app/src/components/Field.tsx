@@ -6,7 +6,11 @@ type Props = {
   label: string
   value: string
   onChange: (value: string) => void
-  kind?: 'text' | 'date' | 'choice' | 'password'
+  kind?: 'text' | 'date' | 'choice' | 'password' | 'lines'
+  /** For kind lines: how many lines show before it scrolls. */
+  rows?: number
+  /** Called when the owner leaves the field. For fields that save themselves. */
+  onBlur?: () => void
   /** For kind choice. An empty value shows the placeholder. */
   choices?: Choice[]
   placeholder?: string
@@ -22,7 +26,7 @@ const box =
 
 // One label, one line to type on, one hairline under it. No box inside a
 // box (section 3.8). An error is a sentence under the field, never a colour.
-export function Field({ label, value, onChange, kind = 'text', choices = [], placeholder, error, autoFocus, autoComplete }: Props) {
+export function Field({ label, value, onChange, kind = 'text', choices = [], placeholder, error, autoFocus, autoComplete, rows = 3, onBlur }: Props) {
   const id = useId()
   const errorId = `${id}-error`
   const shared = {
@@ -38,8 +42,10 @@ export function Field({ label, value, onChange, kind = 'text', choices = [], pla
       <label htmlFor={id} className="label-caps text-ink-2">
         {label}
       </label>
-      {kind === 'choice' ? (
-        <select {...shared} onChange={(e) => onChange(e.target.value)}>
+      {kind === 'lines' ? (
+        <textarea {...shared} rows={rows} placeholder={placeholder} onBlur={onBlur} className={`${shared.className} resize-none py-2 leading-relaxed`} onChange={(e) => onChange(e.target.value)} />
+      ) : kind === 'choice' ? (
+        <select {...shared} onBlur={onBlur} onChange={(e) => onChange(e.target.value)}>
           {placeholder !== undefined && (
             <option value="" disabled={value !== ''}>
               {placeholder}
@@ -57,6 +63,7 @@ export function Field({ label, value, onChange, kind = 'text', choices = [], pla
           type={kind}
           autoComplete={autoComplete}
           placeholder={placeholder}
+          onBlur={onBlur}
           className={`${shared.className} ${kind === 'date' ? 'font-mono' : ''}`}
           onChange={(e) => onChange(e.target.value)}
         />

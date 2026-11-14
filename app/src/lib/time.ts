@@ -78,3 +78,10 @@ export function mondayOf(at: Date): string {
   d.setUTCDate(d.getUTCDate() - (c.isoDay - 1))
   return d.toISOString().slice(0, 10)
 }
+
+/** A plain date moved by a number of days. */
+export function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}

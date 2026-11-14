@@ -1,7 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiWeek, Member, PeopleList, Referral, Signal, Touch, WiderLead } from './data'
+import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, Signal, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { ukClock } from './time'
 
@@ -483,6 +483,30 @@ export function resetSampleKpis() {
   sampleKpiEvents = freshSampleKpiEvents()
 }
 
+// The quarter (32.2): no event held yet, one blog, two testimonials; the
+// outputs so far. Last week every weekly target was hit.
+function freshSampleQuarter(): KpiQuarter[] {
+  const q = (kpi: string, position: number, total: number, target: number | null): KpiQuarter => ({ kpi, position, target, total, pmmTotal: total, hit: target === null ? null : total >= target, pmmHit: target === null ? null : total >= target, hasManual: false })
+  return [
+    q('events_held', 1, 0, 1), q('blogs_published', 2, 1, 3), q('testimonials', 3, 2, 3),
+    q('client_meetings', 4, 4, null), q('jobs_won', 5, 1, null), q('shortlists', 6, 2, null), q('first_interviews', 7, 3, null),
+    q('offers', 8, 1, null), q('placements', 9, 0, null), q('referrals_received', 10, 1, null), q('leads_passed', 11, 1, null),
+  ]
+}
+
+const LAST_WEEK: Record<string, number> = { posts_chased: 22, coaching_calls: 5, linkedin_posts: 2, new_a_star: 6 }
+
+/** The Monday of last week, as a plain date. */
+function lastMondaySample(): string {
+  return daysAgo(ukClock(new Date()).isoDay - 1 + 7)
+}
+
+let sampleReviews: Record<string, WeeklyReview> = {}
+
+export function resetSampleReviews() {
+  sampleReviews = {}
+}
+
 function sampleKpiWeeks(): KpiWeek[] {
   return Object.entries(KPI_TARGETS).map(([kpi, target]) => {
     const rows = sampleKpiEvents[kpi] ?? []
@@ -705,6 +729,51 @@ export const sampleSource: DataSource = {
     sampleMembers.push(member({ id: `m-${id}`, personId: id, name: name.trim(), title: title.trim() || null, company: company.trim() || null, listId, tier, why: why.trim() || null, lastTouchOn: null }))
   },
 
+  async kpiQuarter() {
+    return freshSampleQuarter()
+  },
+  async followUpsQuarter() {
+    return { week: null, completed: 6, onTime: 5 }
+  },
+  async bdFunnel() {
+    const since = daysAgo(56)
+    const after = (d: string | null) => d !== null && d >= since
+    return {
+      found: sampleLeads.filter((l) => after(l.firstSeenOn)).length,
+      chased: sampleLeads.filter((l) => after(l.chasedOn)).length,
+      replied: sampleLeads.filter((l) => after(l.repliedOn)).length,
+      meetings: sampleLeads.filter((l) => after(l.meetingOn)).length,
+      won: sampleLeads.filter((l) => after(l.wonOn)).length,
+    }
+  },
+  async kpiWeeks() {
+    const monday = thisMonday()
+    const lastMonday = lastMondaySample()
+    const last: KpiWeekRow[] = Object.entries(LAST_WEEK).map(([kpi, total]) => {
+      const target = KPI_TARGETS[kpi]
+      return { kpi, week: lastMonday, target, total, hit: total >= target, pmmTotal: total, pmmHit: total >= target, hasManual: false }
+    })
+    return [...last, ...sampleKpiWeeks().map((w) => ({ ...w, week: monday }))]
+  },
+  async kpiOutputWeeks() {
+    const rows: KpiOutputWeek[] = [
+      { kpi: 'shortlists', week: lastMondaySample(), total: 1, pmmTotal: 1 },
+      { kpi: 'first_interviews', week: lastMondaySample(), total: 2, pmmTotal: 2 },
+      { kpi: 'leads_passed', week: thisMonday(), total: 1, pmmTotal: 0 },
+    ]
+    return rows
+  },
+  async followUpsWeeks() {
+    return [{ week: lastMondaySample(), completed: 6, onTime: 5 }]
+  },
+  async weeklyReview(week) {
+    const r = sampleReviews[week]
+    return r ? { ...r } : null
+  },
+  async saveWeeklyReview(week, fields: ReviewFields) {
+    const before = sampleReviews[week]
+    sampleReviews[week] = { week, followupBlockMinutes: before?.followupBlockMinutes ?? null, heldOn: before?.heldOn ?? null, ...fields }
+  },
   async kpiThisWeek() {
     return sampleKpiWeeks()
   },

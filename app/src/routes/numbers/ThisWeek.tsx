@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useState, type FormEvent } from 'react'
 import { Field } from '../../components/Field'
 import { HeroStat } from '../../components/HeroStat'
 import { Note } from '../../components/Note'
@@ -9,10 +9,10 @@ import { Switch } from '../../components/Switch'
 import { TextLink } from '../../components/TextLink'
 import type { Role } from '../../lib/auth'
 import { data, type KpiEvent } from '../../lib/data'
-import { isTyping } from '../../lib/keyboard'
 import { figure, fraction, inOrder, kpiWord, streakSentence } from '../../lib/numbers'
 import { invalidate, useQuery } from '../../lib/query'
 import { sections } from '../../lib/sections'
+import { Stepper } from './Stepper'
 
 // Numbers, This week (32.1): one KPI at a time, large, with a stepper through
 // the four. A sentence instead of a trend chart (14.3). Show what counted
@@ -63,21 +63,15 @@ export function ThisWeek({ role }: { role: Role }) {
   const current = rows[index]
   const streak = current ? streaks.data?.find((s) => s.kpi === current.kpi) : undefined
 
-  function step(by: number) {
-    if (rows.length === 0) return
-    setAt((index + by + rows.length) % rows.length)
-    if (showing === 'counted' || showing === 'correct') setShowing('none')
-  }
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return
-      if (e.key === 'ArrowLeft') step(-1)
-      if (e.key === 'ArrowRight') step(1)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
+  const count = rows.length
+  const step = useCallback(
+    (by: number) => {
+      if (count === 0) return
+      setAt((i) => (Math.min(i, count - 1) + by + count) % count)
+      setShowing((s) => (s === 'counted' || s === 'correct' ? 'none' : s))
+    },
+    [count],
+  )
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -123,16 +117,8 @@ export function ThisWeek({ role }: { role: Role }) {
               mark={current?.hasManual ? 'm' : undefined}
               meter={current && shown ? { filled: shown.total, total: current.target } : undefined}
             />
-            <div className="flex min-h-10 items-center gap-4 self-center font-mono text-label text-ink-2" aria-label="Stepper">
-              <button type="button" aria-label="Previous" onClick={() => step(-1)} className="flex size-10 items-center justify-center text-body text-ink hover:text-ink-2">
-                ‹
-              </button>
-              <span className="tabular-nums" data-testid="stepper">
-                {rows.length ? `${index + 1} of ${rows.length}` : '– of –'}
-              </span>
-              <button type="button" aria-label="Next" onClick={() => step(1)} className="flex size-10 items-center justify-center text-body text-ink hover:text-ink-2">
-                ›
-              </button>
+            <div className="self-center">
+              <Stepper index={index} count={rows.length} onStep={step} />
             </div>
           </div>
 

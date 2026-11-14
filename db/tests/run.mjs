@@ -130,7 +130,7 @@ test('anon holds no privilege on any table or view', async () => {
 
 test('T-AUTH-5 / anon: every table and view refuses a read', async () => {
   await anon(async () => {
-    for (const t of [...allTables, 'kpi_week_view', 'kpi_this_week', 'kpi_streak_view']) {
+    for (const t of [...allTables, 'kpi_week_view', 'kpi_this_week', 'kpi_streak_view', 'kpi_quarter_view', 'kpi_output_week_view', 'followups_quarter_view', 'bd_funnel_view']) {
       const why = await refused(`select * from ${t}`)
       assert.match(String(why), /permission denied/, `${t} as anon`)
     }
@@ -370,6 +370,39 @@ test('P1-42: the streak view, PMM and all-work totals, and a manual correction m
   })
   await reviewer(async () => {
     assert.equal(await count('kpi_streak_view'), 4)
+  })
+})
+
+test('P1-43: the quarter, output, follow-up and funnel views (14.2, 14.4, 14.7, 32.2)', async () => {
+  await owner(async () => {
+    const q = await rows(`select kpi, position, total::int as total, target::int as target, hit from kpi_quarter_view order by position`)
+    assert.deepEqual(q.map((r) => r.kpi), ['events_held', 'blogs_published', 'testimonials', 'client_meetings', 'jobs_won', 'shortlists', 'first_interviews', 'offers', 'placements', 'referrals_received', 'leads_passed'])
+    // Three quarterly targets, judged against the target valid today; outputs carry no target.
+    assert.deepEqual(q.slice(0, 3).map((r) => [r.target, r.hit]), [[1, false], [3, false], [3, false]])
+    assert.ok(q.slice(3).every((r) => r.target === null && r.hit === null))
+    // An earlier test received a referral this quarter.
+    const by = Object.fromEntries(q.map((r) => [r.kpi, r.total]))
+    assert.ok(by.referrals_received >= 1, JSON.stringify(by))
+
+    const out = await rows(`select kpi, week::text as week, total::int as total from kpi_output_week_view`)
+    assert.ok(out.some((r) => r.kpi === 'referrals_received' && r.total >= 1), JSON.stringify(out))
+
+    // The follow-up lifecycle test completed its rows in this quarter unless the
+    // quarter has just turned, so the figure is checked for shape only.
+    const [f] = await rows(`select completed::int as completed, on_time::int as on_time from followups_quarter_view`)
+    assert.ok(f.completed >= f.on_time && f.on_time >= 0, JSON.stringify(f))
+
+    const [funnel] = await rows(`select found::int as found, chased::int as chased, replied::int as replied, meetings::int as meetings, won::int as won from bd_funnel_view`)
+    assert.ok(funnel.found >= funnel.chased && funnel.chased >= funnel.replied, JSON.stringify(funnel))
+    assert.ok(funnel.found >= 5, JSON.stringify(funnel))
+  })
+  await reviewer(async () => {
+    assert.equal(await count('kpi_quarter_view'), 11)
+    assert.equal(await count('bd_funnel_view'), 1)
+  })
+  await noRole(async () => {
+    assert.equal(await count('kpi_quarter_view'), 0)
+    assert.deepEqual(await rows(`select found::int as found from bd_funnel_view`), [{ found: 0 }])
   })
 })
 

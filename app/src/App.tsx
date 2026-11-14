@@ -10,6 +10,8 @@ import { landing, sectionFor, sections, settings, visibleSections, type Section 
 import { Gallery } from './routes/gallery/Gallery'
 import { Home } from './routes/home/Home'
 import { Inbox } from './routes/inbox/Inbox'
+import { Quarter } from './routes/numbers/Quarter'
+import { Review } from './routes/numbers/Review'
 import { ThisWeek } from './routes/numbers/ThisWeek'
 import { FollowUps } from './routes/leads/FollowUps'
 import { Jobs } from './routes/leads/Jobs'
@@ -34,6 +36,8 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'people/top-candidates': <PeopleList listKey="top_candidates" />,
     'people/signals': <Signals />,
     'numbers/this-week': <ThisWeek role={session.role} />,
+    'numbers/quarter': <Quarter />,
+    'numbers/review': <Review role={session.role} />,
   }
 }
 

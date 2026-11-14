@@ -214,6 +214,41 @@ export type KpiStreak = {
   pmmBest12: number
 }
 
+/** One quarterly target or output this quarter (32.2). An output has no target. */
+export type KpiQuarter = {
+  kpi: string
+  position: number
+  target: number | null
+  total: number
+  pmmTotal: number
+  hit: boolean | null
+  pmmHit: boolean | null
+  hasManual: boolean
+}
+
+/** One KPI in one of the last 12 weeks (14.2). */
+export type KpiWeekRow = KpiWeek & { week: string }
+
+/** An output KPI that moved in a week (32.3). */
+export type KpiOutputWeek = { kpi: string; week: string; total: number; pmmTotal: number }
+
+export type FollowUpsDone = { week: string | null; completed: number; onTime: number }
+
+/** The BD funnel as plain numbers, last 8 weeks (14.4). */
+export type BdFunnel = { found: number; chased: number; replied: number; meetings: number; won: number }
+
+/** The owner's notes for one week (13.3). */
+export type WeeklyReview = {
+  week: string
+  learned: string
+  changes: string
+  plan: string
+  quarterlyFocus: string
+  followupBlockMinutes: number | null
+  heldOn: string | null
+}
+export type ReviewFields = Pick<WeeklyReview, 'learned' | 'changes' | 'plan' | 'quarterlyFocus'>
+
 /** One row behind a number this week (13.1). Labels name a role and company, never a person. */
 export type KpiEvent = {
   id: string
@@ -375,6 +410,17 @@ export interface DataSource {
   addPerson(input: { name: string; title: string; company: string; listId: string; tier: Tier; why: string }): Promise<void>
 
   /** New signals, strongest first (29.2). */
+  /** Numbers, Quarter (32.2). */
+  kpiQuarter(): Promise<KpiQuarter[]>
+  followUpsQuarter(): Promise<FollowUpsDone>
+  bdFunnel(): Promise<BdFunnel>
+  /** Numbers, Review (32.3): the last 12 weeks, the outputs that moved and the owner's notes. */
+  kpiWeeks(): Promise<KpiWeekRow[]>
+  kpiOutputWeeks(): Promise<KpiOutputWeek[]>
+  followUpsWeeks(): Promise<FollowUpsDone[]>
+  weeklyReview(week: string): Promise<WeeklyReview | null>
+  saveWeeklyReview(week: string, fields: ReviewFields): Promise<void>
+
   /** Numbers, This week (32.1). */
   kpiThisWeek(): Promise<KpiWeek[]>
   kpiStreaks(): Promise<KpiStreak[]>
@@ -984,6 +1030,99 @@ const live: DataSource = {
     const personId = (data as { id: string }).id
     const { error: e2 } = await supabase!.from('league_members').insert({ person_id: personId, list_id: listId, tier, why: why.trim() || null, added_from: 'manual' })
     fail(e2)
+  },
+
+  async kpiQuarter() {
+    const { data, error } = await supabase!.from('kpi_quarter_view').select('kpi, position, total, target, hit, pmm_total, pmm_hit, has_manual').order('position')
+    fail(error)
+    type Row = { kpi: string; position: number; total: number; target: number | null; hit: boolean | null; pmm_total: number; pmm_hit: boolean | null; has_manual: boolean }
+    return ((data ?? []) as Row[]).map((r) => ({
+      kpi: r.kpi,
+      position: r.position,
+      target: r.target === null ? null : Number(r.target),
+      total: Number(r.total),
+      pmmTotal: Number(r.pmm_total),
+      hit: r.hit,
+      pmmHit: r.pmm_hit,
+      hasManual: r.has_manual,
+    }))
+  },
+
+  async followUpsQuarter() {
+    const { data, error } = await supabase!.from('followups_quarter_view').select('quarter, completed, on_time')
+    fail(error)
+    const row = ((data ?? []) as { quarter: string; completed: number; on_time: number }[])[0]
+    return row ? { week: null, completed: Number(row.completed), onTime: Number(row.on_time) } : { week: null, completed: 0, onTime: 0 }
+  },
+
+  async bdFunnel() {
+    const { data, error } = await supabase!.from('bd_funnel_view').select('found, chased, replied, meetings, won')
+    fail(error)
+    const r = ((data ?? []) as Record<keyof BdFunnel, number>[])[0]
+    return r
+      ? { found: Number(r.found), chased: Number(r.chased), replied: Number(r.replied), meetings: Number(r.meetings), won: Number(r.won) }
+      : { found: 0, chased: 0, replied: 0, meetings: 0, won: 0 }
+  },
+
+  async kpiWeeks() {
+    const { data, error } = await supabase!.from('kpi_week_view').select('kpi, week, total, target, hit, pmm_total, pmm_hit, has_manual').order('week')
+    fail(error)
+    type Row = { kpi: string; week: string; total: number; target: number; hit: boolean; pmm_total: number; pmm_hit: boolean; has_manual: boolean }
+    return ((data ?? []) as Row[]).map((r) => ({
+      kpi: r.kpi,
+      week: r.week,
+      target: Number(r.target),
+      total: Number(r.total),
+      hit: r.hit,
+      pmmTotal: Number(r.pmm_total),
+      pmmHit: r.pmm_hit,
+      hasManual: r.has_manual,
+    }))
+  },
+
+  async kpiOutputWeeks() {
+    const { data, error } = await supabase!.from('kpi_output_week_view').select('kpi, week, total, pmm_total')
+    fail(error)
+    type Row = { kpi: string; week: string; total: number; pmm_total: number }
+    return ((data ?? []) as Row[]).map((r) => ({ kpi: r.kpi, week: r.week, total: Number(r.total), pmmTotal: Number(r.pmm_total) }))
+  },
+
+  async followUpsWeeks() {
+    const { data, error } = await supabase!.from('followups_week_view').select('week, completed, on_time')
+    fail(error)
+    type Row = { week: string; completed: number; on_time: number }
+    return ((data ?? []) as Row[]).map((r) => ({ week: r.week, completed: Number(r.completed), onTime: Number(r.on_time) }))
+  },
+
+  async weeklyReview(week) {
+    const { data, error } = await supabase!
+      .from('weekly_reviews')
+      .select('week, learned, changes, plan, quarterly_focus, followup_block_minutes, held_on')
+      .eq('week', week)
+      .maybeSingle()
+    fail(error)
+    if (!data) return null
+    const r = data as { week: string; learned: string | null; changes: string | null; plan: string | null; quarterly_focus: string | null; followup_block_minutes: number | null; held_on: string | null }
+    return {
+      week: r.week,
+      learned: r.learned ?? '',
+      changes: r.changes ?? '',
+      plan: r.plan ?? '',
+      quarterlyFocus: r.quarterly_focus ?? '',
+      followupBlockMinutes: r.followup_block_minutes,
+      heldOn: r.held_on,
+    }
+  },
+
+  async saveWeeklyReview(week, fields) {
+    const blank = (t: string) => (t.trim() ? t : null)
+    const { error } = await supabase!
+      .from('weekly_reviews')
+      .upsert(
+        { week, learned: blank(fields.learned), changes: blank(fields.changes), plan: blank(fields.plan), quarterly_focus: blank(fields.quarterlyFocus) },
+        { onConflict: 'owner_id,week' },
+      )
+    fail(error)
   },
 
   async kpiThisWeek() {

@@ -1,4 +1,5 @@
-import type { KpiStreak, KpiWeek } from './data'
+import type { FollowUpsDone, KpiOutputWeek, KpiStreak, KpiWeek, KpiWeekRow, ReviewFields } from './data'
+import { mondayOf, shiftDate } from './time'
 
 // Pure helpers for the Numbers tab (32.1, 14.3, 22.5). No data access.
 
@@ -46,4 +47,103 @@ export function streakSentence(s: KpiStreak | undefined, allWork: boolean): stri
   if (hits > 0) return `Hit in ${hits} of the last 4 weeks.`
   const best = Math.round(allWork ? s.best12 : s.pmmBest12)
   return `Not hit in the last 4 weeks. Best week was ${best}.`
+}
+
+/** The three quarterly targets in stepper order (13.2). */
+export const quarterlyKpis = ['events_held', 'blogs_published', 'testimonials'] as const
+
+/** The outputs table on Quarter, in order (32.2). */
+export const outputKpis = ['client_meetings', 'jobs_won', 'shortlists', 'first_interviews', 'offers', 'placements', 'referrals_received', 'leads_passed'] as const
+
+export const outputWord: Record<string, string> = {
+  client_meetings: 'Client meetings',
+  jobs_won: 'Jobs won',
+  shortlists: 'Shortlists sent',
+  first_interviews: 'First interviews',
+  offers: 'Offers',
+  placements: 'Placements',
+  referrals_received: 'Referrals received',
+  leads_passed: 'Leads passed to colleagues',
+}
+
+/** Words for the What moved line: 1 shortlist, 2 first interviews. */
+const movedWord: Record<string, [string, string]> = {
+  client_meetings: ['client meeting', 'client meetings'],
+  jobs_won: ['job won', 'jobs won'],
+  shortlists: ['shortlist', 'shortlists'],
+  first_interviews: ['first interview', 'first interviews'],
+  offers: ['offer', 'offers'],
+  placements: ['placement', 'placements'],
+  referrals_received: ['referral', 'referrals'],
+  leads_passed: ['lead passed on', 'leads passed on'],
+}
+
+/** w/c 9 November. */
+export function weekWords(week: string): string {
+  return `w/c ${dayMonth(week)}`
+}
+
+/** The Monday of the week before the one holding a moment. */
+export function lastMonday(now: Date): string {
+  return shiftDate(mondayOf(now), -7)
+}
+
+/** The What moved line (32.3): outputs for one week in plain words. */
+export function movedWords(outputs: KpiOutputWeek[], week: string, allWork: boolean): string {
+  const parts = outputKpis
+    .map((k) => {
+      const row = outputs.find((o) => o.kpi === k && o.week === week)
+      const n = row ? Math.round(allWork ? row.total : row.pmmTotal) : 0
+      return n > 0 ? `${n} ${movedWord[k][n === 1 ? 0 : 1]}` : null
+    })
+    .filter((p): p is string => p !== null)
+  return parts.length ? `${parts.join(', ')}.` : 'Nothing moved.'
+}
+
+/** One line per weekly KPI for a week: name, N/target and hit or missed. */
+export function weekLines(weeks: KpiWeekRow[], week: string, allWork: boolean): { kpi: string; name: string; fraction: string; hit: boolean; mark: boolean }[] {
+  return inOrder(weeks.filter((w) => w.week === week)).map((w) => {
+    const f = figure(w, allWork)
+    return { kpi: w.kpi, name: kpiWord[w.kpi] ?? w.kpi, fraction: fraction(f.total, w.target), hit: f.hit, mark: w.hasManual }
+  })
+}
+
+/**
+ * The summary email in the shape A1 sends (17.2), built from the same lines
+ * the page shows. A1's own message replaces it once the agent posts.
+ */
+export function summaryDraft(input: {
+  week: string
+  lines: ReturnType<typeof weekLines>
+  moved: string
+  followUps: FollowUpsDone | undefined
+  review: ReviewFields | null
+}): string {
+  const { week, lines, moved, followUps, review } = input
+  const kpiLines = lines.length
+    ? lines.map((l) => `${l.name}: ${l.fraction}, ${l.hit ? 'hit' : 'missed'}`).join('\n')
+    : 'No logged activity this week. Job posts chased, coaching calls, LinkedIn posts and new A-star candidates were not logged.'
+  const away = review && /\b(away|holiday)\b/i.test(review.plan) ? 'I was away for part of the week.\n\n' : ''
+  const notes: string[] = []
+  if (review?.learned.trim()) notes.push(`What I learned: ${review.learned.trim()}`)
+  if (review?.plan.trim()) notes.push(`Next week: ${review.plan.trim()}`)
+  const notesBlock = notes.length ? notes.join('\n\n') : 'Notes to add before the review.'
+  const followLine = followUps ? `Follow-ups on time: ${Math.round(followUps.onTime)} of ${Math.round(followUps.completed)}.` : ''
+  return [
+    `Subject: PMM weekly KPIs - ${weekWords(week)}`,
+    '',
+    'Olly,',
+    '',
+    `${away}Last week against target:`,
+    kpiLines,
+    '',
+    `Moved: ${moved}`,
+    followLine,
+    '',
+    notesBlock,
+    '',
+    'Jason',
+  ]
+    .filter((l, i, all) => !(l === '' && all[i - 1] === ''))
+    .join('\n')
 }
