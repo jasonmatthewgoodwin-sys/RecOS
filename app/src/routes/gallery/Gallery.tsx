@@ -1,11 +1,17 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { Card } from '../../components/Card'
+import { Deck } from '../../components/Deck'
+import { Draft } from '../../components/Draft'
+import { Field } from '../../components/Field'
 import { FileTab } from '../../components/FileTab'
 import { HeroStat } from '../../components/HeroStat'
 import { IndexTabs } from '../../components/IndexTab'
+import { Note } from '../../components/Note'
 import { PillButton } from '../../components/PillButton'
 import { Dots, EmptyLine } from '../../components/Quiet'
 import { Row } from '../../components/Row'
 import { RowList } from '../../components/RowList'
+import { Switch } from '../../components/Switch'
 import { TextLink } from '../../components/TextLink'
 import { TickMeter } from '../../components/TickMeter'
 import { getTheme, setTheme } from '../../theme/tokens'
@@ -32,6 +38,130 @@ const sampleRows = Array.from({ length: 9 }, (_, i) => ({
   detail: 'A quiet detail',
   meta: `0${i + 1}:00`,
 }))
+
+type SampleItem = { id: string; type: string; title: string; why: string; draft?: string }
+
+const deckItems: SampleItem[] = [
+  {
+    id: 'a',
+    type: 'JOB',
+    title: 'Senior PMM at Northwind Sample Co',
+    why: 'B2B SaaS, about 400 people, New York. Posted two days ago.',
+    draft: 'Hi, I saw the Senior PMM role. I work only on product marketing hires and have two people worth a look.',
+  },
+  { id: 'b', type: 'SIGNAL', title: 'Ben Sample was promoted', why: 'Now VP. Likely to build a team.' },
+  { id: 'c', type: 'REFERRAL', title: 'Eve Invented named someone to speak to', why: 'Mentioned on a call this week.' },
+]
+
+function DeckSample() {
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  return (
+    <Deck
+      items={deckItems}
+      renderItem={(item) => (
+        <div className="flex flex-col gap-4">
+          <p className="label-caps text-ink-2">{item.type}</p>
+          <h3 className="text-title text-ink">{item.title}</h3>
+          <p className="text-body text-ink-2">{item.why}</p>
+          {item.draft !== undefined && (
+            <Draft text={drafts[item.id] ?? item.draft} original={item.draft} onChange={(t) => setDrafts({ ...drafts, [item.id]: t })} />
+          )}
+        </div>
+      )}
+      primaryAction={{ label: (item) => (item.type === 'JOB' ? 'Chased' : 'Done'), onClick: noop }}
+      onBin={noop}
+      onSnooze={noop}
+      links={() => <TextLink label="Open source" href="https://example.com" />}
+      onList={noop}
+    />
+  )
+}
+
+function CardSample() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative min-h-[32rem] rounded-sheet border border-rule p-8">
+      <PillButton label="Open card" onClick={() => setOpen(true)} />
+      <p className="mt-4 text-body text-ink-2">The page behind stays put. Esc closes it.</p>
+      {open && (
+        <Card
+          label="Job"
+          title="Senior PMM at Northwind Sample Co"
+          sections={[
+            { label: 'Why', body: 'B2B SaaS, about 400 people, New York. Posted two days ago.' },
+            { label: 'Matched', body: 'Ada Example. Senior PMM in New York, open to a move' },
+          ]}
+          primaryAction={{ label: 'Chased', onClick: () => setOpen(false) }}
+          links={
+            <>
+              <TextLink label="Snooze" onClick={noop} />
+              <TextLink label="Bin" onClick={noop} />
+            </>
+          }
+          foot="Found by the jobs agent. LinkedIn post"
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function NoteSample() {
+  const [shown, setShown] = useState(false)
+  return (
+    <div className="relative min-h-40 rounded-sheet border border-rule p-8">
+      <PillButton label="Show note" onClick={() => setShown(true)} />
+      {shown && <Note text="Outlook needs signing in again" link={{ label: 'Fix', onClick: noop }} onClose={() => setShown(false)} />}
+    </div>
+  )
+}
+
+function SwitchSample() {
+  const [a, setA] = useState(true)
+  const [b, setB] = useState(false)
+  return (
+    <div className="flex flex-col gap-2">
+      <Switch on={a} label="Thank-you emails send on their own" onChange={setA} />
+      <Switch on={b} label="Night theme" onChange={setB} />
+      <Switch on={false} label="LinkedIn messages (draft only)" onChange={noop} disabled />
+    </div>
+  )
+}
+
+function FieldSample() {
+  const [name, setName] = useState('')
+  const [date, setDate] = useState('2026-11-16')
+  const [choice, setChoice] = useState('')
+  return (
+    <div className="grid max-w-md gap-8">
+      <Field label="Colleague" value={name} onChange={setName} placeholder="Who takes it" />
+      <Field label="Due" value={date} onChange={setDate} kind="date" />
+      <Field
+        label="Reason"
+        value={choice}
+        onChange={setChoice}
+        kind="choice"
+        placeholder="Choose one"
+        choices={[
+          { value: 'no_reply', label: 'No reply' },
+          { value: 'filled', label: 'Filled' },
+          { value: 'other', label: 'Other' },
+        ]}
+      />
+      <Field label="Split" value="" onChange={noop} error="Agree the split first" />
+    </div>
+  )
+}
+
+function DraftSample() {
+  const original = 'Congratulations on the move to VP, Ben. Well earned.'
+  const [text, setText] = useState(original)
+  return (
+    <div className="max-w-md">
+      <Draft text={text} original={original} onChange={setText} />
+    </div>
+  )
+}
 
 export function Gallery() {
   return (
@@ -112,6 +242,34 @@ export function Gallery() {
         <TextLink label="Show more" onClick={noop} />
         <EmptyLine text="All clear" />
         <Dots />
+      </Block>
+
+      <Block name="Deck: three items, then All clear. Keys j k Enter x s e. Undo shows for 8 seconds">
+        <DeckSample />
+      </Block>
+
+      <Block name="Deck: empty">
+        <Deck items={[]} renderItem={() => null} primaryAction={{ label: () => 'Done', onClick: noop }} />
+      </Block>
+
+      <Block name="Card: open and closing">
+        <CardSample />
+      </Block>
+
+      <Block name="Note: shown and fading">
+        <NoteSample />
+      </Block>
+
+      <Block name="Switch: on, off, disabled">
+        <SwitchSample />
+      </Block>
+
+      <Block name="Field: text, date, choice, error">
+        <FieldSample />
+      </Block>
+
+      <Block name="Draft: rest, then edited with Reset">
+        <DraftSample />
       </Block>
     </div>
   )

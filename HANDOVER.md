@@ -55,7 +55,9 @@ npm install
 npm test
 ```
 
-Both pass as of this note: 25 app tests, and 31 database tests run twice under two grant models.
+Both pass as of this note: 42 app tests, and 31 database tests run twice under two grant models.
+
+To look at the components without signing in, add a file `app/.env.gallery` holding `VITE_SUPABASE_URL=` and `VITE_SUPABASE_ANON_KEY=` (both empty), then run `npm run dev -- --mode gallery --port 5174` in `app` and open `http://localhost:5174/gallery`. The file is ignored by git.
 
 ## What is done
 
@@ -75,6 +77,7 @@ Both pass as of this note: 25 app tests, and 31 database tests run twice under t
 | P1-13 Home | Done. T-HOME-1 to 7 pass. Seen only on sample data so far |
 | P1-18 Business development tables | Done locally: migration 0018 and six policy files. **Not applied to the test project** |
 | P1-19 KPI triggers for the BD tables | Done locally: migration 0019. **Not applied to the test project** |
+| P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
 
 ## What was done in the Supabase dashboard
 
@@ -120,10 +123,10 @@ Against the checklist in section 7 of `docs/build-instructions.md`. Is it calm? 
 
 ### 6. The rest of week 2
 
-Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. P1-18 and P1-19 are done. A sensible order for the rest:
+Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. P1-18, P1-19 and P1-21 are done. A sensible order for the rest:
 
 1. P1-14 to P1-16 and P1-20: the agent endpoints and the write endpoint with its fit score (sections 15, 16, 23.1). These are Supabase Edge Functions. Deploying them needs the Supabase command line tool and Jason's login; no function has been written yet. They can be written and unit-tested without deploying.
-2. P1-21 Deck and Card components, P1-22 Inbox, P1-23 Jobs page (sections 27, 28). These need nothing from Jason and can run alongside item 1.
+2. P1-23 Jobs page and job card (section 28) needs nothing from Jason and can run alongside item 1. P1-22 Inbox (section 27) depends on P1-15.
 3. P1-17 bridge sheet pull and P1-24 import need the sheets from Jason.
 
 New database changes are new numbered files in `db/migrations` (next is 0020), with a policy file for every new table. `npm test` in `db/` fails if a table has no policy file. Apply new files to the test project through the SQL editor.
@@ -141,7 +144,7 @@ New database changes are new numbered files in `db/migrations` (next is 0020), w
 
 - Signing in end to end. The hooks refuse strangers and accept Jason's address, but no session has been completed, so the role in the token and the owner's view of the data are untested on the real project.
 - Microsoft sign-in.
-- The night theme.
+- The night theme, and the new components on a phone.
 - Migrations 0018 and 0019 on a real Supabase project. They pass in the in-memory Postgres under both grant models.
 - Anything else from week 2 on.
 

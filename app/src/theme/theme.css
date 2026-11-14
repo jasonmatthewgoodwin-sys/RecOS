@@ -50,6 +50,9 @@
   --tracking-label: 0.06em;
 
   --animate-fade: fade 150ms ease-out;
+  --animate-fade-out: fade-out 150ms ease-in forwards;
+  --animate-slide: slide 200ms ease-out;
+  --animate-slide-out: slide-out 200ms ease-in forwards;
   --animate-quiet: quiet 1.2s ease-in-out 1;
 
   @keyframes fade {
@@ -58,6 +61,31 @@
     }
     to {
       opacity: 1;
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  /* Cards slide in over 200 ms. Nothing bounces (section 3.13). */
+  @keyframes slide {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes slide-out {
+    to {
+      opacity: 0;
+      transform: translateX(16px);
     }
   }
 }

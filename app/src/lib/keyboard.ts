@@ -6,7 +6,8 @@ import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { landing, sectionFor, type Section } from './sections'
 
-function isTyping(target: EventTarget | null): boolean {
+/** True when a key press belongs to a field the owner is typing in. */
+export function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
 }
