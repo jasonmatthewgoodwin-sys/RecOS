@@ -15,6 +15,7 @@ declare
   p_ada uuid; p_ben uuid; p_cara uuid; p_dev uuid; p_eve uuid; p_finn uuid;
   monday date := public.week_of(now());
   run uuid;
+  jl_north uuid; jl_contoso uuid; jl_globex uuid; wl_fabrikam uuid; rf_eve uuid;
 begin
   select id into o from public.app_users where role = 'owner' order by created_at limit 1;
   if o is null then
@@ -68,6 +69,56 @@ begin
     (o, p_ben,  'Ben Sample',       'Contoso Demo Inc',    'after_coaching',       'Send the two examples discussed',     'call',  'owed',    monday,                 'open', 'sample:fu:ben'),
     (o, p_finn, 'Finn Fictional',   'Umbrella Sample',     'after_submission',     'Check in after the client reply',     'rule',  'owed',    current_date + 7,       'open', 'sample:fu:finn'),
     (o, p_cara, 'Cara Placeholder', 'Fabrikam Test Ltd',   'chase',                'Waiting for feedback on two CVs',     'email', 'waiting', current_date - 1,       'open', 'sample:fu:cara');
+
+  -- Business development (section 9). The three job leads and the wider lead
+  -- are the records behind the inbox items above. Leads inserted already
+  -- chased or dead write no KPI event: only a move from new to chased does.
+  insert into public.job_leads (owner_id, company, company_key, role, role_key, level, city, sources, fit_score, fit_reason, stage, first_seen_on, last_seen_on, matched)
+  values (o, 'Northwind Sample Co', 'northwind sample', 'Senior PMM', 'senior product marketing manager', 'senior', 'new_york', array['linkedin_post'], 88, 'B2B SaaS, about 400 people, New York', 'new', current_date - 2, current_date,
+    jsonb_build_array(jsonb_build_object('person_id', p_ada, 'name', 'Ada Example', 'reason', 'Senior PMM in New York, open to a move')))
+  returning id into jl_north;
+  insert into public.job_leads (owner_id, company, company_key, role, role_key, level, city, sources, fit_score, fit_reason, stage, hiring_manager_id, first_seen_on, last_seen_on)
+  values (o, 'Contoso Demo Inc', 'contoso demo', 'Director of PMM', 'director of product marketing', 'director', 'boston', array['alex_leads', 'linkedin_advert'], 82, 'Fits the ICP. The hiring leader is on the league', 'new', p_ben, current_date - 1, current_date)
+  returning id into jl_contoso;
+  insert into public.job_leads (owner_id, company, company_key, role, role_key, level, city, sources, fit_score, fit_reason, stage, first_seen_on, last_seen_on)
+  values (o, 'Globex Fiction', 'globex fiction', 'Product Marketing Manager', 'product marketing manager', 'manager', 'remote_us', array['linkedin_post'], 70, 'Remote US. Second PMM hire this quarter', 'new', current_date - 3, current_date)
+  returning id into jl_globex;
+  insert into public.job_leads (owner_id, company, company_key, role, role_key, level, city, sources, fit_score, stage, chased_on, first_seen_on, last_seen_on)
+  values (o, 'Initech Mock', 'initech mock', 'Head of Product Marketing', 'head of product marketing', 'head', 'san_francisco', array['linkedin_post', 'manual'], 76, 'chased', monday, monday - 4, monday);
+  insert into public.job_leads (owner_id, company, company_key, role, role_key, level, city, sources, fit_score, stage, chased_on, replied_on, first_seen_on, last_seen_on)
+  values (o, 'Umbrella Sample', 'umbrella sample', 'VP Product Marketing', 'vice president product marketing', 'vp', 'new_york', array['alex_leads'], 91, 'replied', monday - 7, monday - 2, monday - 10, monday - 2);
+  insert into public.job_leads (owner_id, company, company_key, role, role_key, level, country, city, sources, fit_score, stage, dead_reason, purge_after, first_seen_on, last_seen_on)
+  values (o, 'Wonka Imaginary Ltd', 'wonka imaginary', 'PMM Lead', 'product marketing manager lead', 'manager', 'UK', 'london', array['linkedin_advert'], 40, 'dead', 'not_icp', (current_date + interval '12 months')::date, monday - 20, monday - 20);
+
+  insert into public.wider_leads (owner_id, company, role, function, country, location, source, mentioned_by_id, mentioned_by_name, status, notes)
+  values (o, 'Fabrikam Test Ltd', 'Account Executive', 'sales', 'US', 'austin', 'job_post', p_cara, 'Cara Placeholder', 'spotted', 'Not PMM. May suit the sales team.')
+  returning id into wl_fabrikam;
+  insert into public.wider_leads (owner_id, company, role, function, country, source, mentioned_by_id, mentioned_by_name, status, passed_to, passed_on, split_note)
+  values (o, 'Globex Fiction', 'RevOps Manager', 'revops', 'US', 'coaching', p_dev, 'Dev Madeup', 'passed', 'Sam Colleague', monday - 8, 'Half each, agreed on the call');
+
+  insert into public.coaching_sessions (owner_id, person_id, booked_for, source, status)
+  values (o, p_ben, now() + interval '2 hours', 'league', 'booked');
+  insert into public.coaching_sessions (owner_id, person_id, booked_for, held_at, source, status, q_interviewed_where, q_who_else_looking, advice_given, referrals_count, followed_up)
+  values (o, p_eve, monday - 3 + interval '10 hours', monday - 3 + interval '10 hours', 'inbound', 'held', 'Two Series B companies in the Bay Area', 'A former colleague now at Northwind Sample Co', 'Lead with the launch story, not the title', 1, true);
+
+  -- The referral Eve gave on her call. Its KPI event is written by trigger.
+  insert into public.referrals (owner_id, referred_name, referred_company, referred_title, referred_by_id, referred_by_name, context, kind, stage, received_on, dedup_key)
+  values (o, 'Hal Hypothetical', 'Northwind Sample Co', 'Group PMM', p_eve, 'Eve Invented', 'Worked together before. Said to be looking.', 'person', 'new', monday - 3, 'sample:referral:hal hypothetical:northwind sample:eve invented')
+  returning id into rf_eve;
+
+  insert into public.campaigns (owner_id, name, audience, tool, started_on, contacted, replies, calls_booked)
+  values (o, 'Series B PMM leaders, east coast', 'Heads and directors of PMM at Series B SaaS, New York and Boston', 'Other tool', monday - 14, 120, 4, 1);
+
+  insert into public.target_companies (owner_id, list, company, company_key, hq_country, us_presence, headcount_band, marketing_lead_name, marketing_lead_title, status) values
+    (o, 'uk_to_us', 'Fabrikam Test Ltd', 'fabrikam test', 'UK', 'Austin office opened this year', '200-500', 'Cara Placeholder', 'Head of Marketing', 'in_conversation'),
+    (o, 'uk_to_us', 'Wonka Imaginary Ltd', 'wonka imaginary', 'UK', 'None yet. Hiring a first US seller', '50-200', null, null, 'to_research');
+
+  -- Point the inbox items at the records behind them.
+  update public.inbox_items set ref_table = 'job_leads', ref_id = jl_north where dedup_key = 'sample:job_lead:northwind sample:senior pmm';
+  update public.inbox_items set ref_table = 'job_leads', ref_id = jl_contoso where dedup_key = 'sample:job_lead:contoso demo:director of pmm';
+  update public.inbox_items set ref_table = 'job_leads', ref_id = jl_globex where dedup_key = 'sample:job_lead:globex fiction:pmm';
+  update public.inbox_items set ref_table = 'wider_leads', ref_id = wl_fabrikam where dedup_key = 'sample:wider_lead:fabrikam test:account executive';
+  update public.inbox_items set ref_table = 'referrals', ref_id = rf_eve where dedup_key = 'sample:referral:eve invented';
 
   -- Today's calls: 6 external, 1 internal. Spread over the next few hours.
   insert into public.calendar_today (owner_id, starts_at, title, call_type, person_id, person_name, is_external, event_ref) values

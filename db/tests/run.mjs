@@ -400,6 +400,85 @@ test('helpers: week_of and working_days', async () => {
   assert.deepEqual(r, { mon: '2026-11-09', bst: '2026-07-06', wd: 2, q: '2026-10-01' })
 })
 
+test('P1-18: the owner reads the sample business development rows, and every inbox item points at its record', async () => {
+  await owner(async () => {
+    assert.equal(await count('job_leads'), 6)
+    assert.equal(await count('wider_leads'), 2)
+    assert.equal(await count('coaching_sessions'), 2)
+    assert.equal(await count('referrals'), 1)
+    assert.equal(await count('campaigns'), 1)
+    assert.equal(await count('target_companies'), 2)
+    const unlinked = await rows(`select dedup_key from inbox_items where type in ('job_lead', 'wider_lead', 'referral') and ref_id is null`)
+    assert.deepEqual(unlinked, [])
+    const [{ n }] = await rows(
+      `select count(*)::int as n from inbox_items i join job_leads j on j.id = i.ref_id where i.ref_table = 'job_leads' and j.company = i.company`,
+    )
+    assert.equal(n, 3)
+  })
+})
+
+test('JOB-1, JOB-3, JOB-4: stage dates are set once; won needs a search; dead needs a reason and a purge date', async () => {
+  await owner(async () => {
+    const [{ id }] = await rows(
+      `insert into job_leads (company, company_key, role, role_key) values ('Acme Pretend', 'acme pretend', 'PMM', 'product marketing manager') returning id`,
+    )
+    const [lead] = await rows(`select owner_id, stage, chased_on, function, country from job_leads where id = $1`, [id])
+    assert.deepEqual(lead, { owner_id: ownerId, stage: 'new', chased_on: null, function: 'pmm', country: 'US' })
+    await db.query(`update job_leads set stage = 'chased' where id = $1`, [id])
+    const [chased] = await rows(`select chased_on::text as d from job_leads where id = $1`, [id])
+    assert.ok(chased.d, 'chased_on set by trigger')
+    // The date is kept when the stage moves back and forward.
+    await db.query(`update job_leads set stage = 'new' where id = $1`, [id])
+    await db.query(`update job_leads set stage = 'replied' where id = $1`, [id])
+    const [again] = await rows(`select chased_on::text as c, replied_on::text as r from job_leads where id = $1`, [id])
+    assert.deepEqual(again, { c: chased.d, r: chased.d })
+    assert.match(await refused(`update job_leads set stage = 'job_won' where id = $1`, [id]), /job_leads_won_needs_search/)
+    assert.match(await refused(`update job_leads set stage = 'dead' where id = $1`, [id]), /job_leads_dead_needs_reason/)
+    assert.match(await refused(`update job_leads set stage = 'dead', dead_reason = 'bored' where id = $1`, [id]), /dead_reason_check/)
+    const [dead] = await rows(`update job_leads set stage = 'dead', dead_reason = 'filled' where id = $1 returning purge_after::text as p`, [id])
+    assert.equal(dead.p, (await rows(`select (current_date + interval '12 months')::date::text as d`))[0].d)
+    const [reopened] = await rows(`update job_leads set stage = 'new' where id = $1 returning purge_after, dead_reason`, [id])
+    assert.deepEqual(reopened, { purge_after: null, dead_reason: null })
+    assert.match(
+      await refused(`insert into job_leads (company, company_key, role, role_key) values ('Acme Pretend', 'acme pretend', 'PMM', 'product marketing manager')`),
+      /job_leads_owner_id_company_key_role_key_key/,
+    )
+    assert.match(await refused(`update job_leads set matched = '[1,2,3,4]' where id = $1`, [id]), /matched_is_short_list/)
+  })
+})
+
+test('REF-2 and WID-1: contacting a referral owes a thank-you in two working days; passing a wider lead needs a colleague', async () => {
+  await owner(async () => {
+    const [ref] = await rows(`select id, purge_after::text as p, received_on::text as r from referrals`)
+    assert.equal(ref.p, (await rows(`select ($1::date + interval '24 months')::date::text as d`, [ref.r]))[0].d)
+    const before = await count(`follow_ups where kind = 'referral_thanks'`)
+    await db.query(`update referrals set stage = 'contacted' where id = $1`, [ref.id])
+    await db.query(`update referrals set stage = 'new' where id = $1`, [ref.id])
+    await db.query(`update referrals set stage = 'contacted' where id = $1`, [ref.id])
+    const fus = await rows(`select person_name, due_on::text as due, source, direction, status from follow_ups where kind = 'referral_thanks'`)
+    assert.equal(fus.length, before + 1, 'one thank-you however often the stage moves')
+    assert.deepEqual(fus[0], { person_name: 'Eve Invented', due: (await rows(`select add_working_days(current_date, 2)::text as d`))[0].d, source: 'rule', direction: 'owed', status: 'open' })
+    const [r] = await rows(`select contacted_on::text as c from referrals where id = $1`, [ref.id])
+    assert.ok(r.c)
+
+    const [wl] = await rows(`select id from wider_leads where status = 'spotted'`)
+    assert.match(await refused(`update wider_leads set status = 'passed' where id = $1`, [wl.id]), /wider_leads_passed_needs_colleague/)
+    const [passed] = await rows(`update wider_leads set status = 'passed', passed_to = 'Sam Colleague' where id = $1 returning passed_on::text as p`, [wl.id])
+    assert.equal(passed.p, (await rows(`select current_date::text as d`))[0].d)
+    assert.match(await refused(`update wider_leads set currency = 'pounds' where id = $1`, [wl.id]), /currency_check/)
+  })
+})
+
+test('add_working_days skips weekends', async () => {
+  const [r] = await rows(
+    `select add_working_days('2026-11-12', 2)::text as thu, add_working_days('2026-11-13', 2)::text as fri,
+            add_working_days('2026-11-14', 1)::text as sat, add_working_days('2026-11-16', 5)::text as mon`,
+  )
+  // Thursday 12 November plus 2 is Monday 16. Friday 13 plus 2 is Tuesday 17.
+  // Saturday 14 plus 1 is Monday 16. Monday 16 plus 5 is Monday 23.
+  assert.deepEqual(r, { thu: '2026-11-16', fri: '2026-11-17', sat: '2026-11-16', mon: '2026-11-23' })
+})
+
 test('rule 1: people hold no CV, phone, pay or note-text columns anywhere', async () => {
   const cols = await rows(
     `select table_name, column_name from information_schema.columns
