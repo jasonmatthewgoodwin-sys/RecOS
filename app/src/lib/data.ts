@@ -4,7 +4,7 @@
 
 import { sampleSource } from './sample'
 import { supabase } from './supabase'
-import { ukClock, weekdayOf } from './time'
+import { mondayOf, ukClock, weekdayOf } from './time'
 
 export type CalendarCall = {
   id: string
@@ -188,6 +188,44 @@ export type Touch = { id: string; touchedOn: string; channel: string; kind: stri
 
 export type SignalStatus = 'new' | 'actioned' | 'added_to_league' | 'ignored' | 'expired'
 
+/** One weekly KPI this week, from kpi_this_week (14.2, 22.5). */
+export type KpiWeek = {
+  kpi: string
+  target: number
+  /** All work. */
+  total: number
+  hit: boolean
+  /** PMM only: what the targets are set against. Shown by default. */
+  pmmTotal: number
+  pmmHit: boolean
+  /** A correction typed by the owner is part of the week (22.4). */
+  hasManual: boolean
+}
+
+/** The parts of the sentence instead of a trend chart (14.3). */
+export type KpiStreak = {
+  kpi: string
+  weeksHistory: number
+  /** Plain date of the first tracked week. */
+  firstWeek: string | null
+  hitLast4: number
+  pmmHitLast4: number
+  best12: number
+  pmmBest12: number
+}
+
+/** One row behind a number this week (13.1). Labels name a role and company, never a person. */
+export type KpiEvent = {
+  id: string
+  label: string | null
+  amount: number
+  manual: boolean
+  reason: string | null
+  isPmm: boolean
+  happenedAt: string
+}
+
+
 /** Something that changed for a person or their company (section 10.4). */
 export type Signal = {
   id: string
@@ -337,6 +375,14 @@ export interface DataSource {
   addPerson(input: { name: string; title: string; company: string; listId: string; tier: Tier; why: string }): Promise<void>
 
   /** New signals, strongest first (29.2). */
+  /** Numbers, This week (32.1). */
+  kpiThisWeek(): Promise<KpiWeek[]>
+  kpiStreaks(): Promise<KpiStreak[]>
+  /** The rows behind one KPI this week, newest first. Owner only. */
+  kpiEvents(kpi: string): Promise<KpiEvent[]>
+  /** A manual correction: its own row with manual true and a reason (22.4). Never an edit. */
+  correctKpi(kpi: string, amount: number, reason: string): Promise<void>
+
   signals(): Promise<Signal[]>
   setSignalStatus(id: string, status: SignalStatus): Promise<void>
   /**
@@ -402,10 +448,10 @@ const live: DataSource = {
   },
 
   async weekTargets() {
-    const { data, error } = await supabase!.from('kpi_this_week').select('hit')
+    const { data, error } = await supabase!.from('kpi_this_week').select('pmm_hit')
     fail(error)
-    const rows = (data ?? []) as { hit: boolean }[]
-    return { hit: rows.filter((r) => r.hit).length, total: rows.length }
+    const rows = (data ?? []) as { pmm_hit: boolean }[]
+    return { hit: rows.filter((r) => r.pmm_hit).length, total: rows.length }
   },
 
   async jobLeads() {
@@ -938,6 +984,61 @@ const live: DataSource = {
     const personId = (data as { id: string }).id
     const { error: e2 } = await supabase!.from('league_members').insert({ person_id: personId, list_id: listId, tier, why: why.trim() || null, added_from: 'manual' })
     fail(e2)
+  },
+
+  async kpiThisWeek() {
+    const { data, error } = await supabase!.from('kpi_this_week').select('kpi, total, target, hit, pmm_total, pmm_hit, has_manual')
+    fail(error)
+    type Row = { kpi: string; total: number; target: number; hit: boolean; pmm_total: number; pmm_hit: boolean; has_manual: boolean }
+    return ((data ?? []) as Row[]).map((r) => ({
+      kpi: r.kpi,
+      target: Number(r.target),
+      total: Number(r.total),
+      hit: r.hit,
+      pmmTotal: Number(r.pmm_total),
+      pmmHit: r.pmm_hit,
+      hasManual: r.has_manual,
+    }))
+  },
+
+  async kpiStreaks() {
+    const { data, error } = await supabase!.from('kpi_streak_view').select('kpi, weeks_history, first_week, hit_last_4, pmm_hit_last_4, best_12, pmm_best_12')
+    fail(error)
+    type Row = { kpi: string; weeks_history: number; first_week: string | null; hit_last_4: number; pmm_hit_last_4: number; best_12: number | null; pmm_best_12: number | null }
+    return ((data ?? []) as Row[]).map((r) => ({
+      kpi: r.kpi,
+      weeksHistory: r.weeks_history,
+      firstWeek: r.first_week,
+      hitLast4: r.hit_last_4,
+      pmmHitLast4: r.pmm_hit_last_4,
+      best12: Number(r.best_12 ?? 0),
+      pmmBest12: Number(r.pmm_best_12 ?? 0),
+    }))
+  },
+
+  async kpiEvents(kpi) {
+    const { data, error } = await supabase!
+      .from('kpi_events')
+      .select('id, label, amount, manual, reason, is_pmm, happened_at')
+      .eq('kpi', kpi)
+      .eq('week', mondayOf(new Date()))
+      .order('happened_at', { ascending: false })
+    fail(error)
+    type Row = { id: string; label: string | null; amount: number; manual: boolean; reason: string | null; is_pmm: boolean; happened_at: string }
+    return ((data ?? []) as Row[]).map((r) => ({
+      id: r.id,
+      label: r.label,
+      amount: Number(r.amount),
+      manual: r.manual,
+      reason: r.reason,
+      isPmm: r.is_pmm,
+      happenedAt: r.happened_at,
+    }))
+  },
+
+  async correctKpi(kpi, amount, reason) {
+    const { error } = await supabase!.from('kpi_events').insert({ kpi, amount, manual: true, reason: reason.trim(), label: 'Correction' })
+    fail(error)
   },
 
   async signals() {

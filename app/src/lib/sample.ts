@@ -1,7 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, Member, PeopleList, Referral, Signal, Touch, WiderLead } from './data'
+import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiWeek, Member, PeopleList, Referral, Signal, Touch, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { ukClock } from './time'
 
@@ -454,6 +454,44 @@ export function freshSampleSignals(): Signal[] {
 
 let sampleSignals = freshSampleSignals()
 
+// This week's numbers (32.1), mirroring db/seed/sample_week.sql: posts chased
+// and coaching hit, LinkedIn posts and new A-star not. Targets started on
+// 9 November 2026, so every sentence is still Tracking since.
+function freshSampleKpiEvents(): Record<string, KpiEvent[]> {
+  const ev = (kpi: string, n: number, label: string): KpiEvent[] =>
+    Array.from({ length: n }, (_, i) => ({ id: `${kpi}-${i + 1}`, label, amount: 1, manual: false, reason: null, isPmm: true, happenedAt: `${daysAgo(i % 5)}T10:00:00Z` }))
+  const chased = [
+    'Senior PMM at Contoso Demo Inc', 'Director of PMM at Fabrikam Test Ltd', 'Head of Product Marketing at Initech Mock', 'PMM Lead at Northwind Sample Co',
+    'VP Product Marketing at Stark Sample', 'Group PMM at Wonka Imaginary Ltd', 'Senior PMM at Acme Fictional', 'PMM Manager at Globex Pretend',
+    'Head of PMM at Umbrella Made-up', 'Product Marketing Lead at Hooli Sample', 'Senior PMM at Vandelay Example', 'Director of PMM at Dunder Mock',
+    'PMM at Soylent Sample', 'Senior PMM at Oscorp Placeholder', 'Head of PMM at Tyrell Imaginary', 'PMM Lead at Cyberdyne Test',
+    'Principal PMM at Gringotts Demo', 'Senior PMM at Pied Piper Sample', 'Director of PMM at Aperture Mock', 'PMM at Massive Dynamic Example',
+  ]
+  return {
+    posts_chased: chased.map((c, i) => ({ id: `posts-${i + 1}`, label: `Chased: ${c}`, amount: 1, manual: false, reason: null, isPmm: true, happenedAt: `${daysAgo(i % 5)}T10:00:00Z` })),
+    coaching_calls: ev('coaching_calls', 5, 'Coaching call held'),
+    linkedin_posts: ev('linkedin_posts', 1, 'Post published'),
+    new_a_star: ev('new_a_star', 3, 'New A-star candidate'),
+  }
+}
+
+const KPI_TARGETS: Record<string, number> = { posts_chased: 20, coaching_calls: 5, linkedin_posts: 2, new_a_star: 5 }
+
+let sampleKpiEvents = freshSampleKpiEvents()
+
+export function resetSampleKpis() {
+  sampleKpiEvents = freshSampleKpiEvents()
+}
+
+function sampleKpiWeeks(): KpiWeek[] {
+  return Object.entries(KPI_TARGETS).map(([kpi, target]) => {
+    const rows = sampleKpiEvents[kpi] ?? []
+    const total = rows.reduce((n, r) => n + r.amount, 0)
+    const pmmTotal = rows.filter((r) => r.isPmm).reduce((n, r) => n + r.amount, 0)
+    return { kpi, target, total, hit: total >= target, pmmTotal, pmmHit: pmmTotal >= target, hasManual: rows.some((r) => r.manual) }
+  })
+}
+
 export function resetSampleSignals() {
   sampleSignals = freshSampleSignals()
 }
@@ -489,7 +527,8 @@ export const sampleSource: DataSource = {
     ]
   },
   async weekTargets() {
-    return { hit: 2, total: 4 }
+    const weeks = sampleKpiWeeks()
+    return { hit: weeks.filter((w) => w.pmmHit).length, total: weeks.length }
   },
 
   async jobLeads() {
@@ -664,6 +703,22 @@ export const sampleSource: DataSource = {
   async addPerson({ name, title, company, listId, tier, why }) {
     const id = `p-${name.toLowerCase().replace(/\s+/g, '-')}`
     sampleMembers.push(member({ id: `m-${id}`, personId: id, name: name.trim(), title: title.trim() || null, company: company.trim() || null, listId, tier, why: why.trim() || null, lastTouchOn: null }))
+  },
+
+  async kpiThisWeek() {
+    return sampleKpiWeeks()
+  },
+  async kpiStreaks() {
+    const monday = thisMonday()
+    return Object.keys(KPI_TARGETS).map((kpi) => ({ kpi, weeksHistory: 0, firstWeek: monday, hitLast4: 0, pmmHitLast4: 0, best12: 0, pmmBest12: 0 }))
+  },
+  async kpiEvents(kpi) {
+    return (sampleKpiEvents[kpi] ?? []).map((r) => ({ ...r })).reverse()
+  },
+  async correctKpi(kpi, amount, reason) {
+    if (!reason.trim()) throw new Error('A correction needs a reason')
+    const rows = (sampleKpiEvents[kpi] ??= [])
+    rows.push({ id: `${kpi}-m${rows.length + 1}`, label: 'Correction', amount, manual: true, reason: reason.trim(), isPmm: true, happenedAt: new Date().toISOString() })
   },
 
   async signals() {

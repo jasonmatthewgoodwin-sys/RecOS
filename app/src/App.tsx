@@ -10,6 +10,7 @@ import { landing, sectionFor, sections, settings, visibleSections, type Section 
 import { Gallery } from './routes/gallery/Gallery'
 import { Home } from './routes/home/Home'
 import { Inbox } from './routes/inbox/Inbox'
+import { ThisWeek } from './routes/numbers/ThisWeek'
 import { FollowUps } from './routes/leads/FollowUps'
 import { Jobs } from './routes/leads/Jobs'
 import { Referrals } from './routes/leads/Referrals'
@@ -22,18 +23,21 @@ import { Profile } from './routes/settings/Profile'
 import { SignIn } from './routes/SignIn'
 
 // The index pages built so far. Anything else shows the SectionPage placeholder.
-const built: Record<string, ReactNode> = {
-  'leads/jobs': <Jobs />,
-  'leads/follow-ups': <FollowUps />,
-  'leads/referrals': <Referrals />,
-  'leads/wider': <Wider />,
-  'people/coaching': <Coaching />,
-  'people/senior-network': <PeopleList listKey="senior_network" />,
-  'people/top-candidates': <PeopleList listKey="top_candidates" />,
-  'people/signals': <Signals />,
+function builtPages(session: Session): Record<string, ReactNode> {
+  return {
+    'leads/jobs': <Jobs />,
+    'leads/follow-ups': <FollowUps />,
+    'leads/referrals': <Referrals />,
+    'leads/wider': <Wider />,
+    'people/coaching': <Coaching />,
+    'people/senior-network': <PeopleList listKey="senior_network" />,
+    'people/top-candidates': <PeopleList listKey="top_candidates" />,
+    'people/signals': <Signals />,
+    'numbers/this-week': <ThisWeek role={session.role} />,
+  }
 }
 
-function sectionRoutes(section: Section) {
+function sectionRoutes(section: Section, built: Record<string, ReactNode>) {
   if (section.pages.length === 0) {
     return <Route key={section.key} path={`${section.path}/*`} element={<SectionPage section={section} />} />
   }
@@ -64,6 +68,7 @@ export function SignedIn({ session }: { session: Session }) {
 
   const start = owner ? '/home' : '/numbers/this-week'
   const allowed = owner ? [...sections, settings] : tabs
+  const built = builtPages(session)
 
   return (
     <>
@@ -73,7 +78,7 @@ export function SignedIn({ session }: { session: Session }) {
           {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
           {owner && <Route path="/settings/profile" element={<Profile />} />}
           {owner && <Route path="/inbox" element={<Inbox />} />}
-          {allowed.filter((s) => s.key !== 'home').map(sectionRoutes)}
+          {allowed.filter((s) => s.key !== 'home').map((s) => sectionRoutes(s, built))}
           {import.meta.env.DEV && <Route path="/gallery" element={<Gallery />} />}
           <Route path="*" element={<Navigate to={start} replace />} />
         </Routes>

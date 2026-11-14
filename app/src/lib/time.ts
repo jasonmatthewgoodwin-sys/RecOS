@@ -70,3 +70,11 @@ export function ukTime(at: Date): string {
 export function weekdayOf(date: string): string {
   return ukClock(new Date(`${date}T12:00:00Z`)).weekday
 }
+
+/** The Monday of the UK week holding a moment, as a plain date (7.3). */
+export function mondayOf(at: Date): string {
+  const c = ukClock(at)
+  const d = new Date(`${c.date}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - (c.isoDay - 1))
+  return d.toISOString().slice(0, 10)
+}

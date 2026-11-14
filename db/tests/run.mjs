@@ -130,7 +130,7 @@ test('anon holds no privilege on any table or view', async () => {
 
 test('T-AUTH-5 / anon: every table and view refuses a read', async () => {
   await anon(async () => {
-    for (const t of [...allTables, 'kpi_week_view', 'kpi_this_week']) {
+    for (const t of [...allTables, 'kpi_week_view', 'kpi_this_week', 'kpi_streak_view']) {
       const why = await refused(`select * from ${t}`)
       assert.match(String(why), /permission denied/, `${t} as anon`)
     }
@@ -336,6 +336,40 @@ test('Home counts (14.1) match the sample week: 7 need you, 3 follow-ups, 6 call
     // on 9 November 2026, so no earlier week appears.
     const [w] = await rows(`select min(week)::text as first, count(distinct week)::int as n from kpi_week_view`)
     assert.ok(w.first >= '2026-11-09' && w.n >= 1 && w.n <= 12, JSON.stringify(w))
+  })
+})
+
+test('P1-42: the streak view, PMM and all-work totals, and a manual correction marks the week (14.3, 22.4, 22.5)', async () => {
+  await owner(async () => {
+    // Targets start on 9 November 2026 and the test clock is in that week, so
+    // there is no history yet: every KPI is still Tracking since.
+    const streaks = await rows(`select kpi, weeks_history, hit_last_4, pmm_hit_last_4, first_week::text as first_week, best_12::int as best_12 from kpi_streak_view order by kpi`)
+    assert.deepEqual(streaks.map((r) => r.kpi), ['coaching_calls', 'linkedin_posts', 'new_a_star', 'posts_chased'])
+    const posts = streaks.find((r) => r.kpi === 'posts_chased')
+    assert.ok(posts.weeks_history >= 0 && posts.weeks_history <= 11, JSON.stringify(posts))
+    assert.ok(posts.hit_last_4 <= posts.weeks_history && posts.pmm_hit_last_4 <= posts.weeks_history, JSON.stringify(posts))
+    assert.ok(posts.best_12 >= 20, JSON.stringify(posts))
+    assert.ok(posts.first_week >= '2026-11-09')
+
+    const read = async () => (await rows(`select total::int as total, pmm_total::int as pmm_total, hit, pmm_hit, has_manual from kpi_this_week where kpi = 'posts_chased'`))[0]
+    const before = await read()
+    assert.equal(before.has_manual, false)
+    assert.ok(before.total >= 20 && before.total === before.pmm_total, JSON.stringify(before))
+
+    // T-NUM-3: correct by minus 2 with a reason. The week shows the m mark.
+    await db.query(`insert into kpi_events (kpi, manual, amount, reason) values ('posts_chased', true, -2, 'Two were the same post')`)
+    let after = await read()
+    assert.deepEqual(after, { total: before.total - 2, pmm_total: before.pmm_total - 2, hit: before.total - 2 >= 20, pmm_hit: before.pmm_total - 2 >= 20, has_manual: true })
+    assert.equal((await rows(`select 1 from audit_log where action = 'manual KPI correction'`)).length, 1)
+
+    // All work counts a non-PMM event; the PMM figure does not move.
+    await db.query(`insert into kpi_events (kpi, manual, amount, reason, is_pmm) values ('posts_chased', true, 3, 'Three non-PMM posts chased by hand', false)`)
+    after = await read()
+    assert.equal(after.total, before.total + 1)
+    assert.equal(after.pmm_total, before.pmm_total - 2)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('kpi_streak_view'), 4)
   })
 })
 
