@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { PhoneGate } from './components/PhoneGate'
 import { Dots } from './components/Quiet'
 import { FileTabs, Paper, Sheet } from './components/Shell'
 import { AuthProvider, useAuth, type Session } from './lib/auth'
@@ -54,7 +55,7 @@ function builtPages(session: Session): Record<string, ReactNode> {
 
 function sectionRoutes(section: Section, built: Record<string, ReactNode>) {
   if (section.pages.length === 0) {
-    return <Route key={section.key} path={`${section.path}/*`} element={<SectionPage section={section} />} />
+    return <Route key={section.key} path={`${section.path}/*`} element={<PhoneGate title={section.label}><SectionPage section={section} /></PhoneGate>} />
   }
   return (
     <Route key={section.key} path={section.path}>
@@ -62,9 +63,9 @@ function sectionRoutes(section: Section, built: Record<string, ReactNode>) {
       {section.pages
         .filter((p) => built[`${section.key}/${p.slug}`])
         .map((p) => (
-          <Route key={p.slug} path={p.slug} element={built[`${section.key}/${p.slug}`]} />
+          <Route key={p.slug} path={p.slug} element={<PhoneGate title={section.label}>{built[`${section.key}/${p.slug}`]}</PhoneGate>} />
         ))}
-      <Route path="*" element={<SectionPage section={section} />} />
+      <Route path="*" element={<PhoneGate title={section.label}><SectionPage section={section} /></PhoneGate>} />
     </Route>
   )
 }
@@ -97,7 +98,7 @@ export function SignedIn({ session }: { session: Session }) {
       <Sheet fadeKey={sectionFor(pathname)?.key}>
         <Routes>
           {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
-          {owner && <Route path="/settings/profile" element={<Profile />} />}
+          {owner && <Route path="/settings/profile" element={<PhoneGate title="Settings"><Profile /></PhoneGate>} />}
           {owner && <Route path="/inbox" element={<Inbox />} />}
           {allowed.filter((s) => s.key !== 'home').map((s) => sectionRoutes(s, built))}
           {import.meta.env.DEV && <Route path="/gallery" element={<Gallery />} />}

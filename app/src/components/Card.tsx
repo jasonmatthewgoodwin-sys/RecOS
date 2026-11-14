@@ -29,6 +29,8 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
   const [closing, setClosing] = useState(false)
   const ref = useRef<HTMLElement>(null)
   const opener = useRef<Element | null>(null)
+  // On a phone a swipe down from the top of the card closes it (25.8).
+  const touchStart = useRef<{ y: number; atTop: boolean } | null>(null)
 
   function close() {
     if (closing) return
@@ -60,6 +62,19 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
       tabIndex={-1}
       data-card
       data-closing={closing || undefined}
+      onTouchStart={(e) => {
+        touchStart.current = { y: e.touches[0].clientY, atTop: (ref.current?.scrollTop ?? 0) <= 0 }
+      }}
+      onTouchMove={(e) => {
+        const start = touchStart.current
+        if (start && start.atTop && e.touches[0].clientY - start.y > 80) {
+          touchStart.current = null
+          close()
+        }
+      }}
+      onTouchEnd={() => {
+        touchStart.current = null
+      }}
       className={`absolute inset-y-0 right-0 z-20 flex w-full flex-col overflow-y-auto rounded-sheet border border-ink bg-sheet p-6 outline-none sm:p-12 md:w-1/2 ${
         closing ? 'animate-slide-out' : 'animate-slide'
       }`}
