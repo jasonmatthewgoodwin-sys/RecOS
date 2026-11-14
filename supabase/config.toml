@@ -1,0 +1,15 @@
+# Supabase CLI config, used only to deploy the edge functions in ../functions.
+# Deploy from the repository root:
+#   npx supabase functions deploy agent-write --project-ref vbnzdugfgoletjlumxba --use-api
+#   npx supabase functions deploy run-agent  --project-ref vbnzdugfgoletjlumxba --use-api
+# Agents carry an X-Agent-Key, not a Supabase session, so JWT checks are off.
+
+project_id = "recos"
+
+[functions.agent-write]
+verify_jwt = false
+entrypoint = "../functions/agent-write/index.ts"
+
+[functions.run-agent]
+verify_jwt = false
+entrypoint = "../functions/run-agent/index.ts"
