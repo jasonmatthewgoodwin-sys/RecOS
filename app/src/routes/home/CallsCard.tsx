@@ -21,30 +21,44 @@ export function easternTime(at: Date): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at)
 }
 
-type CallsProps = { calls: CalendarCall[]; onPrep: (id: string) => void; onClose: () => void }
+type CallsProps = { calls: CalendarCall[]; day?: CalendarCall[]; onPrep: (id: string) => void; onClose: () => void }
 
-export function CallsCard({ calls, onPrep, onClose }: CallsProps) {
+// The day view (Mia, 14 November 2026): the whole day from the Outlook feed
+// in time order, internal meetings dimmed, calls with someone outside get
+// Prep. Nothing is written back to Outlook.
+export function CallsCard({ calls, day, onPrep, onClose }: CallsProps) {
+  const events = day ?? calls
+  const external = (c: CalendarCall) => c.isExternal !== false
   return (
     <Card
       label="Today"
-      title="Calls today"
+      title="Your day"
       sections={[
         {
           body:
-            calls.length === 0 ? (
-              <p className="text-ink-2">No calls left today</p>
+            events.length === 0 ? (
+              <p className="text-ink-2">Nothing in the diary today</p>
             ) : (
-              <ul className="flex flex-col">
-                {calls.map((c) => {
+              <ul className="flex flex-col" aria-label="Your day">
+                {events.map((c) => {
                   const at = new Date(c.startsAt)
+                  const to = c.endsAt ? new Date(c.endsAt) : null
+                  const ext = external(c)
                   return (
-                    <li key={c.id} className="flex min-h-12 items-center gap-4 border-b border-rule" data-call>
-                      <span className="shrink-0 font-mono text-label tabular-nums text-ink">
-                        {ukTime(at)} <span className="text-ink-3">{easternTime(at)} ET</span>
+                    <li
+                      key={c.id}
+                      className={`flex min-h-11 items-center gap-4 border-b border-rule ${ext ? '' : 'text-ink-3'}`}
+                      data-call={ext || undefined}
+                      data-internal={!ext || undefined}
+                    >
+                      <span className="w-28 shrink-0 font-mono text-label tabular-nums">
+                        {ukTime(at)}
+                        {to ? `\u2013${ukTime(to)}` : ''}
                       </span>
                       <span className="min-w-0 flex-1 truncate">{c.personName ?? c.title}</span>
-                      <span className="hidden truncate text-ink-2 sm:inline">{callTypeWord[c.callType] ?? c.title}</span>
-                      <TextLink label="Prep" onClick={() => onPrep(c.id)} />
+                      <span className="hidden truncate text-ink-2 sm:inline">{ext ? (callTypeWord[c.callType] ?? c.title) : 'Internal'}</span>
+                      {ext && <span className="hidden font-mono text-label text-ink-3 md:inline">{easternTime(at)} ET</span>}
+                      {ext && <TextLink label="Prep" onClick={() => onPrep(c.id)} />}
                     </li>
                   )
                 })}

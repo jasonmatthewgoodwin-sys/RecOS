@@ -9,6 +9,7 @@ import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
 import { daysSince } from '../../lib/bd'
 import { data, type Signal, type SignalStatus } from '../../lib/data'
+import { sourceLabel } from '../../lib/links'
 import { twoDigits } from '../../lib/format'
 import { signalWord } from '../../lib/people'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
@@ -211,7 +212,7 @@ export function Signals() {
               {!chosen.onList && senior && <TextLink label="Add to league" onClick={() => void addToList(chosen).then(closeCard)} />}
               {chosen.signalType === 'open_to_work' && <TextLink label="Offer coaching" onClick={() => void move(chosen, 'actioned').then(closeCard)} />}
               <TextLink label="Ignore" onClick={() => void move(chosen, 'ignored').then(closeCard)} />
-              {chosen.sourceUrl && <TextLink label="Open source" href={chosen.sourceUrl} />}
+              {chosen.sourceUrl && <TextLink label={sourceLabel(chosen.sourceUrl)} href={chosen.sourceUrl} icon="open" />}
             </>
           }
           foot={`Seen ${chosen.seenOn}, strength ${chosen.strength}`}

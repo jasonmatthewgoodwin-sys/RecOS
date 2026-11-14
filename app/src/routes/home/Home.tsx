@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { HeroStat } from '../../components/HeroStat'
 import { PillButton } from '../../components/PillButton'
+import { TextLink } from '../../components/TextLink'
 import { skyClass, toneForCount } from '../../lib/tone'
 import { data } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
@@ -67,6 +68,7 @@ export function Home({ firstName }: { firstName: string }) {
   const needsYou = useQuery('home.needsYou', data.needsYou)
   const followUps = useQuery('home.followUps', data.followUpsDue)
   const calls = useQuery('home.calls', data.callsToday)
+  const day = useQuery('home.day', data.dayToday)
   const week = useQuery('home.week', data.weekTargets)
 
   const settled = [needsYou, followUps, calls, week].every((q) => q.status !== 'loading')
@@ -104,6 +106,11 @@ export function Home({ firstName }: { firstName: string }) {
         />
       </div>
 
+      {/* The day view (Mia, 14 November 2026): one quiet link under the numbers opens the whole day from Outlook. */}
+      <div className="mt-4">
+        <TextLink label="Your day" icon="calendar" onClick={() => openCard('calls')} />
+      </div>
+
       <hr className="mt-10 border-rule" />
 
       <div className="mt-6 flex min-h-11 flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -116,7 +123,7 @@ export function Home({ firstName }: { firstName: string }) {
       {/* The lower third of the sheet is empty, on purpose. */}
       <div aria-hidden className="h-10 sm:h-16" />
 
-      {callsOpen && <CallsCard calls={calls.data ?? []} onPrep={(id) => openCard(`prep:${id}`)} onClose={closeCard} />}
+      {callsOpen && <CallsCard calls={calls.data ?? []} day={day.data} onPrep={(id) => openCard(`prep:${id}`)} onClose={closeCard} />}
       {prepId && <PrepFor id={prepId} onClose={closeCard} />}
     </div>
   )

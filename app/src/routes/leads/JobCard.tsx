@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card } from '../../components/Card'
+import { isOutlookLink } from '../../lib/links'
 import { Draft } from '../../components/Draft'
 import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
@@ -101,7 +102,7 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onClose }: Props)
                 {lead.sources.map((s, i) => {
                   const word = sourceWord[s] ?? s
                   const url = lead.sourceUrls[i]
-                  return <li key={`${s}-${i}`}>{url ? <TextLink label={word} href={url} /> : <span className="inline-flex min-h-10 items-center text-ink-2">{word}</span>}</li>
+                  return <li key={`${s}-${i}`}>{url ? <TextLink label={isOutlookLink(url) ? `${word}: open the email` : word} href={url} icon="open" /> : <span className="inline-flex min-h-10 items-center text-ink-2">{word}</span>}</li>
                 })}
               </ul>
             ),

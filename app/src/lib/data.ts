@@ -18,6 +18,9 @@ export type CalendarCall = {
   personName: string | null
   /** The person's CRM page, for the prep card's one link (26.4). */
   crmUrl?: string | null
+  /** For the day view (14 November 2026): when it ends, and whether it is a call with someone outside or an internal meeting. */
+  endsAt?: string | null
+  isExternal?: boolean
 }
 
 export type FollowUpsDue = {
@@ -495,6 +498,8 @@ export interface DataSource {
   followUpsDue(): Promise<FollowUpsDue>
   /** External calls still to come today, soonest first. */
   callsToday(): Promise<CalendarCall[]>
+  /** The whole of today from the Outlook feed, internal meetings included, in time order (14 November 2026). */
+  dayToday(): Promise<CalendarCall[]>
   weekTargets(): Promise<WeekTargets>
 
   /** Every job lead the owner holds. The page sorts and filters. */
@@ -698,6 +703,20 @@ const live: DataSource = {
       late: late.length,
       lateFromDay: late.length > 0 ? weekdayOf(late[0].due_on) : null,
     }
+  },
+
+  async dayToday() {
+    const today = ukClock(new Date()).date
+    const { data, error } = await supabase!
+      .from('calendar_today')
+      .select('id, starts_at, ends_at, title, call_type, person_name, is_external, person:people!person_id (crm_url)')
+      .gte('starts_at', new Date(Date.now() - 18 * 3_600_000).toISOString())
+      .order('starts_at', { ascending: true })
+    fail(error)
+    type Row = { id: string; starts_at: string; ends_at: string | null; title: string; call_type: string; person_name: string | null; is_external: boolean; person: { crm_url: string | null } | null }
+    return ((data ?? []) as unknown as Row[])
+      .filter((r) => ukClock(new Date(r.starts_at)).date === today)
+      .map((r) => ({ id: r.id, startsAt: r.starts_at, endsAt: r.ends_at, title: r.title, callType: r.call_type, personName: r.person_name, crmUrl: r.person?.crm_url ?? null, isExternal: r.is_external }))
   },
 
   async callsToday() {

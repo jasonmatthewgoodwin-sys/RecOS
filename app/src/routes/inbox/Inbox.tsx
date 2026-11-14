@@ -11,6 +11,7 @@ import { Dots, EmptyLine } from '../../components/Quiet'
 import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
 import type { Tone } from '../../theme/tokens'
+import { sourceLabel } from '../../lib/links'
 import { data, type InboxAction, type InboxActionExtra, type InboxItem } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import {
@@ -233,7 +234,7 @@ export function Inbox() {
             {item.type === 'job_lead' && item.draft !== null && (
               <TextLink label="Copy" onClick={() => void navigator.clipboard?.writeText(draftOf(item))} />
             )}
-            {item.sourceUrl && <TextLink label="Open source" href={item.sourceUrl} />}
+            {item.sourceUrl && <TextLink label={sourceLabel(item.sourceUrl)} href={item.sourceUrl} icon="open" />}
           </>
         )}
         onList={() => setView('list')}
@@ -374,10 +375,10 @@ export function Inbox() {
         chosen.type !== 'auto_sent' && cardMode === 'view' ? (
           <>
             <TextLink label="Bin" onClick={() => setCardMode('bin')} />
-            {chosen.sourceUrl && <TextLink label="Open source" href={chosen.sourceUrl} />}
+            {chosen.sourceUrl && <TextLink label={sourceLabel(chosen.sourceUrl)} href={chosen.sourceUrl} icon="open" />}
           </>
         ) : chosen.sourceUrl ? (
-          <TextLink label="Open source" href={chosen.sourceUrl} />
+          <TextLink label={sourceLabel(chosen.sourceUrl)} href={chosen.sourceUrl} icon="open" />
         ) : undefined
       }
       foot={`Found by ${agentWord[chosen.agent] ?? chosen.agent}${chosen.source ? `, ${chosen.source}` : ''}`}

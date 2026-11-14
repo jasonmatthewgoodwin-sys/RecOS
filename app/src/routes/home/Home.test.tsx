@@ -26,6 +26,7 @@ function mock(over: Partial<{ needsYou: number; due: number; late: number; calls
   vi.spyOn(data, 'needsYou').mockResolvedValue(v.needsYou)
   vi.spyOn(data, 'followUpsDue').mockResolvedValue({ due: v.due, late: v.late, lateFromDay: v.late ? 'Monday' : null })
   vi.spyOn(data, 'callsToday').mockResolvedValue(v.calls)
+  vi.spyOn(data, 'dayToday').mockResolvedValue(v.calls)
   vi.spyOn(data, 'weekTargets').mockResolvedValue({ hit: v.hit, total: 4 })
 }
 
@@ -119,7 +120,7 @@ describe('Home', () => {
     open()
     await waitFor(() => expect(values()[2]).toBe('03'))
     await userEvent.click(screen.getByRole('button', { name: /Calls today/ }))
-    const card = await screen.findByRole('dialog', { name: 'Calls today' })
+    const card = await screen.findByRole('dialog', { name: 'Your day' })
     const rows = card.querySelectorAll('[data-call]')
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('11:00')

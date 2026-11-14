@@ -28,3 +28,7 @@ One line per service: what it is for, how RecOS signs in to it, what moves each 
 ## What never connects
 
 RecOS does not record calls, does not read the whole mailbox, does not ask for directory permissions, loads no analytics and sets no third-party cookies (34.4, 34.8).
+
+## Every source has a link (14 November 2026)
+
+Every lead, signal, draft and inbox item carries the address it came from, and the app shows it as a link whose label says where it goes: Open the email for an Outlook message, Open on LinkedIn for a post or profile, Open the call notes for Granola, Open source for anything else. Agents that read mail (the hiring reports from Alex's leads among them) write the message's own web address as `source_url`: in Microsoft Graph that is the message's `webLink`, which opens the email in Outlook on the web for the signed-in owner. Never the mailbox address or the sender's email; only the link to the message.

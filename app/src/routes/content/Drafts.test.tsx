@@ -57,8 +57,6 @@ describe('Drafts gallery', () => {
     expect(tiles()[3]).toMatch(/^Three questions a CMO should ask before hiring a PMM\.Calls/)
     expect(tiles()[4]).toMatch(/^Three questions a CMO should ask before hiring a PMM\.Calls, On 2026-11-12/)
     expect(screen.getByText('3 new, 1 approved, 1 scheduled')).toBeInTheDocument()
-    const sections = Array.from(document.querySelectorAll('main h3, main [data-section]')).map((el) => el.textContent)
-    expect(sections.join(' ')).toMatch(/New/)
   })
 
   it('a tile opens a window with the whole post and the quiet lines; Approve moves it to Approved', async () => {

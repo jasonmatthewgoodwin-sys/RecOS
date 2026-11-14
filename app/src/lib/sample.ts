@@ -786,6 +786,14 @@ export const sampleSource: DataSource = {
       lateFromDay: late.length > 0 ? days[new Date(`${late[0].dueOn}T12:00:00Z`).getUTCDay()] : null,
     }
   },
+  async dayToday() {
+    const calls = (await this.callsToday()).map((c) => ({ ...c, endsAt: new Date(Date.parse(c.startsAt) + 30 * 60_000).toISOString(), isExternal: true }))
+    const internal = [
+      { id: 'sample-i1', startsAt: todayAt(-1), endsAt: todayAt(-0.5), title: 'Desk stand-up', callType: 'internal', personName: null, isExternal: false },
+      { id: 'sample-i2', startsAt: todayAt(2.5), endsAt: todayAt(3), title: 'Lunch with Sam', callType: 'internal', personName: null, isExternal: false },
+    ]
+    return [...calls, ...internal].sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+  },
   async callsToday() {
     return [
       { id: 'sample-1', startsAt: todayAt(1), title: 'Candidate screen', callType: 'candidate_screen', personName: 'Ada Example' },
