@@ -14,7 +14,7 @@ Most of week 1 is built. The app runs: Home shows its four numbers, the sentence
 | Original documents | Mia's `Desktop\PLATFORM SPEC` folder. Converted copies are in `docs/` |
 | Supabase test project | Ref `vbnzdugfgoletjlumxba`, in Jason's Supabase account. Shown in the dashboard as "jasonmatthewgoodwin-sys's Project". Region not yet checked |
 | Supabase live project | Not created |
-| Vercel project | `rec-os` in Jason's Vercel team `rec-os`, connected to the GitHub repository with root directory `app`. Every push to `main` deploys. Address: see "Hosting on Vercel" below |
+| The app, on the web | `https://rec-os-gules.vercel.app`. Vercel project `rec-os` in Jason's Vercel team `rec-os`, connected to the GitHub repository with root directory `app`. Every push to `main` deploys in about a minute |
 | The brief | `CLAUDE.md`. Read first, every session |
 | Per-ticket record | `docs/build-log.md` |
 | Choices made, and those awaiting Jason's yes | `docs/decisions.md` |
@@ -136,7 +136,7 @@ New database changes are new numbered files in `db/migrations` (next is 0020), w
 
 Mia chose Vercel on 14 November, in Jason's own Vercel account, so the address belongs to him like the repository and the database. Nothing is deployed yet. `app/vercel.json` is in place so every route serves the app. The app sends sign-in links back to whatever address it runs on, so no code changes with the host.
 
-Set up by Mia in Jason's name on 14 November: Vercel team `rec-os`, project `rec-os`, GitHub app installed on the RecOS repository only, root directory `app`, the two public values set for Production and Preview. For the record, the steps were:
+**Done on 14 November.** The app is at `https://rec-os-gules.vercel.app`. Set up by Mia in Jason's name: Vercel team `rec-os`, project `rec-os`, GitHub app installed on the RecOS repository only, root directory `app`, the two public values set for Production and Preview. In Supabase the Site URL is the Vercel address and the redirect list holds `http://localhost:5173/**` and `https://rec-os-gules.vercel.app/**`. For the record, the steps were:
 
 1. Go to vercel.com and choose Continue with GitHub, signed in as Jason's GitHub account, the one that owns the repository. Pick the free Hobby plan.
 2. Add New, Project. When Vercel asks which repositories it may see, choose `RecOS` only. Then click Import next to `RecOS`.
