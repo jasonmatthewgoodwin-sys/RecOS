@@ -1,7 +1,8 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
+import type {
+  ContentItem, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import type { SearchHit } from './capture'
 import { ukClock } from './time'
@@ -459,6 +460,28 @@ export function freshSampleSignals(): Signal[] {
 }
 
 let sampleSignals = freshSampleSignals()
+
+// Content (31.2): three unreviewed drafts, one approved, one posted, one idea.
+const sampleBody = 'The brief says senior. The interview loop says junior. The hiring manager wants both and the budget says neither.\nFix the brief before the first call and the rest of the search takes half the time.\nThe best briefs I see answer three questions: what the first ninety days look like, who the person reports to, and what good looks like at month six.'
+export function freshSampleContent(): ContentItem[] {
+  const base: ContentItem = {
+    id: '', kind: 'linkedin_post', runSource: 'calls', angle: 'hiring_manager', topic: '', hook: null, body: sampleBody, closeLine: 'Fix the brief first.', hashtags: ['productmarketing'],
+    dataPoint: null, dataPointUrl: null, promptedBy: null, formatOk: true, formatReason: null, rank: 0, status: 'draft', heldReason: null,
+    plannedFor: null, postedOn: null, postUrl: null, impressions: null, comments: null, inboundMessages: null, createdAt: `${daysAgo(1)}T07:00:00Z`,
+  }
+  return [
+    { ...base, id: 'c1', runSource: 'recruiting_news', angle: 'talent_market', topic: 'PMM job posts asking for AI tooling', hook: 'Four in ten PMM job posts now ask for AI tooling.', dataPoint: '41% of PMM roles now ask for AI tooling', dataPointUrl: 'https://example.com/report', rank: 75, hashtags: ['productmarketing', 'hiring'] },
+    { ...base, id: 'c2', topic: 'Why PMM hires stall at the brief', hook: 'Most PMM hires stall before the first interview.', promptedBy: 'A call on Tuesday', rank: 65 },
+    { ...base, id: 'c3', runSource: 'pmm_community', angle: 'candidate', topic: 'What a PMM portfolio should show', hook: 'Your portfolio should show the decision, not the deck.', body: 'Show the decision you shaped, the evidence you used and what happened next. A deck is the artefact. The decision is the work.', closeLine: 'Lead with the decision.', dataPoint: 'Two in three PMM hiring managers ask for a portfolio', dataPointUrl: 'https://example.com/survey', formatOk: false, formatReason: 'body 32 words, under 40', rank: 40, createdAt: `${daysAgo(2)}T07:00:00Z` },
+    { ...base, id: 'c4', topic: 'Three questions a CMO should ask before hiring a PMM', hook: 'Three questions a CMO should ask before hiring a PMM.', status: 'approved', rank: 60, createdAt: `${daysAgo(5)}T07:00:00Z` },
+    { ...base, id: 'c5', topic: 'The best PMM hires this year', hook: 'The best PMM hires I see this year have one thing in common.', status: 'posted', postedOn: daysAgo(2), postUrl: 'https://example.com/post', impressions: 1200, comments: 14, inboundMessages: 3, rank: 70, createdAt: `${daysAgo(9)}T07:00:00Z` },
+    { ...base, id: 'c6', kind: 'idea', runSource: 'manual', angle: null, topic: 'A post on levelling', body: null, closeLine: null, hashtags: [], status: 'idea', createdAt: `${daysAgo(3)}T07:00:00Z` },
+  ]
+}
+let sampleContent = freshSampleContent()
+export function resetSampleContent() {
+  sampleContent = freshSampleContent()
+}
 
 // This week's numbers (32.1), mirroring db/seed/sample_week.sql: posts chased
 // and coaching hit, LinkedIn posts and new A-star not. Targets started on
@@ -1179,6 +1202,15 @@ export const sampleSource: DataSource = {
     rows.push({ id: `${kpi}-m${rows.length + 1}`, label: 'Correction', amount, manual: true, reason: reason.trim(), isPmm: true, happenedAt: new Date().toISOString() })
   },
 
+  async contentItems() {
+    return sampleContent.filter((c) => c.status !== 'binned').map((c) => ({ ...c })).sort((a, b) => b.rank - a.rank || b.createdAt.localeCompare(a.createdAt))
+  },
+  async updateContent(id, patch) {
+    const found = sampleContent.find((c) => c.id === id)
+    if (!found) throw new Error('No such draft')
+    Object.assign(found, patch)
+    if (patch.status === 'posted' && !found.postedOn) found.postedOn = daysAgo(0)
+  },
   async signals() {
     return sampleSignals.filter((s) => s.status === 'new').map((s) => ({ ...s }))
   },

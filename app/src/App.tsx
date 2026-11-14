@@ -12,6 +12,7 @@ import { useQuery } from './lib/query'
 import { applyTheme } from './lib/theme'
 import { landing, sectionFor, sections, settings, visibleSections, type Section } from './lib/sections'
 import { Gallery } from './routes/gallery/Gallery'
+import { Drafts } from './routes/content/Drafts'
 import { Home } from './routes/home/Home'
 import { Inbox } from './routes/inbox/Inbox'
 import { Quarter } from './routes/numbers/Quarter'
@@ -36,6 +37,7 @@ import { SignIn } from './routes/SignIn'
 // The index pages built so far. Anything else shows the SectionPage placeholder.
 function builtPages(session: Session): Record<string, ReactNode> {
   return {
+    'content/drafts': <Drafts />,
     'leads/jobs': <Jobs />,
     'leads/follow-ups': <FollowUps />,
     'leads/referrals': <Referrals />,
@@ -55,13 +57,18 @@ function builtPages(session: Session): Record<string, ReactNode> {
   }
 }
 
+function firstBuilt(section: Section, built: Record<string, ReactNode>): string | undefined {
+  const page = section.pages.find((p) => built[`${section.key}/${p.slug}`])
+  return page ? `${section.path}/${page.slug}` : undefined
+}
+
 function sectionRoutes(section: Section, built: Record<string, ReactNode>) {
   if (section.pages.length === 0) {
     return <Route key={section.key} path={`${section.path}/*`} element={<PhoneGate title={section.label}><SectionPage section={section} /></PhoneGate>} />
   }
   return (
     <Route key={section.key} path={section.path}>
-      <Route index element={<Navigate to={landing(section)} replace />} />
+      <Route index element={<Navigate to={firstBuilt(section, built) ?? landing(section)} replace />} />
       {section.pages
         .filter((p) => built[`${section.key}/${p.slug}`])
         .map((p) => (

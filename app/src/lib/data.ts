@@ -389,6 +389,39 @@ export type WiderLead = {
 }
 
 /** One next action owed to a person, or awaited from them (section 8.2). */
+/** Content (12.1, 31.2): a post, a draft, an idea or a testimonial. Never a feed. */
+export type ContentKind = 'linkedin_post' | 'job_post' | 'blog' | 'testimonial' | 'case_study' | 'idea'
+export type ContentStatus = 'idea' | 'draft' | 'approved' | 'planned' | 'posted' | 'held' | 'binned'
+export type ContentSource = 'calls' | 'pmm_community' | 'recruiting_news' | 'event' | 'manual'
+export type ContentItem = {
+  id: string
+  kind: ContentKind
+  runSource: ContentSource | null
+  angle: 'hiring_manager' | 'talent_market' | 'candidate' | null
+  topic: string
+  hook: string | null
+  body: string | null
+  closeLine: string | null
+  hashtags: string[]
+  dataPoint: string | null
+  dataPointUrl: string | null
+  promptedBy: string | null
+  formatOk: boolean
+  formatReason: string | null
+  rank: number
+  status: ContentStatus
+  heldReason: string | null
+  /** Plain dates */
+  plannedFor: string | null
+  postedOn: string | null
+  postUrl: string | null
+  impressions: number | null
+  comments: number | null
+  inboundMessages: number | null
+  createdAt: string
+}
+export type ContentPatch = Partial<Pick<ContentItem, 'status' | 'hook' | 'body' | 'closeLine' | 'heldReason' | 'plannedFor' | 'postedOn' | 'postUrl' | 'impressions' | 'comments' | 'inboundMessages'>>
+
 export type FollowUp = {
   id: string
   personId: string | null
@@ -567,6 +600,10 @@ export interface DataSource {
   kpiEvents(kpi: string): Promise<KpiEvent[]>
   /** A manual correction: its own row with manual true and a reason (22.4). Never an edit. */
   correctKpi(kpi: string, amount: number, reason: string): Promise<void>
+
+  /** Content (31.2): everything not binned, highest rank first. */
+  contentItems(): Promise<ContentItem[]>
+  updateContent(id: string, patch: ContentPatch): Promise<void>
 
   signals(): Promise<Signal[]>
   setSignalStatus(id: string, status: SignalStatus): Promise<void>
@@ -1746,6 +1783,85 @@ const live: DataSource = {
 
   async correctKpi(kpi, amount, reason) {
     const { error } = await supabase!.from('kpi_events').insert({ kpi, amount, manual: true, reason: reason.trim(), label: 'Correction' })
+    fail(error)
+  },
+
+  async contentItems() {
+    const { data, error } = await supabase!
+      .from('content_items')
+      .select('id, kind, run_source, angle, topic, hook, body, close_line, hashtags, data_point, data_point_url, prompted_by, format_ok, format_reason, rank, status, held_reason, planned_for, posted_on, post_url, impressions, comments, inbound_messages, created_at')
+      .neq('status', 'binned')
+      .order('rank', { ascending: false })
+      .order('created_at', { ascending: false })
+    fail(error)
+    type Row = {
+      id: string
+      kind: ContentKind
+      run_source: ContentSource | null
+      angle: ContentItem['angle']
+      topic: string
+      hook: string | null
+      body: string | null
+      close_line: string | null
+      hashtags: string[] | null
+      data_point: string | null
+      data_point_url: string | null
+      prompted_by: string | null
+      format_ok: boolean
+      format_reason: string | null
+      rank: number | string
+      status: ContentStatus
+      held_reason: string | null
+      planned_for: string | null
+      posted_on: string | null
+      post_url: string | null
+      impressions: number | null
+      comments: number | null
+      inbound_messages: number | null
+      created_at: string
+    }
+    return ((data ?? []) as Row[]).map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      runSource: r.run_source,
+      angle: r.angle,
+      topic: r.topic,
+      hook: r.hook,
+      body: r.body,
+      closeLine: r.close_line,
+      hashtags: r.hashtags ?? [],
+      dataPoint: r.data_point,
+      dataPointUrl: r.data_point_url,
+      promptedBy: r.prompted_by,
+      formatOk: r.format_ok,
+      formatReason: r.format_reason,
+      rank: Number(r.rank),
+      status: r.status,
+      heldReason: r.held_reason,
+      plannedFor: r.planned_for,
+      postedOn: r.posted_on,
+      postUrl: r.post_url,
+      impressions: r.impressions,
+      comments: r.comments,
+      inboundMessages: r.inbound_messages,
+      createdAt: r.created_at,
+    }))
+  },
+
+  async updateContent(id, patch) {
+    const row: Record<string, unknown> = {}
+    if (patch.status !== undefined) row.status = patch.status
+    if (patch.hook !== undefined) row.hook = patch.hook
+    if (patch.body !== undefined) row.body = patch.body
+    if (patch.closeLine !== undefined) row.close_line = patch.closeLine
+    if (patch.heldReason !== undefined) row.held_reason = patch.heldReason
+    if (patch.plannedFor !== undefined) row.planned_for = patch.plannedFor
+    if (patch.postedOn !== undefined) row.posted_on = patch.postedOn
+    if (patch.postUrl !== undefined) row.post_url = patch.postUrl
+    if (patch.impressions !== undefined) row.impressions = patch.impressions
+    if (patch.comments !== undefined) row.comments = patch.comments
+    if (patch.inboundMessages !== undefined) row.inbound_messages = patch.inboundMessages
+    const { error } = await supabase!.from('content_items').update(row).eq('id', id)
     fail(error)
   },
 
