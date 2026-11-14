@@ -133,21 +133,24 @@ New database changes are new numbered files in `db/migrations` (next is 0020), w
 
 ## Hosting on Vercel, so Jason can sign in from a web address
 
-Mia chose Vercel on 14 November. Nothing is deployed yet: the Vercel account to use has not been settled (see `docs/decisions.md`). `app/vercel.json` is in place so every route serves the app. The app sends sign-in links back to whatever address it runs on, so no code changes with the host.
+Mia chose Vercel on 14 November, in Jason's own Vercel account, so the address belongs to him like the repository and the database. Nothing is deployed yet. `app/vercel.json` is in place so every route serves the app. The app sends sign-in links back to whatever address it runs on, so no code changes with the host.
 
-Whoever owns the Vercel account does this once, in the Vercel dashboard:
+Mia is setting this up in Jason's name (14 November). It is done once and takes about ten minutes:
 
-1. Add New, Project, Import the GitHub repository `jasonmatthewgoodwin-sys/RecOS`. Vercel's GitHub app must be installed on that repository, which only Jason can do for his account.
-2. Root Directory: `app`. Framework: Vite. Leave the build settings as detected.
-3. Environment variables, for Production and Preview: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, with the two values from "Get it running" above. Both are safe for a browser. Never add any other key.
-4. Deploy. Note the address, for example `https://recos.vercel.app`.
+1. Go to vercel.com and choose Continue with GitHub, signed in as Jason's GitHub account, the one that owns the repository. Pick the free Hobby plan.
+2. Add New, Project. When Vercel asks which repositories it may see, choose `RecOS` only. Then click Import next to `RecOS`.
+3. On the import page: Root Directory, click Edit and choose `app`. Framework Preset should say Vite. Leave the build settings alone.
+4. Open Environment Variables on the same page and add two: name `VITE_SUPABASE_URL` with the value `https://vbnzdugfgoletjlumxba.supabase.co`, and name `VITE_SUPABASE_ANON_KEY` with the value `sb_publishable_Tlc-Gir9YN6UerFeyQBdbw_gkvT3pWT`. Both are safe for a browser. Never add any other key here.
+5. Click Deploy and wait for the tick. Note the address it gives you, something like `https://recos.vercel.app`, and write it in this file under "Where everything is".
 
-Then in the Supabase dashboard for the test project, Authentication, URL Configuration:
+Then in the Supabase dashboard (supabase.com, the test project), Authentication, URL Configuration:
 
-5. Site URL: the Vercel address.
-6. Redirect URLs: add `http://localhost:5173/**` so the app still works on a laptop, and `https://*.vercel.app/**` if preview deployments should allow sign-in.
+6. Site URL: paste the Vercel address. Save.
+7. Redirect URLs: add `http://localhost:5173/**` so the app still works on a laptop. Save.
 
-After that, every push to `main` deploys. The live project, when it exists, gets its own Vercel project with its own two values.
+Open the Vercel address, click Email me a sign-in link, and open the email on any device. It will work from a phone now.
+
+After that, every push to `main` deploys on its own. The live project, when it exists, gets its own Vercel project with its own two values.
 
 ## Working habits that matter
 
