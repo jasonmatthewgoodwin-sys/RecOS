@@ -4,7 +4,7 @@ Updated 14 November 2026, mid afternoon. Written so the build can be picked up i
 
 ## In one paragraph
 
-Most of week 1 is built. The app runs: Home shows its four numbers, the sentence and the Start button; the nine file tabs, routes and keyboard shortcuts work. The database is live in Jason's Supabase test project with access rules on every table. Jason has **not yet signed in**, so the targets and the sample week are not loaded and Home has not been seen on real data. Week 2 has started: the business-development tables and their KPI triggers (P1-18, P1-19) are built and tested locally but **not yet applied to the test project**.
+Week 1 is built and three week 2 tickets are done. The app is live at `https://rec-os-gules.vercel.app` and runs on Jason's Supabase test project, which now holds every migration to 0019, access rules on all 25 tables, the targets and the sample week. Jason has signed in twice by emailed link. Home has not yet been seen by him on the real data. The rest of week 2 is being built in the cloud.
 
 ## Where everything is
 
@@ -72,12 +72,12 @@ To look at the components without signing in, add a file `app/.env.gallery` hold
 | P1-06 Allow-list and roles | Done and working on Supabase. Only `jason@3searchgroup.com` is accepted. A made-up address was refused |
 | P1-07, P1-08 Tables | Done. Migrations 0001 to 0017 applied to the test project |
 | P1-09 Access rules | Done. Every table refuses anonymous reads on the real project |
-| P1-10 Seeds | Settings, agents and send policies are in. Targets and sample week **not loaded yet** |
+| P1-10 Seeds | Settings, agents and send policies are in. Targets and the sample week loaded on the test project on 14 November |
 | P1-11 Import KPI log and inbox sheet | Not started. Needs the sheets from Jason |
 | P1-12 Shell | Done |
 | P1-13 Home | Done. T-HOME-1 to 7 pass. Seen only on sample data so far |
-| P1-18 Business development tables | Done locally: migration 0018 and six policy files. **Not applied to the test project** |
-| P1-19 KPI triggers for the BD tables | Done locally: migration 0019. **Not applied to the test project** |
+| P1-18 Business development tables | Done. Migration 0018 and six policy files applied to the test project on 14 November |
+| P1-19 KPI triggers for the BD tables | Done. Migration 0019 applied to the test project on 14 November |
 | P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
 
 ## What was done in the Supabase dashboard
@@ -92,37 +92,30 @@ Nothing else was changed. No secret key or database password has been seen by Cl
 
 ## The next steps, in order
 
-### 1. Get Jason signed in (blocked until about 14:20 on 14 November)
+### 1. Jason signs in at the web address
 
-Supabase's free email service sends only about two emails an hour and the limit was hit at 13:15. After 14:20:
+Open `https://rec-os-gules.vercel.app` on any device, click **Email me a sign-in link**, enter `jason@3searchgroup.com`, press **Send link** once, and open the newest email on the same device within 10 minutes. Older links are dead.
 
-1. Open `http://localhost:5173` on the computer running the app.
-2. Click **Email me a sign-in link**, enter `jason@3searchgroup.com`, press **Send link** once.
-3. Open that email **on the same computer** and click the link. Any browser on that computer works. A phone or another laptop will show "site can't be reached", because the app only exists on the computer running it.
-4. Only the newest email works. Older links are dead.
+**The emails are rationed.** Supabase's built-in mail service sends only a few sign-in emails an hour per project (the exact figure is under Authentication, Rate Limits). Two were used on 14 November at 13:15 and 14:22; a request inside the same hour sends nothing, and the app still says "a link is on its way", by design, so the form cannot be used to test addresses. If a link does not arrive, wait an hour and ask once. The lasting fix is to connect the project's own mail sender under Authentication, SMTP Settings (a Resend or Postmark account in Jason's name), which lifts the limit and sends from his own address. That is Jason's decision and his account to create.
 
-What went wrong earlier, so it is not repeated: links were opened on another device, and repeat requests used up the hourly limit. The app shows "a link is on its way" whether or not an email was sent, by design, so it cannot be used to test addresses.
+What went wrong on 14 November, so it is not repeated: before the Site URL was changed, links were sent back to `localhost:5173`, which only exists on the computer running the app; and a used or expired link showed "This account does not have access", which the app now words correctly.
 
-### 2. Apply the week 2 migrations to the test project
+### 2. Applied to the test project on 14 November
 
-In the Supabase SQL editor for the test project, run in this order: `db/migrations/0018_business_development.sql`, `db/migrations/0019_kpi_bd_triggers.sql`, then the six new files in `db/policies` (`job_leads`, `coaching_sessions`, `referrals`, `wider_leads`, `campaigns`, `target_companies`). This does not need Jason to have signed in. Do it before step 3: the sample week now writes to these tables.
+Migrations 0018 and 0019, the six new policy files, `db/seed/targets.sql` and `db/seed/sample_week.sql` were all run in the SQL editor. Home should show 07, 03, the calls left today, and 2/4.
 
-### 3. Load the data, once Jason has signed in
-
-In the Supabase SQL editor for the test project, run `db/seed/targets.sql`, then `db/seed/sample_week.sql`. Both need the owner to have signed in once. Home should then show 07, 03, the calls left today, and 2/4.
-
-### 4. Jason reviews Home
+### 3. Jason reviews Home
 
 Against the checklist in section 7 of `docs/build-instructions.md`. Is it calm? Could anything go?
 
-### 5. Tidy-ups Jason should decide
+### 4. Tidy-ups Jason should decide
 
 - Check the test project's region (Project Settings, General). The design asks for UK or EU. If it is in the US, recreate it now: `node db/bundle.mjs` rebuilds the one-file setup.
 - Rename the project `recos-test`, and create `recos-live` in the same region. Leave live empty.
 - Microsoft sign-in (section 6 of `docs/build-instructions.md`). Optional. The emailed link is the designed fallback.
 - The three rows still marked Pending in `docs/decisions.md`.
 
-### 6. The rest of week 2
+### 5. The rest of week 2
 
 Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. P1-18, P1-19 and P1-21 are done. A sensible order for the rest:
 
@@ -167,7 +160,7 @@ After that, every push to `main` deploys on its own. The live project, when it e
 - Signing in end to end. The hooks refuse strangers and accept Jason's address, but no session has been completed, so the role in the token and the owner's view of the data are untested on the real project.
 - Microsoft sign-in.
 - The night theme, and the new components on a phone.
-- Migrations 0018 and 0019 on a real Supabase project. They pass in the in-memory Postgres under both grant models.
+- Home on the real data, as Jason sees it. The counts behind it were checked by query on the test project.
 - Anything else from week 2 on.
 
 ## First message to paste into a new Claude Code session
