@@ -10,7 +10,7 @@ export function FileTab({ label, route, hasDot }: Props) {
     <NavLink
       to={route}
       className={({ isActive }) =>
-        `relative inline-flex h-11 items-center gap-2 rounded-t-tab border border-b-0 px-4 text-body ${
+        `relative inline-flex h-11 items-center gap-2 whitespace-nowrap rounded-t-tab border border-b-0 px-4 text-body ${
           isActive ? 'z-10 border-ink bg-sheet text-ink' : 'border-transparent text-ink-3 hover:text-ink-2'
         }`
       }

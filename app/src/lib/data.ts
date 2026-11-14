@@ -13,6 +13,8 @@ export type CalendarCall = {
   title: string
   callType: string
   personName: string | null
+  /** The person's CRM page, for the prep card's one link (26.4). */
+  crmUrl?: string | null
 }
 
 export type FollowUpsDue = {
@@ -300,18 +302,19 @@ const live: DataSource = {
   async callsToday() {
     const { data, error } = await supabase!
       .from('calendar_today')
-      .select('id, starts_at, title, call_type, person_name')
+      .select('id, starts_at, title, call_type, person_name, person:people!person_id (crm_url)')
       .eq('is_external', true)
       .gte('starts_at', new Date().toISOString())
       .order('starts_at', { ascending: true })
     fail(error)
-    type Row = { id: string; starts_at: string; title: string; call_type: string; person_name: string | null }
-    return ((data ?? []) as Row[]).map((r) => ({
+    type Row = { id: string; starts_at: string; title: string; call_type: string; person_name: string | null; person: { crm_url: string | null } | null }
+    return ((data ?? []) as unknown as Row[]).map((r) => ({
       id: r.id,
       startsAt: r.starts_at,
       title: r.title,
       callType: r.call_type,
       personName: r.person_name,
+      crmUrl: r.person?.crm_url ?? null,
     }))
   },
 

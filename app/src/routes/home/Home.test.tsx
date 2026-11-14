@@ -96,11 +96,41 @@ describe('Home', () => {
 
   it('T-HOME-5 names a call starting in 10 minutes, and Start opens its prep card', async () => {
     mock({ needsYou: 7, due: 3, late: 3, calls: [call('c9', 10, 'Ada Example')] })
+    vi.spyOn(data, 'followUps').mockResolvedValue([])
     open()
     await waitFor(() =>
       expect(screen.getByTestId('next-line')).toHaveTextContent('Your call with Ada Example starts at 10:10'),
     )
-    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
+    const card = await screen.findByRole('dialog', { name: 'Ada Example' })
+    expect(within(card).getAllByText('Candidate screen').length).toBeGreaterThan(0)
+    expect(within(card).getByText('The role')).toBeInTheDocument()
+    expect(within(card).getByText('10:10, 05:10 ET')).toBeInTheDocument()
+    expect(card.querySelectorAll('[data-kind="primary"]')).toHaveLength(0)
+  })
+
+  it('P1-32 Calls today opens a card of the calls with UK and US Eastern times, and Prep opens the prep card', async () => {
+    const calls = [call('c1', 60, 'Ada Example'), { ...call('c2', 120, 'Cara Placeholder'), callType: 'client_update' }, { ...call('c3', 180, 'Eve Invented'), callType: 'reference' }]
+    mock({ calls, hit: 2 })
+    vi.spyOn(data, 'followUps').mockResolvedValue([
+      { id: 'f1', personId: null, personName: 'Cara Placeholder', company: 'Fabrikam Test Ltd', kind: 'chase', reason: 'Waiting for feedback on two CVs', source: 'email', direction: 'waiting', dueOn: '2026-11-10', status: 'open', snoozedUntil: null, message: null, createdAt: '2026-11-09T10:00:00Z' },
+    ])
+    open()
+    await waitFor(() => expect(values()[2]).toBe('03'))
+    await userEvent.click(screen.getByRole('button', { name: /Calls today/ }))
+    const card = await screen.findByRole('dialog', { name: 'Calls today' })
+    const rows = card.querySelectorAll('[data-call]')
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toHaveTextContent('11:00')
+    expect(rows[0]).toHaveTextContent('06:00 ET')
+    expect(rows[0]).toHaveTextContent('Ada Example')
+    expect(rows[1]).toHaveTextContent('Client update')
+    expect(card.querySelectorAll('[data-kind="primary"]')).toHaveLength(0)
+    await userEvent.click(within(rows[1] as HTMLElement).getByRole('button', { name: 'Prep' }))
+    const prep = await screen.findByRole('dialog', { name: 'Cara Placeholder' })
+    expect(within(prep).getByText('Waiting on feedback')).toBeInTheDocument()
+    expect(within(prep).getByText('Waiting for feedback on two CVs')).toBeInTheDocument()
+    expect(within(prep).getByText('12:00, 07:00 ET')).toBeInTheDocument()
   })
 
   it('T-HOME-6 changes nothing while open, and refreshes when focus returns', async () => {
