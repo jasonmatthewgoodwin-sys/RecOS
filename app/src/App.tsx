@@ -15,6 +15,7 @@ import { Jobs } from './routes/leads/Jobs'
 import { Referrals } from './routes/leads/Referrals'
 import { Wider } from './routes/leads/Wider'
 import { Coaching } from './routes/people/Coaching'
+import { PeopleList } from './routes/people/PeopleList'
 import { SectionPage } from './routes/SectionPage'
 import { Profile } from './routes/settings/Profile'
 import { SignIn } from './routes/SignIn'
@@ -26,6 +27,8 @@ const built: Record<string, ReactNode> = {
   'leads/referrals': <Referrals />,
   'leads/wider': <Wider />,
   'people/coaching': <Coaching />,
+  'people/senior-network': <PeopleList listKey="senior_network" />,
+  'people/top-candidates': <PeopleList listKey="top_candidates" />,
 }
 
 function sectionRoutes(section: Section) {

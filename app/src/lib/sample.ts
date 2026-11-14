@@ -1,7 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, Referral, WiderLead } from './data'
+import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, Member, PeopleList, Referral, Touch, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { ukClock } from './time'
 
@@ -373,6 +373,73 @@ export function resetSampleBd() {
   sampleWider = freshSampleWiderLeads()
 }
 
+export const sampleLists: PeopleList[] = [
+  { id: 'list-senior', key: 'senior_network', name: 'Senior network', kind: 'leader', seats: 50 },
+  { id: 'list-top', key: 'top_candidates', name: 'Top candidates', kind: 'a_star', seats: 50 },
+]
+
+const cadence = { premier: 18, championship: 30, league_one: 49 } as const
+
+function member(over: Partial<Member> & Pick<Member, 'id' | 'personId' | 'name' | 'listId' | 'tier' | 'lastTouchOn'> & { addedOn?: string }): Member {
+  const today = ukClock(new Date()).date
+  const nextDue = over.nextDueOn ?? (over.lastTouchOn ? plusDays(over.lastTouchOn, cadence[over.tier]) : plusDays(over.addedOn ?? today, 7))
+  const daysLate = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${nextDue}T00:00:00Z`)) / 86_400_000)
+  return {
+    title: null,
+    company: null,
+    city: null,
+    crmUrl: null,
+    profileUrl: null,
+    why: null,
+    daysLate,
+    state: daysLate >= 0 ? 'late' : daysLate >= -7 ? 'due' : 'fine',
+    missedCycles: 0,
+    liveSignal: null,
+    notesForNextContact: null,
+    jobsBriefed: 0,
+    referralsGiven: 0,
+    introsMade: 0,
+    ...over,
+    nextDueOn: nextDue,
+  }
+}
+
+// The sample league, mirroring db/seed/sample_league.sql with more names so
+// each list runs past seven rows: on cadence, due this week, late.
+export function freshSampleMembers(): Member[] {
+  return [
+    member({ id: 'm-ben', personId: 'p-ben', name: 'Ben Sample', title: 'VP Product Marketing', company: 'Contoso Demo Inc', city: 'boston', listId: 'list-senior', tier: 'premier', why: 'VP who has briefed two roles', lastTouchOn: daysAgo(4), liveSignal: 'promoted', jobsBriefed: 2, crmUrl: 'https://example.com/crm/ben' }),
+    member({ id: 'm-cara', personId: 'p-cara', name: 'Cara Placeholder', title: 'Head of Marketing', company: 'Fabrikam Test Ltd', city: 'austin', listId: 'list-senior', tier: 'championship', why: 'Client contact, warm', lastTouchOn: daysAgo(45), notesForNextContact: 'Ask about the Austin office' }),
+    member({ id: 'm-eve', personId: 'p-eve', name: 'Eve Invented', title: 'Director of PMM', company: 'Initech Mock', city: 'san_francisco', listId: 'list-senior', tier: 'league_one', why: 'Director who gives referrals', lastTouchOn: daysAgo(44), referralsGiven: 1 }),
+    member({ id: 'm-gia', personId: 'p-gia', name: 'Gia Imaginary', title: 'Head of Marketing', company: 'Initech Mock', listId: 'list-senior', tier: 'premier', why: 'New in post, building a team', lastTouchOn: daysAgo(20), liveSignal: 'new_role' }),
+    member({ id: 'm-kit', personId: 'p-kit', name: 'Kit Sample', title: 'CMO', company: 'Contoso Demo Inc', listId: 'list-senior', tier: 'premier', why: 'Signs off the budget', lastTouchOn: daysAgo(10) }),
+    member({ id: 'm-lee', personId: 'p-lee', name: 'Lee Example', title: 'VP Marketing', company: 'Globex Fiction', listId: 'list-senior', tier: 'championship', why: 'Hiring again in the new year', lastTouchOn: daysAgo(25) }),
+    member({ id: 'm-max', personId: 'p-max', name: 'Max Madeup', title: 'Head of Growth', company: 'Stark Sample', listId: 'list-senior', tier: 'championship', why: 'Met at the pricing breakfast', lastTouchOn: daysAgo(29) }),
+    member({ id: 'm-nia', personId: 'p-nia', name: 'Nia Pretend', title: 'Director of Marketing', company: 'Hooli Pretend', listId: 'list-senior', tier: 'league_one', why: 'Former client', lastTouchOn: daysAgo(60), missedCycles: 1 }),
+    member({ id: 'm-ada', personId: 'p-ada', name: 'Ada Example', title: 'Senior PMM', company: 'Northwind Sample Co', city: 'new_york', listId: 'list-top', tier: 'premier', why: 'Senior PMM, open to a move', lastTouchOn: daysAgo(2), profileUrl: 'https://example.com/in/ada' }),
+    member({ id: 'm-dev', personId: 'p-dev', name: 'Dev Madeup', title: 'Product Marketing Manager', company: 'Globex Fiction', city: 'remote_us', listId: 'list-top', tier: 'championship', why: 'Strong on launches', lastTouchOn: daysAgo(31) }),
+    member({ id: 'm-finn', personId: 'p-finn', name: 'Finn Fictional', title: 'PMM Lead', company: 'Umbrella Sample', city: 'new_york', listId: 'list-top', tier: 'league_one', why: 'Placed once, keeps in touch', lastTouchOn: null, addedOn: daysAgo(120), missedCycles: 2 }),
+    member({ id: 'm-oli', personId: 'p-oli', name: 'Oli Fictional', title: 'Product Marketing Manager', company: 'Hooli Pretend', listId: 'list-top', tier: 'championship', why: 'Coached, very sharp', lastTouchOn: daysAgo(9) }),
+    member({ id: 'm-pat', personId: 'p-pat', name: 'Pat Example', title: 'Head of PMM', company: 'Globex Fiction', listId: 'list-top', tier: 'premier', why: 'Could run a team anywhere', lastTouchOn: daysAgo(16) }),
+    member({ id: 'm-quin', personId: 'p-quin', name: 'Quin Sample', title: 'Senior PMM', company: 'Umbrella Sample', listId: 'list-top', tier: 'premier', why: 'Two offers last time', lastTouchOn: daysAgo(5) }),
+    member({ id: 'm-rae', personId: 'p-rae', name: 'Rae Placeholder', title: 'PMM', company: 'Wonka Imaginary Ltd', listId: 'list-top', tier: 'league_one', why: 'Rising', lastTouchOn: daysAgo(50) }),
+  ]
+}
+
+let sampleMembers = freshSampleMembers()
+let sampleTouches: Record<string, Touch[]> = {
+  'p-ben': [
+    { id: 't1', touchedOn: daysAgo(4), channel: 'phone', kind: 'call', note: 'Talked about the Boston role' },
+    { id: 't2', touchedOn: daysAgo(40), channel: 'linkedin', kind: 'message_replied', note: null },
+  ],
+  'p-cara': [{ id: 't3', touchedOn: daysAgo(45), channel: 'meeting', kind: 'meeting', note: 'Quarterly catch-up' }],
+}
+
+export function resetSampleMembers() {
+  sampleMembers = freshSampleMembers()
+  sampleTouches = { 'p-ben': sampleTouches['p-ben'].slice(0, 2) }
+}
+
 // Chased this week in the sample is eleven from earlier in the week plus the
 // sample leads chased since Monday, so a Chased on the page moves the number.
 const CHASED_BEFORE = 11
@@ -529,6 +596,56 @@ export const sampleSource: DataSource = {
     const found = sampleWider.find((w) => w.id === id)
     if (!found) throw new Error('No such lead')
     found.status = status
+  },
+
+  async lists() {
+    return sampleLists.map((l) => ({ ...l }))
+  },
+  async members() {
+    return sampleMembers.map((m) => ({ ...m }))
+  },
+  async touches(personId, limit = 5) {
+    return (sampleTouches[personId] ?? []).slice(0, limit).map((t) => ({ ...t }))
+  },
+  async logReply(personId) {
+    const today = ukClock(new Date()).date
+    const list = (sampleTouches[personId] ??= [])
+    if (!list.some((t) => t.touchedOn === today && t.kind === 'message_replied')) {
+      list.unshift({ id: `t-${personId}-${today}`, touchedOn: today, channel: 'linkedin', kind: 'message_replied', note: null })
+    }
+    // What LEA-2 does on the server.
+    const m = sampleMembers.find((x) => x.personId === personId)
+    if (m) {
+      m.lastTouchOn = today
+      m.nextDueOn = plusDays(today, cadence[m.tier])
+      m.daysLate = -cadence[m.tier]
+      m.state = 'fine'
+      m.missedCycles = 0
+    }
+  },
+  async moveTier(memberId, tier, reason) {
+    const m = sampleMembers.find((x) => x.id === memberId)
+    if (!m) throw new Error('No such member')
+    m.tier = tier
+    m.why = reason
+    if (m.lastTouchOn) m.nextDueOn = plusDays(m.lastTouchOn, cadence[tier])
+  },
+  async removeFromList(memberId) {
+    const at = sampleMembers.findIndex((x) => x.id === memberId)
+    if (at < 0) throw new Error('No such member')
+    sampleMembers.splice(at, 1)
+  },
+  async setDoNotContact(personId) {
+    sampleMembers = sampleMembers.filter((m) => m.personId !== personId)
+    for (const f of sampleFollowUps) if (f.personId === personId && (f.status === 'open' || f.status === 'snoozed')) f.status = 'closed'
+  },
+  async saveNotes(personId, notes) {
+    const m = sampleMembers.find((x) => x.personId === personId)
+    if (m) m.notesForNextContact = notes
+  },
+  async addPerson({ name, title, company, listId, tier, why }) {
+    const id = `p-${name.toLowerCase().replace(/\s+/g, '-')}`
+    sampleMembers.push(member({ id: `m-${id}`, personId: id, name: name.trim(), title: title.trim() || null, company: company.trim() || null, listId, tier, why: why.trim() || null, lastTouchOn: null }))
   },
 }
 

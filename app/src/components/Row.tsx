@@ -5,8 +5,8 @@ export type RowProps = {
   title: string
   detail?: string
   meta?: string
-  /** One word in small capitals: Late, Cold or Auto. */
-  word?: 'Late' | 'Cold' | 'Auto'
+  /** One word in small capitals: Late, Cold, Auto, or a signal such as NEW ROLE (29.1). */
+  word?: string
   /** A few words in small capitals after the detail, such as Existing client (28.2). */
   detailWord?: string
   done?: boolean

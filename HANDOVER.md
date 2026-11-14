@@ -80,7 +80,8 @@ To look at the components without signing in, add a file `app/.env.gallery` hold
 | P1-19 KPI triggers for the BD tables | Done. Migration 0019 applied to the test project on 14 November |
 | P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
 | P1-30 Follow-up lifecycle | Done. Migration 0020 applied to the test project on 14 November |
-| P1-37, P1-38 Lists, league, touches, signals | Done locally: migration 0021, view `league_due_view`, seeds `lists.sql` and `sample_league.sql`. **Not applied to the test project** |
+| P1-37, P1-38 Lists, league, touches, signals | Done. Migration 0021, five policy files, `league_due_view`, `lists.sql` and `sample_league.sql` applied to the test project on 14 November |
+| P1-39 People lists and person card | Done. `/people/senior-network`, `/people/top-candidates`, `?show=all`, card by `?card=person:id`. Not yet seen on the test project's data |
 | P1-34 Coaching, Referrals, Wider business | Done. `/people/coaching`, `/leads/referrals`, `/leads/wider`. Not yet seen on the test project's data |
 | P1-31 Follow-ups deck, list, Monday focus | Done. `/leads/follow-ups`, `?view=list`, `?focus=monday`. Not yet seen on the test project's data |
 | P1-22 Inbox deck and list | Done. `/inbox`, with `?view=list`, `?view=sent` and the card by `?card=item:id`. Not yet seen on the test project's data by Jason |
@@ -112,7 +113,7 @@ What went wrong on 14 November, so it is not repeated: before the Site URL was c
 
 Migrations 0018 and 0019, the six new policy files, `db/seed/targets.sql` and `db/seed/sample_week.sql` were all run in the SQL editor. Home should show 07, 03, the calls left today, and 2/4.
 
-Migration 0020 was applied the same afternoon. Any migration after 0020 that this file does not list is in `docs/build-log.md` with a note on whether it has been applied.
+Migrations 0020 and 0021, with 0021's policies, view and seeds (`lists.sql`, `sample_league.sql`), were applied the same afternoon. Any later migration this file does not list is in `docs/build-log.md` with a note on whether it has been applied.
 
 ### 3. Jason reviews Home
 

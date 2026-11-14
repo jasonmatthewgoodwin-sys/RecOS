@@ -153,6 +153,39 @@ export type Referral = {
 
 export type WiderLeadStatus = 'spotted' | 'passed' | 'meeting_booked' | 'job_won' | 'placed' | 'not_pursued'
 
+export type Tier = 'premier' | 'championship' | 'league_one'
+
+/** A named list under People (docs/decisions.md, 14 November 2026). */
+export type PeopleList = { id: string; key: string; name: string; kind: 'leader' | 'a_star' | 'other'; seats: number }
+
+/** One person on a list, with their cadence state from league_due_view (14.6). Names only. */
+export type Member = {
+  id: string
+  personId: string
+  name: string
+  title: string | null
+  company: string | null
+  city: string | null
+  crmUrl: string | null
+  profileUrl: string | null
+  listId: string
+  tier: Tier
+  why: string | null
+  /** Plain dates */
+  lastTouchOn: string | null
+  nextDueOn: string
+  daysLate: number
+  state: 'late' | 'due' | 'fine'
+  missedCycles: number
+  liveSignal: string | null
+  notesForNextContact: string | null
+  jobsBriefed: number
+  referralsGiven: number
+  introsMade: number
+}
+
+export type Touch = { id: string; touchedOn: string; channel: string; kind: string; note: string | null }
+
 /** A lead for the rest of the business (section 9.4). */
 export type WiderLead = {
   id: string
@@ -262,6 +295,24 @@ export interface DataSource {
   /** WID-1 and WID-2: pass on needs the colleague and the split. */
   passWiderLead(id: string, colleague: string, split: string): Promise<void>
   setWiderLeadStatus(id: string, status: WiderLeadStatus): Promise<void>
+
+  /** The lists under People, in order. */
+  lists(): Promise<PeopleList[]>
+  /** Every active member on every list, with their cadence state. */
+  members(): Promise<Member[]>
+  /** The last touches with a person, newest first (29.1, History). */
+  touches(personId: string, limit?: number): Promise<Touch[]>
+  /** PEO-1: Logged a reply records a LinkedIn touch for today. The database resets the cadence. */
+  logReply(personId: string): Promise<void>
+  /** PEO-2: Move tier, with a reason in one line. The database writes the history row. */
+  moveTier(memberId: string, tier: Tier, reason: string): Promise<void>
+  removeFromList(memberId: string, reason: string): Promise<void>
+  /** PEO-3: the database removes them from the list, cancels drafts and closes follow-ups. */
+  setDoNotContact(personId: string): Promise<void>
+  /** Notes for next contact, editable in place on the card. */
+  saveNotes(personId: string, notes: string): Promise<void>
+  /** 29.4: by hand, from name, company, list and tier. A thin person row and a member row. */
+  addPerson(input: { name: string; title: string; company: string; listId: string; tier: Tier; why: string }): Promise<void>
 }
 
 function fail(error: { message: string } | null): void {
@@ -734,6 +785,127 @@ const live: DataSource = {
   async setWiderLeadStatus(id, status) {
     const { error } = await supabase!.from('wider_leads').update({ status }).eq('id', id)
     fail(error)
+  },
+
+  async lists() {
+    const { data, error } = await supabase!.from('lists').select('id, key, name, kind, seats').order('position')
+    fail(error)
+    return (data ?? []) as PeopleList[]
+  },
+
+  async members() {
+    const { data, error } = await supabase!
+      .from('league_due_view')
+      .select('id, person_id, display_name, display_title, display_company, list_id, tier, last_touch_on, next_due_on, days_late, state, missed_cycles, live_signal')
+    fail(error)
+    type View = {
+      id: string
+      person_id: string
+      display_name: string
+      display_title: string | null
+      display_company: string | null
+      list_id: string
+      tier: Tier
+      last_touch_on: string | null
+      next_due_on: string
+      days_late: number
+      state: 'late' | 'due' | 'fine'
+      missed_cycles: number
+      live_signal: string | null
+    }
+    const views = (data ?? []) as View[]
+    if (views.length === 0) return []
+    const { data: extra, error: e2 } = await supabase!
+      .from('league_members')
+      .select('id, why, jobs_briefed, referrals_given, intros_made, person:people!person_id (city, crm_url, linkedin_url, notes_for_next_contact)')
+      .in('id', views.map((v) => v.id))
+    fail(e2)
+    type Extra = {
+      id: string
+      why: string | null
+      jobs_briefed: number
+      referrals_given: number
+      intros_made: number
+      person: { city: string | null; crm_url: string | null; linkedin_url: string | null; notes_for_next_contact: string | null } | null
+    }
+    const byId = new Map(((extra ?? []) as unknown as Extra[]).map((e) => [e.id, e]))
+    return views.map((v) => {
+      const e = byId.get(v.id)
+      return {
+        id: v.id,
+        personId: v.person_id,
+        name: v.display_name,
+        title: v.display_title,
+        company: v.display_company,
+        city: e?.person?.city ?? null,
+        crmUrl: e?.person?.crm_url ?? null,
+        profileUrl: e?.person?.linkedin_url ?? null,
+        listId: v.list_id,
+        tier: v.tier,
+        why: e?.why ?? null,
+        lastTouchOn: v.last_touch_on,
+        nextDueOn: v.next_due_on,
+        daysLate: Number(v.days_late),
+        state: v.state,
+        missedCycles: v.missed_cycles,
+        liveSignal: v.live_signal,
+        notesForNextContact: e?.person?.notes_for_next_contact ?? null,
+        jobsBriefed: e?.jobs_briefed ?? 0,
+        referralsGiven: e?.referrals_given ?? 0,
+        introsMade: e?.intros_made ?? 0,
+      }
+    })
+  },
+
+  async touches(personId, limit = 5) {
+    const { data, error } = await supabase!
+      .from('touches')
+      .select('id, touched_on, channel, kind, note')
+      .eq('person_id', personId)
+      .order('touched_on', { ascending: false })
+      .limit(limit)
+    fail(error)
+    type Row = { id: string; touched_on: string; channel: string; kind: string; note: string | null }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, touchedOn: r.touched_on, channel: r.channel, kind: r.kind, note: r.note }))
+  },
+
+  async logReply(personId) {
+    const { error } = await supabase!.from('touches').insert({ person_id: personId, channel: 'linkedin', kind: 'message_replied', source: 'manual' })
+    // A second reply on the same day is the same touch (TOU-4).
+    if (error && !/touches_dedup_key_key|duplicate/i.test(error.message)) fail(error)
+  },
+
+  async moveTier(memberId, tier, reason) {
+    const { error } = await supabase!.from('league_members').update({ tier, why: reason }).eq('id', memberId)
+    fail(error)
+  },
+
+  async removeFromList(memberId, reason) {
+    const { error } = await supabase!.from('league_members').update({ active: false, removed_reason: reason }).eq('id', memberId)
+    fail(error)
+  },
+
+  async setDoNotContact(personId) {
+    const { error } = await supabase!.from('people').update({ do_not_contact: true }).eq('id', personId)
+    fail(error)
+  },
+
+  async saveNotes(personId, notes) {
+    const { error } = await supabase!.from('people').update({ notes_for_next_contact: notes }).eq('id', personId)
+    fail(error)
+  },
+
+  async addPerson({ name, title, company, listId, tier, why }) {
+    const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+    const { data, error } = await supabase!
+      .from('people')
+      .insert({ display_name: name.trim(), name_key: key(name), display_title: title.trim() || null, display_company: company.trim() || null, company_key: company.trim() ? key(company) : null, kind: 'leader' })
+      .select('id')
+      .single()
+    fail(error)
+    const personId = (data as { id: string }).id
+    const { error: e2 } = await supabase!.from('league_members').insert({ person_id: personId, list_id: listId, tier, why: why.trim() || null, added_from: 'manual' })
+    fail(e2)
   },
 }
 
