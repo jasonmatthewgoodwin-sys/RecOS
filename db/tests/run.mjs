@@ -450,6 +450,47 @@ test('P1-45: a target changes from next Monday, a saved prompt is the one active
   })
 })
 
+test('P1-46: find a person, export them, delete them with counts and an audit row (T-SET-5); KPI events stay', async () => {
+  await owner(async () => {
+    const found = await rows(`select display_name, counts from person_find('ben sam')`)
+    assert.equal(found.length, 1)
+    assert.equal(found[0].display_name, 'Ben Sample')
+    assert.ok(found[0].counts.league_members >= 1 && found[0].counts.touches >= 1, JSON.stringify(found[0].counts))
+    assert.match(await refused(`select * from person_find('b')`), /at least two/)
+
+    const [{ id }] = await rows(`select id from people where display_name = 'Ben Sample'`)
+    const [{ doc }] = await rows(`select person_export($1) as doc`, [id])
+    assert.equal(doc.person.display_name, 'Ben Sample')
+    assert.ok(Array.isArray(doc.touches) && doc.touches.length >= 1)
+    assert.ok(Array.isArray(doc.league_members) && doc.league_members.length >= 1)
+
+    const kpiBefore = await count('kpi_events')
+    assert.match(await refused(`select person_delete($1, 'yes')`, [id]), /Type DELETE/)
+    const [{ counts }] = await rows(`select person_delete($1, 'DELETE') as counts`, [id])
+    assert.equal(counts.people, 1)
+    assert.ok(counts.league_members >= 1 && counts.touches >= 1, JSON.stringify(counts))
+    assert.equal(counts.crm, 'The CRM record was not touched')
+    assert.equal(await count(`people where id = '${id}'`), 0)
+    assert.equal(await count(`touches where person_id = '${id}'`), 0)
+    assert.equal(await count(`league_members where person_id = '${id}'`), 0)
+    assert.equal(await count(`inbox_items where person_id = '${id}'`), 0)
+    assert.equal(await count('kpi_events'), kpiBefore)
+    const audit = await rows(`select action from audit_log where target_id = $1 order by id`, [id])
+    assert.deepEqual(audit.map((a) => a.action), ['export', 'person delete'])
+    assert.equal((await rows(`select 1 from audit_log where action = 'person search'`)).length, 1)
+
+    await rows(`select record_export('everything')`)
+    assert.equal((await rows(`select 1 from audit_log where action = 'export' and detail ->> 'kind' = 'everything'`)).length, 1)
+  })
+  await reviewer(async () => {
+    assert.match(await refused(`select * from person_find('ben')`), /Only the owner/)
+    assert.match(await refused(`select person_delete(gen_random_uuid(), 'DELETE')`), /Only the owner/)
+  })
+  await anon(async () => {
+    assert.match(await refused(`select * from person_find('ben')`), /permission denied/)
+  })
+})
+
 test('sign-in: the allow-list decides who gets a role, compared without case or spaces', async () => {
   const users = await rows(`select email, display_name, role from app_users`)
   assert.deepEqual(users, [{ email: OWNER_EMAIL, display_name: 'Jason Sample', role: 'owner' }])

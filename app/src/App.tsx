@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Dots } from './components/Quiet'
 import { FileTabs, Paper, Sheet } from './components/Shell'
@@ -6,6 +6,7 @@ import { AuthProvider, useAuth, type Session } from './lib/auth'
 import { data } from './lib/data'
 import { useTabKeys } from './lib/keyboard'
 import { useQuery } from './lib/query'
+import { applyTheme } from './lib/theme'
 import { landing, sectionFor, sections, settings, visibleSections, type Section } from './lib/sections'
 import { Gallery } from './routes/gallery/Gallery'
 import { Home } from './routes/home/Home'
@@ -22,6 +23,7 @@ import { PeopleList } from './routes/people/PeopleList'
 import { Signals } from './routes/people/Signals'
 import { SectionPage } from './routes/SectionPage'
 import { Agents } from './routes/settings/Agents'
+import { Data } from './routes/settings/Data'
 import { Profile } from './routes/settings/Profile'
 import { SendRules } from './routes/settings/SendRules'
 import { Targets } from './routes/settings/Targets'
@@ -46,6 +48,7 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'settings/send-rules': <SendRules />,
     'settings/targets': <Targets />,
     'settings/templates': <Templates />,
+    'settings/data': <Data />,
   }
 }
 
@@ -77,6 +80,12 @@ export function SignedIn({ session }: { session: Session }) {
   const needsYou = useQuery('home.needsYou', data.needsYou)
   const followUps = useQuery('home.followUps', data.followUpsDue)
   const dots: Record<string, boolean> = owner ? { inbox: (needsYou.data ?? 0) > 0, leads: (followUps.data?.due ?? 0) > 0 } : {}
+
+  // The owner's theme and typefaces (32.4), read once and applied to the root.
+  const prefs = useQuery('settings.app', data.appSettings)
+  useEffect(() => {
+    if (owner && prefs.data) applyTheme(prefs.data)
+  }, [owner, prefs.data])
 
   const start = owner ? '/home' : '/numbers/this-week'
   const allowed = owner ? [...sections, settings] : tabs

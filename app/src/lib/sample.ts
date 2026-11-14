@@ -1,7 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { Agent, AgentPrompt, AgentRun, CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
+import type { Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { ukClock } from './time'
 
@@ -427,17 +427,21 @@ export function freshSampleMembers(): Member[] {
 }
 
 let sampleMembers = freshSampleMembers()
-let sampleTouches: Record<string, Touch[]> = {
-  'p-ben': [
-    { id: 't1', touchedOn: daysAgo(4), channel: 'phone', kind: 'call', note: 'Talked about the Boston role' },
-    { id: 't2', touchedOn: daysAgo(40), channel: 'linkedin', kind: 'message_replied', note: null },
-  ],
-  'p-cara': [{ id: 't3', touchedOn: daysAgo(45), channel: 'meeting', kind: 'meeting', note: 'Quarterly catch-up' }],
+function freshSampleTouches(): Record<string, Touch[]> {
+  return {
+    'p-ben': [
+      { id: 't1', touchedOn: daysAgo(4), channel: 'phone', kind: 'call', note: 'Talked about the Boston role' },
+      { id: 't2', touchedOn: daysAgo(40), channel: 'linkedin', kind: 'message_replied', note: null },
+    ],
+    'p-cara': [{ id: 't3', touchedOn: daysAgo(45), channel: 'meeting', kind: 'meeting', note: 'Quarterly catch-up' }],
+  }
 }
+
+let sampleTouches = freshSampleTouches()
 
 export function resetSampleMembers() {
   sampleMembers = freshSampleMembers()
-  sampleTouches = { 'p-ben': sampleTouches['p-ben'].slice(0, 2) }
+  sampleTouches = freshSampleTouches()
 }
 
 // The week's signals (29.2), mirroring db/seed/sample_league.sql. Ben is
@@ -611,6 +615,88 @@ function nextMonday(): string {
   const d = new Date(`${c.date}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + (8 - c.isoDay))
   return d.toISOString().slice(0, 10)
+}
+
+// Profile and Data (32.4): the seeded settings, the shared blocks, a short
+// do-not-contact list and an audit trail. Find a person searches the sample
+// members by name.
+function freshSampleSettings(): AppSettings {
+  return {
+    allSendingPaused: false,
+    icp: {
+      sector: 'B2B SaaS',
+      companySize: 'Up to about 1,000 people',
+      buyer: 'VP or senior director of product marketing with 2 or 3 reports',
+      locations: ['new_york', 'austin', 'boston', 'san_francisco', 'remote_us'],
+      secondAngle: 'UK or European company with a US presence, global marketing head in the UK, hiring PMMs in the US',
+      excluded: ['Very large companies', 'Agencies posting on behalf of clients', 'Non-US roles'],
+    },
+    coachingTitlePhrases: ['coaching', 'LinkedIn audit', 'resume review', 'CV review'],
+    leagueDays: { premier: 18, championship: 30, leagueOne: 49 },
+    health: { clientCooling: 5, clientCold: 7, candidateCooling: 3, candidateCold: 5 },
+    feedback: { nudge: 2, cooling: 4, cold: 7 },
+    staleAfterDays: 14,
+    deckDefault: true,
+    homeStats: ['needs_you', 'follow_ups', 'calls_today', 'this_week'],
+    theme: 'paper',
+    fontSans: 'Space Grotesk',
+    fontMono: 'Space Mono',
+    workingHours: { mon: ['09:00', '20:00'], tue: ['09:00', '20:00'], wed: ['09:00', '20:00'], thu: ['09:00', '20:00'], fri: ['09:00', '17:00'] },
+    reviewerEmail: null,
+  }
+}
+
+function freshSampleBlocks(): SharedBlock[] {
+  const b = (code: string, title: string, body: string): SharedBlock => ({ code, title, body, updatedAt: daysAgo(30) + 'T09:00:00Z' })
+  return [
+    b('icp', 'Ideal client profile', 'Sector: B2B SaaS. Company size: up to about 1,000 people.'),
+    b('voice', 'Voice rules', 'Short words. No exclamation marks. Say the thing once.'),
+    b('post_format', 'Post format', 'One idea. Three short paragraphs. A question at the end.'),
+    b('note_format', 'Candidate note format', 'Not written yet.'),
+    b('service_standards', 'Service standards', 'Not written yet.'),
+    b('confidentiality', 'Confidentiality', 'Not written yet.'),
+    b('commercial_questions', 'Commercial questions', 'Not written yet.'),
+  ]
+}
+
+function freshSampleBlocked(): DoNotContact[] {
+  return [
+    { id: 'dnc-1', name: 'Ray Pretend', company: 'Globex Fiction', scope: 'person', reason: 'Asked not to be contacted', createdAt: daysAgo(12) + 'T11:00:00Z' },
+    { id: 'dnc-2', name: null, company: 'Hooli Sample', scope: 'company', reason: 'Client asked for a pause', createdAt: daysAgo(40) + 'T11:00:00Z' },
+  ]
+}
+
+function freshSampleAudit(): AuditEntry[] {
+  const e = (id: number, h: number, action: string, targetTable: string | null, detail: Record<string, unknown> | null): AuditEntry => ({ id, at: hoursAgoIso(h), actor: 'owner@example.com', action, targetTable, detail })
+  return [
+    e(9, 1, 'sign-in', null, null),
+    e(8, 5, 'manual KPI correction', 'kpi_events', { kpi: 'posts_chased', amount: -1, reason: 'Counted twice' }),
+    e(7, 26, 'send level change', 'send_policies', { type: 'prep_pack', from: 'one_click', to: 'automatic' }),
+    e(6, 30, 'target changed', 'targets', { kpi: 'posts_chased', target: 22 }),
+    e(5, 52, 'sign-in', null, null),
+    e(4, 80, 'stop switch off', 'app_settings', null),
+    e(3, 81, 'stop switch on', 'app_settings', null),
+    e(2, 100, 'export', null, { kind: 'everything' }),
+    e(1, 120, 'sign-in', null, null),
+  ]
+}
+
+let sampleSettings = freshSampleSettings()
+let sampleBlocks = freshSampleBlocks()
+let sampleBlocked = freshSampleBlocked()
+let sampleAudit = freshSampleAudit()
+let sampleDeleted = new Set<string>()
+
+export function resetSampleProfile() {
+  sampleSettings = freshSampleSettings()
+  sampleBlocks = freshSampleBlocks()
+  sampleBlocked = freshSampleBlocked()
+  sampleAudit = freshSampleAudit()
+  sampleDeleted = new Set()
+}
+
+function audit(action: string, targetTable: string | null, detail: Record<string, unknown> | null) {
+  sampleAudit.unshift({ id: (sampleAudit[0]?.id ?? 0) + 1, at: new Date().toISOString(), actor: 'owner@example.com', action, targetTable, detail })
 }
 
 function sampleKpiWeeks(): KpiWeek[] {
@@ -835,6 +921,66 @@ export const sampleSource: DataSource = {
     sampleMembers.push(member({ id: `m-${id}`, personId: id, name: name.trim(), title: title.trim() || null, company: company.trim() || null, listId, tier, why: why.trim() || null, lastTouchOn: null }))
   },
 
+  async appSettings() {
+    return { ...sampleSettings, icp: { ...sampleSettings.icp }, homeStats: [...sampleSettings.homeStats] }
+  },
+  async updateAppSettings(patch) {
+    sampleSettings = { ...sampleSettings, ...patch }
+    if (patch.reviewerEmail !== undefined) sampleSettings.reviewerEmail = patch.reviewerEmail ? patch.reviewerEmail.trim().toLowerCase() : null
+  },
+  async sharedBlocks() {
+    return sampleBlocks.map((b) => ({ ...b }))
+  },
+  async updateSharedBlock(code, body) {
+    const b = sampleBlocks.find((x) => x.code === code)
+    if (!b) throw new Error('No such block')
+    b.body = body
+    b.updatedAt = new Date().toISOString()
+  },
+  async doNotContact() {
+    return sampleBlocked.map((b) => ({ ...b }))
+  },
+  async addDoNotContact({ name, company, scope, reason }) {
+    sampleBlocked.unshift({ id: `dnc-${sampleBlocked.length + 1}`, name: name.trim() || null, company: company.trim() || null, scope, reason: reason.trim() || null, createdAt: new Date().toISOString() })
+  },
+  async auditLog(limit = 50) {
+    return sampleAudit.slice(0, limit).map((e) => ({ ...e }))
+  },
+  async personFind(query) {
+    const q = query.trim().toLowerCase()
+    if (q.length < 2) throw new Error('Type at least two characters')
+    audit('person search', 'people', { query_length: q.length })
+    const seen = new Set<string>()
+    const found: FoundPerson[] = []
+    for (const m of sampleMembers) {
+      if (sampleDeleted.has(m.personId) || seen.has(m.personId) || !m.name.toLowerCase().includes(q)) continue
+      seen.add(m.personId)
+      const touches = (sampleTouches[m.personId] ?? []).length
+      found.push({ id: m.personId, displayName: m.name, displayTitle: m.title, displayCompany: m.company, counts: { league_members: 1, ...(touches ? { touches } : {}) } })
+    }
+    return found
+  },
+  async personExport(personId) {
+    const member = sampleMembers.find((m) => m.personId === personId)
+    if (!member) throw new Error('No such person')
+    audit('export', 'people', { kind: 'person' })
+    return { exported_at: new Date().toISOString(), person: { id: personId, display_name: member.name }, league_members: [member], touches: sampleTouches[personId] ?? [] }
+  },
+  async personDelete(personId, confirm) {
+    if (confirm !== 'DELETE') throw new Error('Type DELETE to confirm')
+    const mine = sampleMembers.filter((m) => m.personId === personId)
+    if (mine.length === 0) throw new Error('No such person')
+    const counts = { league_members: mine.length, touches: (sampleTouches[personId] ?? []).length, people: 1 }
+    sampleMembers = sampleMembers.filter((m) => m.personId !== personId)
+    delete sampleTouches[personId]
+    sampleDeleted.add(personId)
+    audit('person delete', 'people', counts)
+    return { ...counts, crm: 'The CRM record was not touched' }
+  },
+  async exportEverything() {
+    audit('export', null, { kind: 'everything' })
+    return { exported_at: new Date().toISOString(), people: sampleMembers.map((m) => ({ id: m.personId, display_name: m.name })), targets: sampleTargets, settings: sampleSettings }
+  },
   async agents() {
     return sampleAgents.map((a) => ({ ...a, lastRun: a.lastRun ? { ...a.lastRun } : null }))
   },

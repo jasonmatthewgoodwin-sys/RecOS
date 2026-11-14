@@ -303,6 +303,33 @@ export type SendPolicyPatch = Partial<Pick<SendPolicy, 'level' | 'dailyCap' | 'w
 /** One target row (13.2). A change adds a row from the next Monday. */
 export type Target = { id: string; kpi: string; period: 'week' | 'quarter' | 'year'; target: number; validFrom: string; validTo: string | null }
 
+/** The one-row settings table (13.6), typed. */
+export type AppSettings = {
+  allSendingPaused: boolean
+  icp: { sector: string; companySize: string; buyer: string; locations: string[]; secondAngle: string; excluded: string[] }
+  coachingTitlePhrases: string[]
+  leagueDays: { premier: number; championship: number; leagueOne: number }
+  health: { clientCooling: number; clientCold: number; candidateCooling: number; candidateCold: number }
+  feedback: { nudge: number; cooling: number; cold: number }
+  staleAfterDays: number
+  deckDefault: boolean
+  homeStats: string[]
+  theme: 'paper' | 'night'
+  fontSans: string
+  fontMono: string
+  workingHours: Record<string, [string, string]>
+  reviewerEmail: string | null
+}
+
+export type SharedBlock = { code: string; title: string; body: string; updatedAt: string }
+
+export type DoNotContact = { id: string; name: string | null; company: string | null; scope: 'person' | 'company'; reason: string | null; createdAt: string }
+
+export type AuditEntry = { id: number; at: string; actor: string; action: string; targetTable: string | null; detail: Record<string, unknown> | null }
+
+/** A person found by name or email, with where they appear (15.7). No row contents. */
+export type FoundPerson = { id: string; displayName: string; displayTitle: string | null; displayCompany: string | null; counts: Record<string, number> }
+
 /** One row behind a number this week (13.1). Labels name a role and company, never a person. */
 export type KpiEvent = {
   id: string
@@ -494,6 +521,22 @@ export interface DataSource {
   /** Settings, Targets (13.2). The change starts next Monday; the date is returned. */
   targets(): Promise<Target[]>
   setTarget(kpi: string, period: Target['period'], target: number): Promise<string>
+
+  /** Settings, Profile (32.4). */
+  appSettings(): Promise<AppSettings>
+  updateAppSettings(patch: Partial<AppSettings>): Promise<void>
+  sharedBlocks(): Promise<SharedBlock[]>
+  updateSharedBlock(code: string, body: string): Promise<void>
+  /** Settings, Data (32.4, 15.7, 15.8). */
+  doNotContact(): Promise<DoNotContact[]>
+  addDoNotContact(input: { name: string; company: string; scope: 'person' | 'company'; reason: string }): Promise<void>
+  auditLog(limit?: number): Promise<AuditEntry[]>
+  personFind(query: string): Promise<FoundPerson[]>
+  personExport(personId: string): Promise<unknown>
+  /** Removes every row about the person and returns counts per table. The CRM is not touched. */
+  personDelete(personId: string, confirm: string): Promise<Record<string, number | string>>
+  /** Everything the owner can read, as one document, and an audit row. */
+  exportEverything(): Promise<unknown>
 
   /** Numbers, This week (32.1). */
   kpiThisWeek(): Promise<KpiWeek[]>
@@ -1104,6 +1147,154 @@ const live: DataSource = {
     const personId = (data as { id: string }).id
     const { error: e2 } = await supabase!.from('league_members').insert({ person_id: personId, list_id: listId, tier, why: why.trim() || null, added_from: 'manual' })
     fail(e2)
+  },
+
+  async appSettings() {
+    const { data, error } = await supabase!.from('app_settings').select('*').single()
+    fail(error)
+    const r = data as Record<string, unknown>
+    const icp = (r.icp_json ?? {}) as Record<string, unknown>
+    const list = (v: unknown) => (Array.isArray(v) ? (v as string[]) : [])
+    return {
+      allSendingPaused: Boolean(r.all_sending_paused),
+      icp: {
+        sector: String(icp.sector ?? ''),
+        companySize: String(icp.company_size ?? ''),
+        buyer: String(icp.buyer ?? ''),
+        locations: list(icp.locations),
+        secondAngle: String(icp.second_angle ?? ''),
+        excluded: list(icp.excluded),
+      },
+      coachingTitlePhrases: list(r.coaching_title_phrases),
+      leagueDays: { premier: Number(r.league_days_premier), championship: Number(r.league_days_championship), leagueOne: Number(r.league_days_league_one) },
+      health: {
+        clientCooling: Number(r.health_client_cooling_days),
+        clientCold: Number(r.health_client_cold_days),
+        candidateCooling: Number(r.health_candidate_cooling_days),
+        candidateCold: Number(r.health_candidate_cold_days),
+      },
+      feedback: { nudge: Number(r.feedback_nudge_days), cooling: Number(r.feedback_cooling_days), cold: Number(r.feedback_cold_days) },
+      staleAfterDays: Number(r.stale_after_days),
+      deckDefault: Boolean(r.deck_default),
+      homeStats: list(r.home_stats),
+      theme: r.theme === 'night' ? 'night' : 'paper',
+      fontSans: String(r.font_sans),
+      fontMono: String(r.font_mono),
+      workingHours: (r.working_hours ?? {}) as Record<string, [string, string]>,
+      reviewerEmail: (r.reviewer_email as string | null) ?? null,
+    }
+  },
+
+  async updateAppSettings(patch) {
+    const change: Record<string, unknown> = {}
+    if (patch.icp) {
+      change.icp_json = {
+        sector: patch.icp.sector,
+        company_size: patch.icp.companySize,
+        buyer: patch.icp.buyer,
+        locations: patch.icp.locations,
+        second_angle: patch.icp.secondAngle,
+        excluded: patch.icp.excluded,
+      }
+    }
+    if (patch.coachingTitlePhrases) change.coaching_title_phrases = patch.coachingTitlePhrases
+    if (patch.leagueDays) {
+      change.league_days_premier = patch.leagueDays.premier
+      change.league_days_championship = patch.leagueDays.championship
+      change.league_days_league_one = patch.leagueDays.leagueOne
+    }
+    if (patch.health) {
+      change.health_client_cooling_days = patch.health.clientCooling
+      change.health_client_cold_days = patch.health.clientCold
+      change.health_candidate_cooling_days = patch.health.candidateCooling
+      change.health_candidate_cold_days = patch.health.candidateCold
+    }
+    if (patch.feedback) {
+      change.feedback_nudge_days = patch.feedback.nudge
+      change.feedback_cooling_days = patch.feedback.cooling
+      change.feedback_cold_days = patch.feedback.cold
+    }
+    if (patch.staleAfterDays !== undefined) change.stale_after_days = patch.staleAfterDays
+    if (patch.deckDefault !== undefined) change.deck_default = patch.deckDefault
+    if (patch.homeStats) change.home_stats = patch.homeStats
+    if (patch.theme) change.theme = patch.theme
+    if (patch.fontSans) change.font_sans = patch.fontSans
+    if (patch.fontMono) change.font_mono = patch.fontMono
+    if (patch.workingHours) change.working_hours = patch.workingHours
+    if (patch.reviewerEmail !== undefined) change.reviewer_email = patch.reviewerEmail ? patch.reviewerEmail.trim().toLowerCase() : null
+    const { error } = await supabase!.from('app_settings').update(change).eq('id', true)
+    fail(error)
+  },
+
+  async sharedBlocks() {
+    const { data, error } = await supabase!.from('shared_blocks').select('code, title, body, updated_at').order('code')
+    fail(error)
+    type Row = { code: string; title: string; body: string; updated_at: string }
+    return ((data ?? []) as Row[]).map((r) => ({ code: r.code, title: r.title, body: r.body, updatedAt: r.updated_at }))
+  },
+
+  async updateSharedBlock(code, body) {
+    const { error } = await supabase!.from('shared_blocks').update({ body }).eq('code', code)
+    fail(error)
+  },
+
+  async doNotContact() {
+    const { data, error } = await supabase!.from('do_not_contact').select('id, name, company, scope, reason, created_at').order('created_at', { ascending: false })
+    fail(error)
+    type Row = { id: string; name: string | null; company: string | null; scope: 'person' | 'company'; reason: string | null; created_at: string }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, name: r.name, company: r.company, scope: r.scope, reason: r.reason, createdAt: r.created_at }))
+  },
+
+  async addDoNotContact({ name, company, scope, reason }) {
+    const { error } = await supabase!.from('do_not_contact').insert({ name: name.trim() || null, company: company.trim() || null, scope, reason: reason.trim() || null })
+    fail(error)
+  },
+
+  async auditLog(limit = 50) {
+    const { data, error } = await supabase!.from('audit_log').select('id, at, actor, action, target_table, detail').order('id', { ascending: false }).limit(limit)
+    fail(error)
+    type Row = { id: number; at: string; actor: string; action: string; target_table: string | null; detail: Record<string, unknown> | null }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, at: r.at, actor: r.actor, action: r.action, targetTable: r.target_table, detail: r.detail }))
+  },
+
+  async personFind(query) {
+    const { data, error } = await supabase!.rpc('person_find', { p_query: query })
+    fail(error)
+    type Row = { id: string; display_name: string; display_title: string | null; display_company: string | null; counts: Record<string, number> | null }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, displayName: r.display_name, displayTitle: r.display_title, displayCompany: r.display_company, counts: r.counts ?? {} }))
+  },
+
+  async personExport(personId) {
+    const { data, error } = await supabase!.rpc('person_export', { p_person: personId })
+    fail(error)
+    return data
+  },
+
+  async personDelete(personId, confirm) {
+    const { data, error } = await supabase!.rpc('person_delete', { p_person: personId, p_confirm: confirm })
+    fail(error)
+    return (data ?? {}) as Record<string, number | string>
+  },
+
+  async exportEverything() {
+    const tables = [
+      'people', 'inbox_items', 'follow_ups', 'job_leads', 'wider_leads', 'referrals', 'coaching_sessions', 'campaigns', 'target_companies',
+      'lists', 'league_members', 'league_history', 'touches', 'signals', 'kpi_events', 'targets', 'weekly_reviews', 'send_log', 'audit_log',
+      'agents', 'agent_prompts', 'agent_runs', 'shared_blocks', 'send_policies', 'app_settings', 'do_not_contact', 'calendar_today',
+    ]
+    const out: Record<string, unknown> = { exported_at: new Date().toISOString() }
+    for (const t of tables) {
+      const { data, error } = await supabase!.from(t).select('*')
+      fail(error)
+      out[t] = data ?? []
+    }
+    // Message bodies and drafts are left out (15.8).
+    const { data: messages, error } = await supabase!.from('messages').select('id, type, channel, person_id, to_name, state, hold_reason, created_by, level_at_creation, sent_at, created_at')
+    fail(error)
+    out.messages = messages ?? []
+    const { error: e2 } = await supabase!.rpc('record_export', { p_kind: 'everything' })
+    fail(e2)
+    return out
   },
 
   async agents() {
