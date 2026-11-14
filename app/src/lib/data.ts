@@ -330,6 +330,9 @@ export type AuditEntry = { id: number; at: string; actor: string; action: string
 /** A person found by name or email, with where they appear (15.7). No row contents. */
 export type FoundPerson = { id: string; displayName: string; displayTitle: string | null; displayCompany: string | null; counts: Record<string, number> }
 
+/** The weekly health line (33.7): runs, failures, items, sent for you. Owner only. */
+export type SystemWeek = { week: string; runs: number; failed: number; items: number; sent: number; failedDetail: string | null }
+
 /** One row behind a number this week (13.1). Labels name a role and company, never a person. */
 export type KpiEvent = {
   id: string
@@ -537,6 +540,9 @@ export interface DataSource {
   personDelete(personId: string, confirm: string): Promise<Record<string, number | string>>
   /** Everything the owner can read, as one document, and an audit row. */
   exportEverything(): Promise<unknown>
+
+  /** The weekly health line on Review (33.7). Empty for the reviewer. */
+  systemWeeks(): Promise<SystemWeek[]>
 
   /** Numbers, This week (32.1). */
   kpiThisWeek(): Promise<KpiWeek[]>
@@ -1470,6 +1476,13 @@ const live: DataSource = {
     const { data, error } = await supabase!.rpc('set_target', { p_kpi: kpi, p_period: period, p_target: target })
     fail(error)
     return String(data)
+  },
+
+  async systemWeeks() {
+    const { data, error } = await supabase!.from('system_week_view').select('week, runs, failed, items, sent, failed_detail')
+    fail(error)
+    type Row = { week: string; runs: number; failed: number; items: number; sent: number; failed_detail: string | null }
+    return ((data ?? []) as Row[]).map((r) => ({ week: r.week, runs: Number(r.runs), failed: Number(r.failed), items: Number(r.items), sent: Number(r.sent), failedDetail: r.failed_detail }))
   },
 
   async kpiQuarter() {

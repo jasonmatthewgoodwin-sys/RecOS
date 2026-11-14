@@ -10,7 +10,7 @@ import { Switch } from '../../components/Switch'
 import { TextLink } from '../../components/TextLink'
 import type { Role } from '../../lib/auth'
 import { data, type ReviewFields } from '../../lib/data'
-import { lastMonday, movedWords, summaryDraft, weekLines, weekWords } from '../../lib/numbers'
+import { lastMonday, movedWords, summaryDraft, systemLine, weekLines, weekWords } from '../../lib/numbers'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { sections } from '../../lib/sections'
 import { shiftDate } from '../../lib/time'
@@ -36,6 +36,7 @@ export function Review({ role }: { role: Role }) {
   const outputs = useQuery('numbers.outputs', data.kpiOutputWeeks)
   const followUps = useQuery('numbers.followUpsWeeks', data.followUpsWeeks)
   const review = useQuery(`numbers.review.${week}`, () => data.weeklyReview(week))
+  const system = useQuery('numbers.system', owner ? data.systemWeeks : async () => [])
   const [allWork, setAllWork] = useState(false)
   const [fields, setFields] = useState<ReviewFields>(EMPTY)
   const [summary, setSummary] = useState<string | null>(null)
@@ -178,6 +179,12 @@ export function Review({ role }: { role: Role }) {
           {week !== latest && <TextLink label="This week's review" onClick={() => step(Math.round((new Date(latest).getTime() - new Date(week).getTime()) / (7 * 86_400_000)))} />}
         </div>
       </section>
+
+      {owner && system.data && (
+        <p className="max-w-prose text-body text-ink-3" data-testid="system-line">
+          {systemLine(system.data.find((s) => s.week === week))}
+        </p>
+      )}
 
       {note && <Note text={note} onClose={() => setNote(null)} />}
     </div>

@@ -25,6 +25,7 @@ function mock() {
   vi.spyOn(data, 'kpiOutputWeeks').mockImplementation(sampleSource.kpiOutputWeeks)
   vi.spyOn(data, 'followUpsWeeks').mockImplementation(sampleSource.followUpsWeeks)
   vi.spyOn(data, 'weeklyReview').mockImplementation(sampleSource.weeklyReview)
+  vi.spyOn(data, 'systemWeeks').mockImplementation(sampleSource.systemWeeks)
   return { save: vi.spyOn(data, 'saveWeeklyReview').mockImplementation(sampleSource.saveWeeklyReview) }
 }
 
@@ -109,6 +110,8 @@ describe('Numbers, Review', () => {
     expect(summary.value).toContain('Job posts chased: 22/20, hit')
     expect(summary.value).toContain('Notes to add before the review.')
     expect(screen.getByRole('main').querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
+    // The health line for the owner only (33.7).
+    expect(await screen.findByTestId('system-line')).toHaveTextContent('System: 11 runs, 0 failed, 63 items, 14 sent for you.')
   })
 
   it('notes save when a field is left and flow into the summary; the arrows reach the week before', async () => {
@@ -139,6 +142,7 @@ describe('Numbers, Review', () => {
     expect(screen.queryByRole('form', { name: 'Notes' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: 'Notes' })).getAllByText('Nothing written')).toHaveLength(4)
     expect(save).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('system-line')).not.toBeInTheDocument()
   })
 })
 

@@ -1055,6 +1055,12 @@ export const sampleSource: DataSource = {
     else sampleTargets.push({ id: `t-${kpi}-${from}`, kpi, period, target, validFrom: from, validTo: null })
     return from
   },
+  async systemWeeks() {
+    return [
+      { week: lastMondaySample(), runs: 11, failed: 0, items: 63, sent: 14, failedDetail: null },
+      { week: thisMonday(), runs: 6, failed: 1, items: 12, sent: 3, failedDetail: 'Relationship signals on Friday' },
+    ]
+  },
   async kpiQuarter() {
     return freshSampleQuarter()
   },

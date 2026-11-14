@@ -130,7 +130,7 @@ test('anon holds no privilege on any table or view', async () => {
 
 test('T-AUTH-5 / anon: every table and view refuses a read', async () => {
   await anon(async () => {
-    for (const t of [...allTables, 'kpi_week_view', 'kpi_this_week', 'kpi_streak_view', 'kpi_quarter_view', 'kpi_output_week_view', 'followups_quarter_view', 'bd_funnel_view']) {
+    for (const t of [...allTables, 'kpi_week_view', 'kpi_this_week', 'kpi_streak_view', 'kpi_quarter_view', 'kpi_output_week_view', 'followups_quarter_view', 'bd_funnel_view', 'system_week_view']) {
       const why = await refused(`select * from ${t}`)
       assert.match(String(why), /permission denied/, `${t} as anon`)
     }
@@ -850,3 +850,58 @@ for (const { name, fn } of tests) {
 console.log(`\n${tests.length - failed} passed, ${failed} failed, ${allTables.length} tables`)
 await db.close()
 process.exit(failed ? 1 : 0)
+
+// Runs last: it moves rows on by date, which the tests above read as seeded.
+test('P1-47: the nightly job sweeps, retains and raises system notices; no browser role can run it (33.8, 34.5)', async () => {
+  // Rows the night should act on, planted as the database.
+  const [p] = await rows(`select id from people limit 1`)
+  await db.query(`insert into inbox_items (owner_id, type, agent, title, dedup_key, status, created_at) values ($1, 'job_lead', 'a3_jobs', 'Old lead', 'test:stale', 'new', now() - interval '20 days')`, [ownerId])
+  await db.query(`insert into inbox_items (owner_id, type, agent, title, dedup_key, status, snoozed_until) values ($1, 'signal', 'a4_signals', 'Snoozed signal', 'test:woken', 'snoozed', current_date - 1)`, [ownerId])
+  await db.query(`insert into follow_ups (owner_id, person_id, person_name, kind, reason, source, direction, due_on, status, snoozed_until, dedup_key) values ($1, $2, 'Ben Sample', 'chase', 'test', 'manual', 'owed', current_date - 3, 'snoozed', current_date, 'test:fu:reopen')`, [ownerId, p.id])
+  await db.query(`insert into agent_runs (agent, trigger, status, started_at) values ('a2_content', 'schedule', 'running', now() - interval '45 minutes')`)
+  await db.query(`insert into agent_runs (agent, trigger, status, started_at, finished_at) values ('a1_review', 'schedule', 'ok', now() - interval '100 days', now() - interval '100 days')`)
+  await db.query(`insert into messages (owner_id, type, channel, person_id, to_name, created_by, level_at_creation, state, updated_at) values ($1, 'thanks_after_call', 'email', $2, 'Ben Sample', 'send', 'one_click', 'queued', now() - interval '30 hours')`, [ownerId, p.id])
+  await db.query(`update agents set consecutive_failures = 2 where code = 'a4_signals'`)
+  await db.query(`insert into audit_log (actor, action) values ('test', 'old entry')`)
+  await db.query(`update audit_log set at = now() - interval '25 months' where action = 'old entry'`)
+  const callsBefore = await count('calendar_today')
+  assert.ok(callsBefore > 0)
+
+  const [{ night }] = await rows(`select nightly() as night`)
+  assert.equal(night.sweeps.inbox_stale, 1)
+  assert.equal(night.sweeps.inbox_woken, 1)
+  assert.equal(night.sweeps.follow_ups_reopened, 1)
+  assert.equal(night.sweeps.runs_timed_out, 1)
+  assert.equal(night.retention.agent_runs, 1)
+  assert.equal(night.retention.audit_log, 1)
+  assert.equal(night.retention.calendar_today, callsBefore)
+  assert.equal(night.retention.errors, undefined, JSON.stringify(night.retention))
+  assert.deepEqual(await rows(`select status from inbox_items where dedup_key = 'test:stale'`), [{ status: 'stale' }])
+  assert.deepEqual(await rows(`select status from inbox_items where dedup_key = 'test:woken'`), [{ status: 'new' }])
+  assert.deepEqual(await rows(`select status from follow_ups where dedup_key = 'test:fu:reopen'`), [{ status: 'open' }])
+  assert.equal(await count('calendar_today'), 0)
+  assert.equal(await count(`audit_log where action = 'old entry'`), 0)
+
+  // The checks: a failed agent, a stuck queue and a timed-out run, each once a day.
+  const raised = night.checks.raised
+  assert.ok(raised.includes('agent-failed:a4_signals') && raised.includes('send-queue') && raised.includes('stale-runs'), JSON.stringify(raised))
+  const notices = await rows(`select title from inbox_items where type = 'system_notice' and status = 'new' order by title`)
+  assert.ok(notices.some((x) => x.title === 'The relationship signals agent did not run'), JSON.stringify(notices))
+  const [{ again }] = await rows(`select nightly() as again`)
+  assert.deepEqual(again.checks.raised, [])
+  assert.equal((await rows(`select 1 from audit_log where action = 'nightly run'`)).length, 2)
+
+  await owner(async () => {
+    assert.match(await refused(`select nightly()`), /permission denied/)
+    assert.match(await refused(`select retention_job()`), /permission denied/)
+    assert.match(await refused(`select nightly_sweeps()`), /permission denied/)
+    const [sys] = await rows(`select runs::int as runs, failed::int as failed from system_week_view where week = week_of(now())`)
+    assert.ok(sys && sys.runs >= 1 && sys.failed >= 1, JSON.stringify(sys))
+  })
+  await reviewer(async () => {
+    assert.equal(await count('system_week_view'), 0)
+  })
+  // Tidy the planted rows so later tests see the sample week as seeded.
+  await db.query(`delete from inbox_items where dedup_key like 'test:%'`)
+  await db.query(`delete from follow_ups where dedup_key like 'test:%'`)
+})

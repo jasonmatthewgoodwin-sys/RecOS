@@ -1,4 +1,4 @@
-import type { FollowUpsDone, KpiOutputWeek, KpiStreak, KpiWeek, KpiWeekRow, ReviewFields } from './data'
+import type { FollowUpsDone, KpiOutputWeek, KpiStreak, KpiWeek, KpiWeekRow, ReviewFields, SystemWeek } from './data'
 import { mondayOf, shiftDate } from './time'
 
 // Pure helpers for the Numbers tab (32.1, 14.3, 22.5). No data access.
@@ -146,4 +146,11 @@ export function summaryDraft(input: {
   ]
     .filter((l, i, all) => !(l === '' && all[i - 1] === ''))
     .join('\n')
+}
+
+/** System: 11 runs, 0 failed, 63 items, 14 sent for you (33.7). */
+export function systemLine(s: SystemWeek | undefined): string {
+  if (!s) return 'System: no runs logged.'
+  const base = `System: ${s.runs} ${s.runs === 1 ? 'run' : 'runs'}, ${s.failed} failed, ${s.items} ${s.items === 1 ? 'item' : 'items'}, ${s.sent} sent for you.`
+  return s.failed > 0 && s.failedDetail ? `${base} Failed: ${s.failedDetail}.` : base
 }

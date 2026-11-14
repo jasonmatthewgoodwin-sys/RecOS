@@ -81,6 +81,7 @@ To look at the components without signing in, add a file `app/.env.gallery` hold
 | P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
 | P1-30 Follow-up lifecycle | Done. Migration 0020 applied to the test project on 14 November |
 | P1-37, P1-38 Lists, league, touches, signals | Done. Migration 0021, five policy files, `league_due_view`, `lists.sql` and `sample_league.sql` applied to the test project on 14 November |
+| P1-47 Retention job, nightly sweeps, monitoring checks | Done as `nightly()` in migration 0024, applied to the test project on 14 November. `db/jobs/schedule.sql` (pg_cron) still to run on the test project |
 | P1-46 Settings: Profile and Data, person find, export and delete | Done as database functions the page calls. Migration 0023 applied to the test project on 14 November |
 | P1-45 Settings: Agents, Send rules, Targets, Templates | Done, Templates as a line until P1-29. Migration 0022 applied to the test project on 14 November |
 | P1-43 Numbers Quarter and Review | Done. `/numbers/quarter`, `/numbers/review`. `db/views/kpi_quarter_view.sql` applied to the test project on 14 November. The A1 repoint (the agent posting its summary through agent-write) waits for P1-14 |
