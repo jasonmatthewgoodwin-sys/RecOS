@@ -4,7 +4,7 @@ Updated 14 November 2026, mid afternoon. Written so the build can be picked up i
 
 ## In one paragraph
 
-Week 1 is built and three week 2 tickets are done. The app is live at `https://rec-os-gules.vercel.app` and runs on Jason's Supabase test project, which now holds every migration to 0019, access rules on all 25 tables, the targets and the sample week. Jason has signed in twice by emailed link. Home has not yet been seen by him on the real data. The rest of week 2 is being built in the cloud.
+Week 1 is built and four week 2 tickets are done, the latest being the Leads Jobs page and job card (P1-23). The app is live at `https://rec-os-gules.vercel.app` and runs on Jason's Supabase test project, which now holds every migration to 0019, access rules on all 25 tables, the targets and the sample week. Jason has signed in twice by emailed link. Home has not yet been seen by him on the real data. The rest of week 2 is being built in the cloud.
 
 ## Where everything is
 
@@ -79,6 +79,7 @@ To look at the components without signing in, add a file `app/.env.gallery` hold
 | P1-18 Business development tables | Done. Migration 0018 and six policy files applied to the test project on 14 November |
 | P1-19 KPI triggers for the BD tables | Done. Migration 0019 applied to the test project on 14 November |
 | P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
+| P1-23 Leads, Jobs page and job card | Done. `/leads/jobs` and the card by `?card=job:id`. Built in a cloud session, landed from its patch on 14 November. Not yet seen on the test project's data by Jason |
 
 ## What was done in the Supabase dashboard
 
@@ -119,11 +120,13 @@ Against the checklist in section 7 of `docs/build-instructions.md`. Is it calm? 
 
 ### 5. The rest of week 2
 
-Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. P1-18, P1-19 and P1-21 are done. A sensible order for the rest:
+Tickets P1-14 to P1-25 in section 38.2 of `docs/low-level-design.md`. P1-18, P1-19, P1-21 and P1-23 are done. A sensible order for the rest:
 
-1. P1-14 to P1-16 and P1-20: the agent endpoints and the write endpoint with its fit score (sections 15, 16, 23.1). These are Supabase Edge Functions. Deploying them needs the Supabase command line tool and Jason's login; no function has been written yet. They can be written and unit-tested without deploying.
-2. P1-23 Jobs page and job card (section 28) needs nothing from Jason and can run alongside item 1. P1-22 Inbox (section 27) depends on P1-15.
+1. P1-14 to P1-16 and P1-20: the agent endpoints and the write endpoint with its fit score (sections 15, 16, 23.1). These are Supabase Edge Functions. Deploying them needs the Supabase command line tool and Jason's login; no function has been written yet. They can be written and unit-tested without deploying. A cloud session was started on these on 14 November; see the note on cloud sessions below before expecting a pull request from it.
+2. P1-22 Inbox deck and list (section 27). The design lists P1-15 as a dependency because agents fill the inbox through the write endpoint, but the deck and list read `inbox_items`, which exists with the sample week in it, so the screen can be built and checked now.
 3. P1-17 bridge sheet pull and P1-24 import need the sheets from Jason.
+
+**Cloud sessions cannot push yet.** Claude Code cloud sessions push with Mia's own GitHub account (`mia61666`), which has no write access to `jasonmatthewgoodwin-sys/RecOS`. The P1-23 session hit a 403 and left its work as a patch file instead, which Mia landed by hand. To let cloud sessions open pull requests, Jason adds `mia61666` as a collaborator with write access on the repository (GitHub, repository Settings, Collaborators). Until then, any cloud session's work arrives as a patch to apply with `git am --3way`.
 
 New database changes are new numbered files in `db/migrations` (next is 0020), with a policy file for every new table. `npm test` in `db/` fails if a table has no policy file. Apply new files to the test project through the SQL editor.
 
