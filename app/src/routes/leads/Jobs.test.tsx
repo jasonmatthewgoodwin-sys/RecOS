@@ -292,7 +292,7 @@ describe('Jobs', () => {
     open()
     await waitFor(() => expect(screen.getByText('Could not load. Try again.')).toBeInTheDocument())
     await waitFor(() => expect(values()[0]).toBe('12/20'))
-    expect(screen.getByRole('link', { name: 'Coaching' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Referrals' })).toBeInTheDocument()
   })
 
   it('moves between rows with j and k, and x opens the card ready to bin', async () => {

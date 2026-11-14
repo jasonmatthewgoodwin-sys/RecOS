@@ -25,7 +25,6 @@ export const sections: Section[] = [
     arrives: 'weeks 2 and 3',
     pages: [
       { label: 'Jobs', slug: 'jobs' },
-      { label: 'Coaching', slug: 'coaching' },
       { label: 'Referrals', slug: 'referrals' },
       { label: 'Follow-ups', slug: 'follow-ups' },
       { label: 'UK to US', slug: 'uk-us' },
@@ -56,6 +55,8 @@ export const sections: Section[] = [
       { label: 'Warm specs', slug: 'warm-specs' },
       { label: 'In process', slug: 'in-process' },
       { label: 'Placed', slug: 'placed' },
+      // Moved here from Leads on 14 November 2026 at Mia's request (docs/decisions.md).
+      { label: 'Coaching', slug: 'coaching' },
     ],
   },
   {

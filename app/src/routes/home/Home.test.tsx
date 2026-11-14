@@ -143,6 +143,6 @@ describe('Home', () => {
     await userEvent.keyboard('3')
     expect(await screen.findByRole('heading', { name: 'Leads' })).toBeInTheDocument()
     await userEvent.keyboard(']')
-    expect(screen.getByRole('link', { name: 'Coaching' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Referrals' })).toHaveAttribute('aria-current', 'page')
   })
 })
