@@ -110,6 +110,66 @@ export type InboxAction = 'done' | 'approve' | 'bin' | 'snooze' | 'pass'
 
 export type FollowUpStatus = 'open' | 'sent' | 'done' | 'handled_offline' | 'snoozed' | 'closed'
 
+/** One exec coaching session (section 9.2). The person is a thin reference. */
+export type CoachingSession = {
+  id: string
+  personId: string
+  personName: string
+  personTitle: string | null
+  personCompany: string | null
+  /** ISO timestamps */
+  bookedFor: string | null
+  heldAt: string | null
+  source: string | null
+  status: 'booked' | 'held' | 'no_show' | 'cancelled'
+  /** The four standing questions. Null means not asked (COA-3). */
+  answers: { interviewedWhere: string | null; whoElseLooking: string | null; howTheyHire: string | null; eventsRated: string | null }
+  adviceGiven: string | null
+  referralsCount: number
+  leadsCount: number
+  followedUp: boolean
+}
+
+export type ReferralStage = 'new' | 'contacted' | 'spoken' | 'added_to_league' | 'not_relevant'
+
+/** Someone named on a call (section 9.3). A name and a company, never contact details. */
+export type Referral = {
+  id: string
+  referredName: string
+  referredCompany: string | null
+  referredTitle: string | null
+  referredById: string | null
+  referredByName: string
+  context: string | null
+  kind: 'person' | 'company' | 'job'
+  stage: ReferralStage
+  thanked: boolean
+  /** Plain dates */
+  receivedOn: string
+  contactedOn: string | null
+}
+
+export type WiderLeadStatus = 'spotted' | 'passed' | 'meeting_booked' | 'job_won' | 'placed' | 'not_pursued'
+
+/** A lead for the rest of the business (section 9.4). */
+export type WiderLead = {
+  id: string
+  company: string
+  role: string | null
+  function: string
+  country: 'US' | 'UK' | 'other'
+  location: string | null
+  source: string
+  mentionedByName: string | null
+  existingClient: boolean
+  passedTo: string | null
+  passedOn: string | null
+  splitNote: string | null
+  status: WiderLeadStatus
+  notes: string | null
+  createdAt: string
+}
+
 /** One next action owed to a person, or awaited from them (section 8.2). */
 export type FollowUp = {
   id: string
@@ -186,6 +246,20 @@ export interface DataSource {
   redateFollowUps(ids: string[], dueOn: string): Promise<void>
   /** 21.5: how long the Monday block took, on this week's review row. */
   recordFollowUpBlock(minutes: number): Promise<void>
+
+  /** Sessions this week and last, newest first (28.3). */
+  coachingSessions(): Promise<CoachingSession[]>
+  /** The coaching follow-up: until the send engine exists, this marks it followed up. */
+  markCoachingFollowedUp(id: string): Promise<void>
+  /** Referrals that are not closed, oldest first (28.4). */
+  referrals(): Promise<Referral[]>
+  /** REF-2: contacted raises the thank-you follow-up in the database. */
+  setReferralStage(id: string, stage: ReferralStage): Promise<void>
+  /** Spotted leads and passed leads awaiting an outcome (28.8). */
+  widerLeads(): Promise<WiderLead[]>
+  /** WID-1 and WID-2: pass on needs the colleague and the split. */
+  passWiderLead(id: string, colleague: string, split: string): Promise<void>
+  setWiderLeadStatus(id: string, status: WiderLeadStatus): Promise<void>
 }
 
 function fail(error: { message: string } | null): void {
@@ -502,6 +576,161 @@ const live: DataSource = {
       .from('weekly_reviews')
       .upsert({ week: monday, followup_block_minutes: minutes }, { onConflict: 'owner_id,week' })
     fail(e2)
+  },
+
+  async coachingSessions() {
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString()
+    const { data, error } = await supabase!
+      .from('coaching_sessions')
+      .select(
+        'id, person_id, booked_for, held_at, source, status, q_interviewed_where, q_who_else_looking, q_how_they_hire, ' +
+          'q_events_rated, advice_given, referrals_count, leads_count, followed_up, ' +
+          'person:people!person_id (display_name, display_title, display_company)',
+      )
+      .or(`booked_for.gte.${since},held_at.gte.${since}`)
+      .order('booked_for', { ascending: false, nullsFirst: false })
+    fail(error)
+    type Row = {
+      id: string
+      person_id: string
+      booked_for: string | null
+      held_at: string | null
+      source: string | null
+      status: CoachingSession['status']
+      q_interviewed_where: string | null
+      q_who_else_looking: string | null
+      q_how_they_hire: string | null
+      q_events_rated: string | null
+      advice_given: string | null
+      referrals_count: number
+      leads_count: number
+      followed_up: boolean
+      person: { display_name: string; display_title: string | null; display_company: string | null } | null
+    }
+    return ((data ?? []) as unknown as Row[]).map((r) => ({
+      id: r.id,
+      personId: r.person_id,
+      personName: r.person?.display_name ?? 'Someone',
+      personTitle: r.person?.display_title ?? null,
+      personCompany: r.person?.display_company ?? null,
+      bookedFor: r.booked_for,
+      heldAt: r.held_at,
+      source: r.source,
+      status: r.status,
+      answers: {
+        interviewedWhere: r.q_interviewed_where,
+        whoElseLooking: r.q_who_else_looking,
+        howTheyHire: r.q_how_they_hire,
+        eventsRated: r.q_events_rated,
+      },
+      adviceGiven: r.advice_given,
+      referralsCount: r.referrals_count,
+      leadsCount: r.leads_count,
+      followedUp: r.followed_up,
+    }))
+  },
+
+  async markCoachingFollowedUp(id) {
+    const { error } = await supabase!.from('coaching_sessions').update({ followed_up: true }).eq('id', id)
+    fail(error)
+  },
+
+  async referrals() {
+    const { data, error } = await supabase!
+      .from('referrals')
+      .select('id, referred_name, referred_company, referred_title, referred_by_id, referred_by_name, context, kind, stage, thanked, received_on, contacted_on')
+      .in('stage', ['new', 'contacted', 'spoken'])
+      .order('received_on', { ascending: true })
+    fail(error)
+    type Row = {
+      id: string
+      referred_name: string
+      referred_company: string | null
+      referred_title: string | null
+      referred_by_id: string | null
+      referred_by_name: string
+      context: string | null
+      kind: Referral['kind']
+      stage: ReferralStage
+      thanked: boolean
+      received_on: string
+      contacted_on: string | null
+    }
+    return ((data ?? []) as Row[]).map((r) => ({
+      id: r.id,
+      referredName: r.referred_name,
+      referredCompany: r.referred_company,
+      referredTitle: r.referred_title,
+      referredById: r.referred_by_id,
+      referredByName: r.referred_by_name,
+      context: r.context,
+      kind: r.kind,
+      stage: r.stage,
+      thanked: r.thanked,
+      receivedOn: r.received_on,
+      contactedOn: r.contacted_on,
+    }))
+  },
+
+  async setReferralStage(id, stage) {
+    const { error } = await supabase!.from('referrals').update({ stage }).eq('id', id)
+    fail(error)
+  },
+
+  async widerLeads() {
+    const { data, error } = await supabase!
+      .from('wider_leads')
+      .select('id, company, role, function, country, location, source, mentioned_by_name, existing_client, passed_to, passed_on, split_note, status, notes, created_at')
+      .in('status', ['spotted', 'passed', 'meeting_booked'])
+      .order('created_at', { ascending: false })
+    fail(error)
+    type Row = {
+      id: string
+      company: string
+      role: string | null
+      function: string
+      country: 'US' | 'UK' | 'other'
+      location: string | null
+      source: string
+      mentioned_by_name: string | null
+      existing_client: boolean
+      passed_to: string | null
+      passed_on: string | null
+      split_note: string | null
+      status: WiderLeadStatus
+      notes: string | null
+      created_at: string
+    }
+    return ((data ?? []) as Row[]).map((r) => ({
+      id: r.id,
+      company: r.company,
+      role: r.role,
+      function: r.function,
+      country: r.country,
+      location: r.location,
+      source: r.source,
+      mentionedByName: r.mentioned_by_name,
+      existingClient: r.existing_client,
+      passedTo: r.passed_to,
+      passedOn: r.passed_on,
+      splitNote: r.split_note,
+      status: r.status,
+      notes: r.notes,
+      createdAt: r.created_at,
+    }))
+  },
+
+  async passWiderLead(id, colleague, split) {
+    const { error } = await supabase!
+      .from('wider_leads')
+      .update({ status: 'passed', passed_to: colleague, split_note: split })
+      .eq('id', id)
+    fail(error)
+  },
+
+  async setWiderLeadStatus(id, status) {
+    const { error } = await supabase!.from('wider_leads').update({ status }).eq('id', id)
+    fail(error)
   },
 }
 

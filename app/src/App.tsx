@@ -12,6 +12,9 @@ import { Home } from './routes/home/Home'
 import { Inbox } from './routes/inbox/Inbox'
 import { FollowUps } from './routes/leads/FollowUps'
 import { Jobs } from './routes/leads/Jobs'
+import { Referrals } from './routes/leads/Referrals'
+import { Wider } from './routes/leads/Wider'
+import { Coaching } from './routes/people/Coaching'
 import { SectionPage } from './routes/SectionPage'
 import { Profile } from './routes/settings/Profile'
 import { SignIn } from './routes/SignIn'
@@ -20,6 +23,9 @@ import { SignIn } from './routes/SignIn'
 const built: Record<string, ReactNode> = {
   'leads/jobs': <Jobs />,
   'leads/follow-ups': <FollowUps />,
+  'leads/referrals': <Referrals />,
+  'leads/wider': <Wider />,
+  'people/coaching': <Coaching />,
 }
 
 function sectionRoutes(section: Section) {

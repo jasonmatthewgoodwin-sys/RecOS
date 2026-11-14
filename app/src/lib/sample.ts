@@ -1,7 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
-import type { DataSource, FollowUp, InboxAction, InboxItem, JobLead } from './data'
+import type { CoachingSession, DataSource, FollowUp, InboxAction, InboxItem, JobLead, Referral, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { ukClock } from './time'
 
@@ -334,6 +334,45 @@ export function resetSampleFollowUps() {
 
 let sampleBlockMinutes: number | null = null
 
+// Coaching sessions this week and last (28.3). Two held, two still to come,
+// one held with two questions not asked (T-LEAD-5).
+export function freshSampleCoaching(): CoachingSession[] {
+  const none = { interviewedWhere: null, whoElseLooking: null, howTheyHire: null, eventsRated: null }
+  return [
+    { id: 'co-ben', personId: 'p-ben', personName: 'Ben Sample', personTitle: 'VP Product Marketing', personCompany: 'Contoso Demo Inc', bookedFor: todayAt(2), heldAt: null, source: 'league', status: 'booked', answers: none, adviceGiven: null, referralsCount: 0, leadsCount: 0, followedUp: false },
+    { id: 'co-nia', personId: 'p-nia', personName: 'Nia Pretend', personTitle: 'Senior PMM', personCompany: 'Stark Sample', bookedFor: todayAt(26), heldAt: null, source: 'inbound', status: 'booked', answers: none, adviceGiven: null, referralsCount: 0, leadsCount: 0, followedUp: false },
+    { id: 'co-eve', personId: 'p-eve', personName: 'Eve Invented', personTitle: 'Director of PMM', personCompany: 'Initech Mock', bookedFor: todayAt(-48), heldAt: todayAt(-48), source: 'inbound', status: 'held', answers: { interviewedWhere: 'Two Series B companies in the Bay Area', whoElseLooking: 'A former colleague now at Northwind Sample Co', howTheyHire: null, eventsRated: null }, adviceGiven: 'Lead with the launch story, not the title', referralsCount: 1, leadsCount: 0, followedUp: false },
+    { id: 'co-oli', personId: 'p-oli', personName: 'Oli Fictional', personTitle: 'Product Marketing Manager', personCompany: 'Hooli Pretend', bookedFor: todayAt(-9 * 24), heldAt: todayAt(-9 * 24), source: 'open_to_work', status: 'held', answers: { interviewedWhere: 'Nowhere yet', whoElseLooking: 'Nobody she would name', howTheyHire: 'Take-home task, then a panel', eventsRated: 'The pricing breakfast, highly' }, adviceGiven: 'Ask for the panel in advance', referralsCount: 0, leadsCount: 1, followedUp: true },
+  ]
+}
+
+export function freshSampleReferrals(): Referral[] {
+  return [
+    { id: 'rf-hal', referredName: 'Hal Hypothetical', referredCompany: 'Northwind Sample Co', referredTitle: 'Group PMM', referredById: 'p-eve', referredByName: 'Eve Invented', context: 'Worked together before. Said to be looking.', kind: 'person', stage: 'new', thanked: false, receivedOn: daysAgo(3), contactedOn: null },
+    { id: 'rf-pat', referredName: 'Pat Example', referredCompany: 'Globex Fiction', referredTitle: 'Head of Marketing', referredById: 'p-dev', referredByName: 'Dev Madeup', context: 'Hiring two PMMs in the new year.', kind: 'person', stage: 'new', thanked: false, receivedOn: daysAgo(1), contactedOn: null },
+    { id: 'rf-quin', referredName: 'Quin Sample', referredCompany: 'Umbrella Sample', referredTitle: null, referredById: 'p-finn', referredByName: 'Finn Fictional', context: 'Mentioned in passing.', kind: 'person', stage: 'contacted', thanked: true, receivedOn: daysAgo(9), contactedOn: daysAgo(6) },
+  ]
+}
+
+export function freshSampleWiderLeads(): WiderLead[] {
+  const monday = thisMonday()
+  return [
+    { id: 'wider-fabrikam', company: 'Fabrikam Test Ltd', role: 'Account Executive', function: 'sales', country: 'US', location: 'Austin', source: 'job_post', mentionedByName: 'Cara Placeholder', existingClient: false, passedTo: null, passedOn: null, splitNote: null, status: 'spotted', notes: 'Not PMM. May suit the sales team.', createdAt: hoursAgo(28) },
+    { id: 'wider-initech', company: 'Initech Mock', role: null, function: 'customer_success', country: 'US', location: null, source: 'coaching', mentionedByName: 'Eve Invented', existingClient: true, passedTo: null, passedOn: null, splitNote: null, status: 'spotted', notes: null, createdAt: hoursAgo(70) },
+    { id: 'wider-globex', company: 'Globex Fiction', role: 'RevOps Manager', function: 'revops', country: 'US', location: null, source: 'coaching', mentionedByName: 'Dev Madeup', existingClient: false, passedTo: 'Sam Colleague', passedOn: plusDays(monday, -8), splitNote: 'Half each, agreed on the call', status: 'passed', notes: null, createdAt: hoursAgo(200) },
+  ]
+}
+
+let sampleCoaching = freshSampleCoaching()
+let sampleReferrals = freshSampleReferrals()
+let sampleWider = freshSampleWiderLeads()
+
+export function resetSampleBd() {
+  sampleCoaching = freshSampleCoaching()
+  sampleReferrals = freshSampleReferrals()
+  sampleWider = freshSampleWiderLeads()
+}
+
 // Chased this week in the sample is eleven from earlier in the week plus the
 // sample leads chased since Monday, so a Chased on the page moves the number.
 const CHASED_BEFORE = 11
@@ -455,6 +494,41 @@ export const sampleSource: DataSource = {
   },
   async recordFollowUpBlock(minutes) {
     sampleBlockMinutes = minutes
+  },
+
+  async coachingSessions() {
+    return sampleCoaching.map((s) => ({ ...s, answers: { ...s.answers } }))
+  },
+  async markCoachingFollowedUp(id) {
+    const found = sampleCoaching.find((s) => s.id === id)
+    if (!found) throw new Error('No such session')
+    found.followedUp = true
+  },
+  async referrals() {
+    return sampleReferrals.filter((r) => r.stage !== 'not_relevant' && r.stage !== 'added_to_league').map((r) => ({ ...r }))
+  },
+  async setReferralStage(id, stage) {
+    const found = sampleReferrals.find((r) => r.id === id)
+    if (!found) throw new Error('No such referral')
+    found.stage = stage
+    if (stage === 'contacted') found.contactedOn ??= ukClock(new Date()).date
+  },
+  async widerLeads() {
+    return sampleWider.filter((w) => ['spotted', 'passed', 'meeting_booked'].includes(w.status)).map((w) => ({ ...w }))
+  },
+  async passWiderLead(id, colleague, split) {
+    const found = sampleWider.find((w) => w.id === id)
+    if (!found) throw new Error('No such lead')
+    if (!colleague.trim() || !split.trim()) throw new Error('Passing needs a colleague and a split')
+    found.status = 'passed'
+    found.passedTo = colleague
+    found.splitNote = split
+    found.passedOn = ukClock(new Date()).date
+  },
+  async setWiderLeadStatus(id, status) {
+    const found = sampleWider.find((w) => w.id === id)
+    if (!found) throw new Error('No such lead')
+    found.status = status
   },
 }
 

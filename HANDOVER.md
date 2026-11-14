@@ -79,7 +79,8 @@ To look at the components without signing in, add a file `app/.env.gallery` hold
 | P1-18 Business development tables | Done. Migration 0018 and six policy files applied to the test project on 14 November |
 | P1-19 KPI triggers for the BD tables | Done. Migration 0019 applied to the test project on 14 November |
 | P1-21 Deck, Card, Draft, Note, Switch, Field | Done. See `/gallery` |
-| P1-30 Follow-up lifecycle | Done locally: migration 0020. **Not applied to the test project** |
+| P1-30 Follow-up lifecycle | Done. Migration 0020 applied to the test project on 14 November |
+| P1-34 Coaching, Referrals, Wider business | Done. `/people/coaching`, `/leads/referrals`, `/leads/wider`. Not yet seen on the test project's data |
 | P1-31 Follow-ups deck, list, Monday focus | Done. `/leads/follow-ups`, `?view=list`, `?focus=monday`. Not yet seen on the test project's data |
 | P1-22 Inbox deck and list | Done. `/inbox`, with `?view=list`, `?view=sent` and the card by `?card=item:id`. Not yet seen on the test project's data by Jason |
 | P1-23 Leads, Jobs page and job card | Done. `/leads/jobs` and the card by `?card=job:id`. Built in a cloud session, landed from its patch on 14 November. Not yet seen on the test project's data by Jason |
@@ -110,7 +111,7 @@ What went wrong on 14 November, so it is not repeated: before the Site URL was c
 
 Migrations 0018 and 0019, the six new policy files, `db/seed/targets.sql` and `db/seed/sample_week.sql` were all run in the SQL editor. Home should show 07, 03, the calls left today, and 2/4.
 
-**Still to apply:** `db/migrations/0020_follow_up_lifecycle.sql`. Run it in the SQL editor; it needs nothing else. Migrations after 0020 that this file does not list yet are in `docs/build-log.md`.
+Migration 0020 was applied the same afternoon. Any migration after 0020 that this file does not list is in `docs/build-log.md` with a note on whether it has been applied.
 
 ### 3. Jason reviews Home
 
