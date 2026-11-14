@@ -9,7 +9,10 @@ const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 export const supabase: SupabaseClient | null =
   url && key
     ? createClient(url, key, {
-        auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
+        // 'implicit' so an emailed link works in whichever browser opens it. With
+        // 'pkce' the link only works in the browser that asked for it, which a
+        // link read on another screen or pre-opened by a mail scanner breaks.
+        auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
       })
     : null
 
