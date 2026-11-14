@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { night, theme } from '../theme/tokens'
-import { firstNameOf, readClaims } from './auth'
+import { firstNameOf, problemInUrl, readClaims } from './auth'
 import { twoDigits } from './format'
 import { nextLine } from './nextLine'
 import { landing, sections, visibleSections } from './sections'
@@ -114,6 +114,16 @@ describe('auth helpers', () => {
     expect(readClaims('not-a-token')).toEqual({})
     expect(firstNameOf('Jason Sample', 'x@example.com')).toBe('Jason')
     expect(firstNameOf(undefined, 'jason.sample@example.com')).toBe('Jason')
+  })
+
+  it('tells a dead link from a refusal from what the auth service put in the address', () => {
+    expect(problemInUrl('', '')).toBeNull()
+    expect(problemInUrl('', '#access_token=x&type=magiclink')).toBeNull()
+    expect(
+      problemInUrl('', '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired'),
+    ).toBe('expired')
+    expect(problemInUrl('?error=access_denied&error_description=Signups+not+allowed', '')).toBe('refused')
+    expect(problemInUrl('', '#error=server_error&error_description=Error+running+hook')).toBe('failed')
   })
 })
 

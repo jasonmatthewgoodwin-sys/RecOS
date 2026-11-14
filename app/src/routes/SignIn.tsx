@@ -1,11 +1,17 @@
 import { useState, type FormEvent } from 'react'
 import { PillButton } from '../components/PillButton'
 import { TextLink } from '../components/TextLink'
-import { useAuth } from '../lib/auth'
+import { useAuth, type SignInProblem } from '../lib/auth'
+
+const problemLine: Record<Exclude<SignInProblem, null>, string> = {
+  refused: 'This account does not have access.',
+  expired: 'That link has expired or was already used. Ask for a new one.',
+  failed: 'Sign-in did not finish. Try again.',
+}
 
 // The sign-in view (sections 5.2 and 5.5): one line and one pill button, with
 // a quieter link for the emailed one-time link. No password is ever asked for.
-export function SignIn({ refused }: { refused: boolean }) {
+export function SignIn({ problem }: { problem: SignInProblem }) {
   const auth = useAuth()
   const [mode, setMode] = useState<'microsoft' | 'email' | 'sent'>('microsoft')
   const [email, setEmail] = useState('')
@@ -24,7 +30,7 @@ export function SignIn({ refused }: { refused: boolean }) {
     <div className="flex min-h-96 flex-col items-start justify-center gap-8">
       <h1 className="text-title text-ink">RecOS</h1>
 
-      {refused && <p className="text-body text-ink">This account does not have access.</p>}
+      {problem && <p className="text-body text-ink">{problemLine[problem]}</p>}
 
       {mode === 'microsoft' && (
         <>

@@ -8,9 +8,12 @@ export type Role = 'owner' | 'reviewer'
 
 export type Session = { firstName: string; role: Role }
 
+/** Why the sign-in view is showing after an attempt, if it is. */
+export type SignInProblem = 'refused' | 'expired' | 'failed' | null
+
 type AuthState =
   | { status: 'loading' }
-  | { status: 'signed-out'; refused: boolean }
+  | { status: 'signed-out'; problem: SignInProblem }
   | { status: 'signed-in'; session: Session }
 
 type Auth = {
@@ -45,11 +48,11 @@ export function firstNameOf(fullName: unknown, email: unknown): string {
 
 type RawSession = { access_token: string; user: { email?: string; user_metadata?: Record<string, unknown> } }
 
-function toState(raw: RawSession | null, refused: boolean): AuthState {
-  if (!raw) return { status: 'signed-out', refused }
+function toState(raw: RawSession | null, problem: SignInProblem): AuthState {
+  if (!raw) return { status: 'signed-out', problem }
   const role = readClaims(raw.access_token).app_role
   // A session with no role is not on the allow-list (AUTH-2).
-  if (role !== 'owner' && role !== 'reviewer') return { status: 'signed-out', refused: true }
+  if (role !== 'owner' && role !== 'reviewer') return { status: 'signed-out', problem: 'refused' }
   const meta = raw.user.user_metadata ?? {}
   return {
     status: 'signed-in',
@@ -57,10 +60,20 @@ function toState(raw: RawSession | null, refused: boolean): AuthState {
   }
 }
 
-/** True when Microsoft or the auth service sent the browser back with a refusal. */
-function refusedInUrl(): boolean {
-  const text = `${window.location.search}${window.location.hash}`
-  return /[?&#]error(_code|_description)?=/.test(text)
+/**
+ * What the auth service said when it sent the browser back, read from the
+ * address. An emailed link works once and for 10 minutes (5.5); a dead link
+ * is not a refusal, and saying so stops the owner asking for access he has.
+ */
+export function problemInUrl(search: string, hash: string): SignInProblem {
+  const text = `${search}${hash}`
+  if (!/[?&#]error(_code|_description)?=/.test(text)) return null
+  const params = new URLSearchParams(text.replace(/^[?#]/, '').replace(/#/, '&'))
+  const code = (params.get('error_code') ?? '').toLowerCase()
+  const description = (params.get('error_description') ?? '').toLowerCase()
+  if (code.includes('otp_expired') || description.includes('expired') || description.includes('invalid')) return 'expired'
+  if (code.includes('access_denied') || params.get('error') === 'access_denied') return 'refused'
+  return 'failed'
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -72,9 +85,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!supabase) return
     const client = supabase
-    const refused = refusedInUrl()
+    const problem = problemInUrl(window.location.search, window.location.hash)
     const apply = (raw: RawSession | null) => {
-      const next = toState(raw, refused)
+      const next = toState(raw, problem)
       if (raw && next.status === 'signed-out') void client.auth.signOut()
       setState(next)
     }

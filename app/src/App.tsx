@@ -65,7 +65,7 @@ function Gate() {
   if (state.status === 'signed-out') {
     return (
       <Sheet>
-        <SignIn refused={state.refused} />
+        <SignIn problem={state.problem} />
       </Sheet>
     )
   }
