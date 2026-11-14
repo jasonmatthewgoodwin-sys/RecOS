@@ -893,7 +893,7 @@ test('P1-14, P1-15, P1-16: keys, run-start, the write contract with its merges a
     { kind: 'job_lead', data: { company: 'Initech Mock', role: 'PMM', source: 'linkedin_post' } },
     { kind: 'job_lead', data: { company: 'Initech Mock', role: 'PMM', source: 'linkedin_post', source_url: 'https://example.com/jobs/4', salary: '200k' } },
     { kind: 'signal', data: { person_name: 'Someone', signal_type: 'promoted', source: 'linkedin_alert' } },
-    { kind: 'content_draft', data: { hook: 'x' } },
+    { kind: 'call', data: { ref: 'x' } },
   ]
   const [{ out }] = await rows(`select agent_write($1, $2) as out`, [run, JSON.stringify(batch)])
   assert.deepEqual([out.created, out.merged, out.rejected], [2, 1, 4], JSON.stringify(out))
@@ -1053,6 +1053,87 @@ test('P1-47: the nightly job sweeps, retains and raises system notices; no brows
   // Tidy the planted rows so later tests see the sample week as seeded.
   await db.query(`delete from inbox_items where dedup_key like 'test:%'`)
   await db.query(`delete from follow_ups where dedup_key like 'test:%'`)
+})
+
+test('P1-44: content drafts and data points through the write contract, the format check, held drafts, the KPI triggers and who may read (12.1 to 12.3, 16.8, 16.9, 17.3)', async () => {
+  // 16.9: the format check in words.
+  const body = Array.from({ length: 6 }, (_, i) => `Line ${i} has a handful of words in it for the test.`).join('\n')
+  assert.deepEqual(await rows(`select ok, reason from content_format_check('A short hook', $1, 'A close', '{}')`, [body]), [{ ok: true, reason: null }])
+  const [{ reason }] = await rows(`select reason from content_format_check('A hook!', 'Too short', $1, '{a,b,c}')`, ['A close\nover two lines'])
+  assert.match(reason, /body 2 words, under 40/)
+  assert.match(reason, /close on more than one line/)
+  assert.match(reason, /more than 2 tags/)
+  assert.match(reason, /an exclamation mark/)
+
+  const [{ start }] = await rows(`select agent_run_start('a2_content', 'schedule', 'calls') as start`)
+  const run = start.run_id
+  const draft = (over) => ({ kind: 'content_draft', data: { kind: 'linkedin_post', run_source: 'calls', angle: 'hiring_manager', topic: 'Why PMM hires stall at the brief', hook: 'Most PMM hires stall before the first interview.', body, close_line: 'Fix the brief first.', hashtags: ['productmarketing'], ...over } })
+  const [{ out }] = await rows(`select agent_write($1, $2) as out`, [run, JSON.stringify([
+    draft({}),
+    draft({ topic: 'Why PMM hires stall at the brief.' }),
+    draft({ topic: 'A named person', body: body + '\nI spoke to Nia Pretend about this last week and she agreed.' }),
+    draft({ topic: 'Research with no data', run_source: 'pmm_community' }),
+    draft({ topic: 'Research with no link', run_source: 'pmm_community', data_point: '41% of PMM roles now ask for AI tooling' }),
+    draft({ topic: 'Research with a link', run_source: 'recruiting_news', angle: 'talent_market', data_point: '41% of PMM roles now ask for AI tooling', data_point_url: 'https://example.com/report' }),
+    draft({ topic: 'Wrong shape', kind: 'idea' }),
+    { kind: 'data_point', data: { statement: 'Open PMM roles in New York', value: '312', source_name: 'Example Jobs', source_url: 'https://example.com/jobs', category: 'job_postings', as_of: '2026-11-10' } },
+    { kind: 'data_point', data: { statement: 'No link', value: '1', source_name: 'Example' } },
+    { kind: 'data_point', data: { statement: 'Stale', value: '1', source_name: 'Example', source_url: 'https://example.com/old', as_of: '2026-01-01' } },
+    { kind: 'content_draft', data: { topic: 'x', salary: '1' } },
+  ])])
+  const r = out.results
+  assert.deepEqual([out.created, out.merged, out.rejected], [4, 0, 7], JSON.stringify(out))
+  assert.equal(r[0].outcome, 'created')
+  assert.equal(r[0].note, null)
+  assert.deepEqual([r[1].code, r[1].id], ['duplicate', r[0].id])
+  assert.match(r[1].message, /Pick another/)
+  assert.equal(r[2].code, 'policy_refused')
+  assert.match(r[2].message, /names Nia Pretend/)
+  assert.deepEqual([r[3].code, r[3].field], ['invalid', 'data_point'])
+  assert.equal(r[4].outcome, 'created')
+  assert.match(r[4].note, /Held: The data point has no link/)
+  assert.ok(r[4].inbox_item_id)
+  assert.equal(r[5].outcome, 'created')
+  assert.deepEqual([r[6].code, r[6].field], ['invalid', 'kind'])
+  assert.equal(r[7].outcome, 'created')
+  assert.deepEqual([r[8].code, r[8].field], ['invalid', 'source_url'])
+  assert.deepEqual([r[9].code, r[9].field], ['invalid', 'as_of'])
+  assert.deepEqual([r[10].code, r[10].field], ['invalid', 'salary'])
+  // Ranks (17.3): research with a link 30 + 15 + 20 + 10; the calls draft 20 + 20 + 15 + 10; the held one has no link.
+  assert.deepEqual(await rows(`select status, rank::int as rank, format_ok, word_count from content_items where id in ($1, $2, $3) order by rank desc`, [r[0].id, r[5].id, r[4].id]),
+    [{ status: 'draft', rank: 75, format_ok: true, word_count: 72 }, { status: 'draft', rank: 65, format_ok: true, word_count: 72 }, { status: 'held', rank: 50, format_ok: true, word_count: 72 }])
+  assert.deepEqual(await rows(`select type, ref_table, dedup_key from inbox_items where id = $1`, [r[4].inbox_item_id]), [{ type: 'content_draft', ref_table: 'content_items', dedup_key: `content_draft:held:${r[4].id}` }])
+  assert.equal(await count(`data_points where run_id = '${run}'`), 1)
+
+  // The context A2 may read, and only that.
+  const [{ ctx }] = await rows(`select agent_context('a2_content', array['topic_keys', 'sources']) as ctx`)
+  assert.ok(ctx.topic_keys.includes('why pmm hires stall at the brief'))
+  assert.deepEqual(ctx.sources, [])
+  assert.match(await refusedPlain(`select agent_context('a2_content', array['league'])`), /not_allowed/)
+
+  // CON-3 and CON-4: posting counts once; a testimonial received counts once; planned needs a day.
+  await owner(async () => {
+    assert.deepEqual(await rows(`select topic from content_items where status = 'draft' order by rank desc limit 1`), [{ topic: 'Research with a link' }])
+    assert.match(await refused(`update content_items set status = 'planned' where id = '${r[0].id}'`), /needs a day/)
+    assert.equal(await refused(`update content_items set status = 'planned', planned_for = current_date + 1 where id = '${r[0].id}'`), null)
+    assert.equal(await refused(`update content_items set status = 'posted', post_url = 'https://example.com/post' where id = '${r[0].id}'`), null)
+    assert.equal(await refused(`update content_items set impressions = 120 where id = '${r[0].id}'`), null)
+    assert.equal(await count(`kpi_events where kpi = 'linkedin_posts' and source_id = '${r[0].id}'`), 1)
+    assert.equal(await refused(`insert into content_items (kind, topic, topic_key, status, received_on, used_where) values ('testimonial', 'From a placed PMM', 'from a placed pmm', 'approved', current_date, 'website')`), null)
+    assert.equal(await count(`kpi_events where kpi = 'testimonials'`), 1)
+    assert.equal(await refused(`insert into content_items (kind, topic, topic_key, status) values ('idea', 'A post on levelling', 'a post on levelling', 'idea')`), null)
+    assert.match(await refused(`delete from content_items where id = '${r[0].id}'`), /permission denied/)
+    assert.match(await refused(`insert into data_points (statement, value, source_name, source_url) values ('x', '1', 'x', 'https://example.com')`), /permission denied|row-level security/)
+    assert.equal(await refused(`select * from data_points`), null)
+  })
+  await reviewer(async () => {
+    for (const t of ['content_items', 'content_sources', 'data_points']) assert.equal(await count(t), 0, `${t} as reviewer`)
+  })
+  // Tidy, so the nightly test sees the sample week as seeded.
+  await db.query(`delete from inbox_items where ref_table = 'content_items'`)
+  await db.query(`delete from data_points where run_id = $1`, [run])
+  await db.query(`delete from content_items where run_id = $1`, [run])
+  await db.query(`delete from agent_runs where id = $1`, [run])
 })
 
 // ---------------------------------------------------------------- run

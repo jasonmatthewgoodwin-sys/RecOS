@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { HeroStat } from '../../components/HeroStat'
 import { PillButton } from '../../components/PillButton'
-import { gradClass, toneForCount } from '../../lib/tone'
+import { skyClass, toneForCount } from '../../lib/tone'
 import { data } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { nextLine } from '../../lib/nextLine'
@@ -82,7 +82,8 @@ export function Home({ firstName }: { firstName: string }) {
 
   return (
     <div className="flex flex-col">
-      <div aria-hidden data-band={dayTone} className={`-mx-6 -mt-6 mb-8 h-28 rounded-t-sheet opacity-70 sm:-mx-16 sm:-mt-16 sm:mb-12 sm:h-40 ${gradClass[dayTone]}`} />
+      {/* The sky: a tall soft band across the top of the sheet, the day's state as its warm core, the plain sheet below (26). */}
+      <div aria-hidden data-band={dayTone} className={`-mx-6 -mt-6 mb-10 h-56 rounded-t-sheet sm:-mx-16 sm:-mt-16 sm:mb-14 sm:h-80 ${skyClass[dayTone]}`} />
       <p className="label-caps text-ink-2">{dateLine(now)}</p>
       <h1 className="mt-2 text-title text-ink">
         {greeting(now)}

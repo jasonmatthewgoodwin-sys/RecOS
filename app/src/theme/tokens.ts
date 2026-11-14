@@ -51,6 +51,10 @@ export const tone = {
   clearB: '#C9B8E8',
   mistA: '#DDD9D2',
   mistB: '#F6F4F0',
+  /** The Home sky: pale blue to near-sheet, with a lavender wash (26). */
+  skyA: '#C6D9EC',
+  skyB: '#E6ECF2',
+  skyC: '#D2C4EA',
   /** The window shadow: ink at 40 percent. */
   shadow: '#1C1C1A66',
 } as const
@@ -66,6 +70,9 @@ export const nightTone = {
   clearB: '#7A6AA3',
   mistA: '#3A3936',
   mistB: '#262624',
+  skyA: '#2D3644',
+  skyB: '#262A31',
+  skyC: '#3D3552',
   shadow: '#00000099',
 } as const
 

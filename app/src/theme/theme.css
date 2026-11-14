@@ -21,6 +21,10 @@
   --tone-clear-b: #c9b8e8;
   --tone-mist-a: #ddd9d2;
   --tone-mist-b: #f6f4f0;
+  /* The sky behind the Home band: pale blue to near-sheet, with a lavender wash. */
+  --sky-a: #c6d9ec;
+  --sky-b: #e6ecf2;
+  --sky-c: #d2c4ea;
   --window-shadow: 0 24px 60px -24px #1c1c1a66;
   color-scheme: light;
 }
@@ -44,6 +48,9 @@
   --tone-clear-b: #7a6aa3;
   --tone-mist-a: #3a3936;
   --tone-mist-b: #262624;
+  --sky-a: #2d3644;
+  --sky-b: #262a31;
+  --sky-c: #3d3552;
   --window-shadow: 0 24px 60px -24px #00000099;
   color-scheme: dark;
 }
@@ -226,6 +233,42 @@
 }
 @utility grad-new {
   background-image: linear-gradient(135deg, var(--tone-new-a), var(--tone-new-b));
+}
+/* The Home band (26): a sky with the day's state as its warm core. */
+@utility sky-new {
+  background-image:
+    radial-gradient(ellipse 55% 80% at 32% 100%, var(--tone-new-a) 0%, transparent 72%),
+    radial-gradient(ellipse 60% 75% at 82% 75%, var(--tone-new-b) 0%, transparent 72%),
+    radial-gradient(ellipse 50% 60% at 60% 20%, var(--sky-c) 0%, transparent 70%),
+    linear-gradient(180deg, var(--sky-a), var(--sky-b));
+}
+@utility sky-action {
+  background-image:
+    radial-gradient(ellipse 55% 80% at 32% 100%, var(--tone-action-a) 0%, transparent 72%),
+    radial-gradient(ellipse 60% 75% at 82% 75%, var(--tone-action-b) 0%, transparent 72%),
+    radial-gradient(ellipse 50% 60% at 60% 20%, var(--sky-c) 0%, transparent 70%),
+    linear-gradient(180deg, var(--sky-a), var(--sky-b));
+}
+@utility sky-pending {
+  background-image:
+    radial-gradient(ellipse 55% 80% at 32% 100%, var(--tone-pending-a) 0%, transparent 72%),
+    radial-gradient(ellipse 60% 75% at 82% 75%, var(--tone-pending-b) 0%, transparent 72%),
+    radial-gradient(ellipse 50% 60% at 60% 20%, var(--sky-c) 0%, transparent 70%),
+    linear-gradient(180deg, var(--sky-a), var(--sky-b));
+}
+@utility sky-clear {
+  background-image:
+    radial-gradient(ellipse 55% 80% at 32% 100%, var(--tone-clear-a) 0%, transparent 72%),
+    radial-gradient(ellipse 60% 75% at 82% 75%, var(--tone-clear-b) 0%, transparent 72%),
+    radial-gradient(ellipse 50% 60% at 60% 20%, var(--sky-c) 0%, transparent 70%),
+    linear-gradient(180deg, var(--sky-a), var(--sky-b));
+}
+@utility sky-mist {
+  background-image:
+    radial-gradient(ellipse 55% 80% at 32% 100%, var(--tone-mist-a) 0%, transparent 72%),
+    radial-gradient(ellipse 60% 75% at 82% 75%, var(--tone-mist-b) 0%, transparent 72%),
+    radial-gradient(ellipse 50% 60% at 60% 20%, var(--sky-c) 0%, transparent 70%),
+    linear-gradient(180deg, var(--sky-a), var(--sky-b));
 }
 @utility orb-new {
   background-image: radial-gradient(circle at 35% 30%, var(--tone-new-b), var(--tone-new-a) 55%, var(--sheet) 100%);

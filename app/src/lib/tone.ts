@@ -22,6 +22,8 @@ export function toneForCount(n: number | undefined, urgent = false): Tone {
 /** Literal class names, so the build sees them. */
 export const orbClass: Record<Tone | 'mist', string> = { new: 'orb-new', action: 'orb-action', pending: 'orb-pending', clear: 'orb-clear', mist: 'orb-mist' }
 export const gradClass: Record<Tone | 'mist', string> = { new: 'grad-new', action: 'grad-action', pending: 'grad-pending', clear: 'grad-clear', mist: 'grad-mist' }
+/** The Home sky band, one per state (26). */
+export const skyClass: Record<Tone | 'mist', string> = { new: 'sky-new', action: 'sky-action', pending: 'sky-pending', clear: 'sky-clear', mist: 'sky-mist' }
 export const toneBg: Record<Tone, string> = { new: 'bg-tone-new', action: 'bg-tone-action', pending: 'bg-tone-pending', clear: 'bg-tone-clear' }
 
 /** The word for a state, for a key or a label. */
