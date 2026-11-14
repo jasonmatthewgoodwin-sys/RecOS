@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Dots, EmptyLine } from './Quiet'
 import { Row, type RowProps } from './Row'
 import { TextLink } from './TextLink'
 
 type Props = {
-  rows?: (RowProps & { id: string })[]
+  /** A row with a section name sits under a labelled hairline when the name changes, such as LOWER FIT (28.2). */
+  rows?: (RowProps & { id: string; section?: string })[]
   state?: 'loading' | 'ready' | 'error'
   emptyText?: string
   limit?: number
@@ -21,8 +22,15 @@ export function RowList({ rows = [], state = 'ready', emptyText = 'All clear', l
   return (
     <div>
       <ul className="border-t border-rule">
-        {shown.map(({ id, ...row }) => (
-          <Row key={id} {...row} />
+        {shown.map(({ id, section, ...row }, i) => (
+          <Fragment key={id}>
+            {section && section !== shown[i - 1]?.section && (
+              <li aria-hidden data-divider className="label-caps flex min-h-8 items-end pb-1 text-ink-3">
+                {section}
+              </li>
+            )}
+            <Row {...row} />
+          </Fragment>
         ))}
       </ul>
       {!showAll && rows.length > limit && (

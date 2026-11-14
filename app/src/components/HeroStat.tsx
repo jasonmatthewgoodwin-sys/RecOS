@@ -18,7 +18,7 @@ export function HeroStat({ label, value, plus, meter, onClick }: Props) {
         {value ?? '–'}
         {plus && <span className="align-top text-title text-ink-2">+</span>}
       </span>
-      <span className="mt-4 flex items-center gap-4">
+      <span className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="label-caps text-ink-2">{label}</span>
         {meter && value !== undefined && <TickMeter filled={meter.filled} total={meter.total} />}
       </span>

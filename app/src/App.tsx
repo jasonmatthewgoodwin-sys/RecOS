@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Dots } from './components/Quiet'
 import { FileTabs, Paper, Sheet } from './components/Shell'
@@ -8,9 +9,15 @@ import { useQuery } from './lib/query'
 import { landing, sectionFor, sections, settings, visibleSections, type Section } from './lib/sections'
 import { Gallery } from './routes/gallery/Gallery'
 import { Home } from './routes/home/Home'
+import { Jobs } from './routes/leads/Jobs'
 import { SectionPage } from './routes/SectionPage'
 import { Profile } from './routes/settings/Profile'
 import { SignIn } from './routes/SignIn'
+
+// The index pages built so far. Anything else shows the SectionPage placeholder.
+const built: Record<string, ReactNode> = {
+  'leads/jobs': <Jobs />,
+}
 
 function sectionRoutes(section: Section) {
   if (section.pages.length === 0) {
@@ -19,6 +26,11 @@ function sectionRoutes(section: Section) {
   return (
     <Route key={section.key} path={section.path}>
       <Route index element={<Navigate to={landing(section)} replace />} />
+      {section.pages
+        .filter((p) => built[`${section.key}/${p.slug}`])
+        .map((p) => (
+          <Route key={p.slug} path={p.slug} element={built[`${section.key}/${p.slug}`]} />
+        ))}
       <Route path="*" element={<SectionPage section={section} />} />
     </Route>
   )

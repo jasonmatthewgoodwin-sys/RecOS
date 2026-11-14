@@ -67,6 +67,18 @@ export function useQuery<T>(key: string, fn: () => Promise<T>): QueryState<T> {
   return { data: entry?.data as T | undefined, status: entry?.status ?? 'loading' }
 }
 
+/**
+ * Change cached data in place, before the server has answered (25.5: actions
+ * update the screen first and the server second). The caller keeps the old
+ * value and puts it back if the write fails.
+ */
+export function setQueryData<T>(key: string, update: (current: T | undefined) => T) {
+  const entry = entries.get(key)
+  if (!entry) return
+  entries.set(key, { ...entry, data: update(entry.data as T | undefined), status: 'ready' })
+  emit(key)
+}
+
 /** Refetch keys that start with the prefix. Call after an action that could change them. */
 export function invalidate(prefix = '') {
   for (const key of entries.keys()) {

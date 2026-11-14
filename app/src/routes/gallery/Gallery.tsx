@@ -7,6 +7,7 @@ import { FileTab } from '../../components/FileTab'
 import { HeroStat } from '../../components/HeroStat'
 import { IndexTabs } from '../../components/IndexTab'
 import { Note } from '../../components/Note'
+import { NumberLine } from '../../components/NumberLine'
 import { PillButton } from '../../components/PillButton'
 import { Dots, EmptyLine } from '../../components/Quiet'
 import { Row } from '../../components/Row'
@@ -38,6 +39,12 @@ const sampleRows = Array.from({ length: 9 }, (_, i) => ({
   detail: 'A quiet detail',
   meta: `0${i + 1}:00`,
 }))
+
+const dividedRows = [
+  { id: 'd1', dot: 'solid' as const, title: 'Senior PMM', detail: 'Northwind Sample Co', meta: 'New York 2d' },
+  { id: 'd2', dot: 'solid' as const, title: 'Head of Product Marketing', detail: 'Acme Pretend Ltd', detailWord: 'Existing client', meta: 'Austin 4d' },
+  { id: 'd3', dot: 'solid' as const, title: 'Marketing Manager', detail: 'Dunder Mock Paper', meta: 'Scranton 8d', section: 'Lower fit' },
+]
 
 type SampleItem = { id: string; type: string; title: string; why: string; draft?: string }
 
@@ -222,23 +229,48 @@ export function Gallery() {
         </ul>
       </Block>
 
-      <Block name="RowList: 9 rows with Show more, loading, empty, error">
+      <Block name="RowList: 9 rows with Show more, a labelled divider, loading, empty, error">
         <RowList rows={sampleRows} />
+        <RowList rows={dividedRows} />
         <RowList state="loading" />
         <RowList rows={[]} emptyText="All clear" />
         <RowList state="error" />
       </Block>
 
-      <Block name="PillButton: primary, plain, busy, disabled">
+      <Block name="PillButton: primary, plain, busy, disabled, current (a row of stage pills)">
         <div className="flex flex-wrap gap-4">
           <PillButton kind="primary" label="Start" />
           <PillButton label="Plain" />
           <PillButton kind="primary" label="Busy" busy />
           <PillButton label="Disabled" disabled />
         </div>
+        <div className="flex flex-wrap gap-2">
+          <PillButton label="New" />
+          <PillButton label="Chased" current />
+          <PillButton label="Replied" />
+        </div>
       </Block>
 
-      <Block name="TextLink, EmptyLine, Dots">
+      <Block name="NumberLine: a funnel. Click the line for the ratios">
+        <NumberLine
+          pairs={[
+            { label: 'found', value: 64 },
+            { label: 'chased', value: 41 },
+            { label: 'replied', value: 9 },
+            { label: 'meetings', value: 4 },
+            { label: 'won', value: 1 },
+          ]}
+          note="Last 8 weeks"
+          detail="64% of found were chased. 22% of chased replied. 44% of replies became meetings. 25% of meetings were won"
+        />
+      </Block>
+
+      <Block name="TextLink: rest and active, EmptyLine, Dots">
+        <div className="flex gap-6">
+          <TextLink label="New" active />
+          <TextLink label="Chased" onClick={noop} />
+          <TextLink label="All" onClick={noop} />
+        </div>
         <TextLink label="Show more" onClick={noop} />
         <EmptyLine text="All clear" />
         <Dots />

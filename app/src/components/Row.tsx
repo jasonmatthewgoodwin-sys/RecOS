@@ -7,21 +7,27 @@ export type RowProps = {
   meta?: string
   /** One word in small capitals: Late, Cold or Auto. */
   word?: 'Late' | 'Cold' | 'Auto'
+  /** A few words in small capitals after the detail, such as Existing client (28.2). */
+  detailWord?: string
   done?: boolean
   /** Two text actions at most, shown on hover or focus. */
   actions?: RowAction[]
   onOpen?: () => void
+  /** The record behind the row, for page keys such as x (25.6). */
+  leadId?: string
 }
 
 // One line: a dot, a title, a quiet detail, a time (section 3.9).
 // State is shown by shape and words, never by colour alone (UX-7).
-export function Row({ dot, title, detail, meta, word, done, actions = [], onOpen }: RowProps) {
+export function Row({ dot, title, detail, meta, word, detailWord, done, actions = [], onOpen, leadId }: RowProps) {
   const shown = actions.slice(0, 2)
   return (
     <li className="group flex min-h-12 items-center gap-4 border-b border-rule">
       <button
         type="button"
         onClick={onOpen}
+        data-row
+        data-lead-id={leadId}
         data-done={done || undefined}
         className="flex min-h-12 min-w-0 flex-1 items-center gap-4 text-left"
       >
@@ -37,6 +43,7 @@ export function Row({ dot, title, detail, meta, word, done, actions = [], onOpen
         <span className={`truncate text-body ${done ? 'text-ink-3' : 'text-ink'}`}>{title}</span>
         {word && <span className="label-caps shrink-0 text-ink">{word}</span>}
         {detail && <span className="hidden truncate text-body text-ink-2 sm:inline">{detail}</span>}
+        {detailWord && <span className="label-caps hidden shrink-0 text-ink-2 sm:inline">{detailWord}</span>}
       </button>
       {shown.length > 0 && (
         <span className="hidden shrink-0 gap-4 group-focus-within:flex group-hover:flex">
