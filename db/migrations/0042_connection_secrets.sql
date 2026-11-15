@@ -1,4 +1,4 @@
--- 0041 Connection secrets and status (24.1, 24.9; 15 November 2026).
+-- 0042 Connection secrets and status (24.1, 24.9; 15 November 2026).
 --
 -- Outlook's refresh token and the Granola and Spott API keys live in Supabase
 -- Vault, one secret per owner and app, named recos_conn_<provider>_<owner>.

@@ -1,11 +1,11 @@
--- 0040 Connections (low-level design 24.1 and 24.9, Route B; 15 November 2026,
+-- 0041 Connections (low-level design 24.1 and 24.9, Route B; 15 November 2026,
 -- Pending Jason in docs/decisions.md). RecOS talks to Outlook (Microsoft
 -- Graph), Granola and Spott itself, with tokens and keys held in Supabase
--- Vault (0041), never in a table the browser can read.
+-- Vault (0042), never in a table the browser can read.
 --
 -- connections: one row per app the owner has connected. Status in words and
 -- when it last worked, nothing secret. The owner reads his own rows; only the
--- server functions write (through the definer functions in 0041).
+-- server functions write (through the definer functions in 0042).
 --
 -- connection_states: the short-lived state that ties an Outlook sign-in to
 -- the owner's session. Server only.

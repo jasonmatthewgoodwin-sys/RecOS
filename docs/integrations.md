@@ -60,4 +60,4 @@ Route B of 24.1, built but not deployed. Settings, Connections shows each app's 
 - **Granola.** Jason pastes an API key (Granola: Settings, API; Business plan). It is checked with one notes read and kept in Vault.
 - **Spott.** Jason pastes an API key (Spott: Settings, API; admin only). It is checked with a one-row candidate list (`GET https://api.gospott.com/candidates?limit=1`, `x-api-key`) and kept in Vault.
 
-Keys and tokens never reach the browser; the browser reads status only, from `connections` (migrations 0040 and 0041). The agents' Claude connectors keep working as before; nothing uses the stored Granola or Spott key yet.
+Keys and tokens never reach the browser; the browser reads status only, from `connections` (migrations 0041 and 0042). The agents' Claude connectors keep working as before; nothing uses the stored Granola or Spott key yet.

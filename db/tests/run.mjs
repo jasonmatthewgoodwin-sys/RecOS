@@ -1002,7 +1002,7 @@ test('P1-14, P1-15, P1-16: keys, run-start, the write contract with its merges a
   })
 })
 
-test('connections (0040, 0041): the owner reads status only; secrets sit in the vault, out of every browser role’s reach', async () => {
+test('connections (0041, 0042): the owner reads status only; secrets sit in the vault, out of every browser role’s reach', async () => {
   // The server's path, as service_role: connect, read back, mark failing, disconnect.
   await service(async () => {
     const [c] = await rows(`select status, account_label from connection_connect($1, 'granola', 'grn_invented_key_0001', 'Granola')`, [ownerId])

@@ -11,7 +11,7 @@
 // he signs in with his work account and consents as a user. Secrets, from
 // function settings only: MS_CLIENT_ID, MS_CLIENT_SECRET, MS_REDIRECT_URI
 // (default below) and APP_URL. The refresh token goes to Supabase Vault
-// (migration 0041) and never reaches the browser.
+// (migration 0042) and never reaches the browser.
 //
 // The adapter operations (sendMail, createDraft, listEvents, findMessages,
 // readMessage) and the send engine's hook sendViaGraph live in graph.ts so

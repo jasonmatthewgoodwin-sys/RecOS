@@ -7,7 +7,7 @@
 // raises for anyone else), the same way run-agent checks request-run.
 //
 // A key is checked with one harmless read before it is kept, then stored in
-// Supabase Vault (migration 0041). It is never returned, logged or echoed.
+// Supabase Vault (migration 0042). It is never returned, logged or echoed.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { serviceClient } from '../_shared/agent.ts'

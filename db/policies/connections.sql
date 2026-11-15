@@ -1,7 +1,7 @@
--- Row-level security for connections (low-level design 24.9; migration 0040).
+-- Row-level security for connections (low-level design 24.9; migration 0041).
 -- The owner reads his own rows: status, account label, when it last worked.
 -- No browser role may insert, update or delete; the server functions write
--- through the definer functions in 0041. Safe to run again.
+-- through the definer functions in 0042. Safe to run again.
 
 alter table public.connections enable row level security;
 

@@ -3,7 +3,7 @@
 // other functions: this file starts no server. The routes live in index.ts.
 //
 // The refresh token is kept in Supabase Vault through the definer functions
-// of migration 0041 and read only here, with the service role. Access tokens
+// of migration 0042 and read only here, with the service role. Access tokens
 // live in memory for the life of the isolate and are never stored or logged.
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
