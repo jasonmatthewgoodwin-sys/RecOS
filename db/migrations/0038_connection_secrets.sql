@@ -120,6 +120,15 @@ begin
   return s;
 end $$;
 
+-- The connections function asks this with the caller's own session token:
+-- the owner's user id, or a refusal. The database decides who the owner is.
+create function public.connection_owner() returns uuid
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if app_role() <> 'owner' or auth.uid() is null then raise exception 'not_allowed: only the owner can connect an app'; end if;
+  return auth.uid();
+end $$;
+
 -- Check a state without using it (the start route).
 create function public.connection_oauth_check(p_state text) returns uuid
 language plpgsql stable security definer set search_path = public as $$
@@ -170,5 +179,5 @@ grant execute on function
   public.connection_oauth_take(text)
   to service_role;
 
-revoke execute on function public.connection_oauth_begin(text) from public, anon;
-grant execute on function public.connection_oauth_begin(text) to authenticated, service_role;
+revoke execute on function public.connection_oauth_begin(text), public.connection_owner() from public, anon;
+grant execute on function public.connection_oauth_begin(text), public.connection_owner() to authenticated, service_role;

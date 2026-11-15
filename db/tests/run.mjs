@@ -1036,6 +1036,7 @@ test('connections (0037, 0038): the owner reads status only; secrets sit in the 
       assert.match(await refused(`select connection_connect('${ownerId}', 'granola', 'grn_invented_key_0003')`), /permission denied/)
       assert.match(await refused(`select connection_disconnect('${ownerId}', 'outlook')`), /permission denied/)
       assert.match(await refused(`select connection_oauth_take('x')`), /permission denied/)
+      assert.deepEqual(await rows(`select connection_owner() as o`), [{ o: ownerId }])
       assert.match(await refused(`select * from vault.decrypted_secrets`), /permission denied/)
       assert.match(await refused(`select * from vault.secrets`), /permission denied/)
       assert.match(await refused(`select * from connection_states`), /permission denied/)
@@ -1046,6 +1047,7 @@ test('connections (0037, 0038): the owner reads status only; secrets sit in the 
     await reviewer(async () => {
       assert.equal(await count('connections'), 0)
       assert.match(await refused(`select connection_oauth_begin('outlook')`), /only the owner/)
+      assert.match(await refused(`select connection_owner()`), /only the owner/)
       assert.match(await refused(`select * from vault.decrypted_secrets`), /permission denied/)
     })
     await noRole(async () => {

@@ -17,3 +17,18 @@ entrypoint = "../functions/run-agent/index.ts"
 [functions.send]
 verify_jwt = false
 entrypoint = "../functions/send/index.ts"
+
+# Outlook through Microsoft Graph. start is a browser link and callback is
+# Microsoft's redirect, so neither carries a Supabase token; both check the
+# one-time sign-in state themselves (functions/outlook/index.ts).
+#   npx supabase functions deploy outlook --project-ref vbnzdugfgoletjlumxba --use-api
+[functions.outlook]
+verify_jwt = false
+entrypoint = "../functions/outlook/index.ts"
+
+# Granola and Spott keys, and Disconnect. The owner's session is checked by
+# the database (connection_owner), as run-agent does for request-run.
+#   npx supabase functions deploy connections --project-ref vbnzdugfgoletjlumxba --use-api
+[functions.connections]
+verify_jwt = false
+entrypoint = "../functions/connections/index.ts"

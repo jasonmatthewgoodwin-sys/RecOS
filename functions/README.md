@@ -7,6 +7,8 @@ Supabase Edge Functions, in TypeScript for Deno. Each folder is one function. Th
 | `agent-write` | `POST /functions/v1/agent-write` | Agents, with `X-Agent-Name` and `X-Agent-Key` headers and an optional `Idempotency-Key` | Yes (P1-15, P1-16) |
 | `run-agent` | `POST .../run-agent/run-start`, `POST .../run-agent/run-finish`, `GET .../run-agent/context?want=`, `POST .../run-agent/request-run` | Agents; request-run is the owner's session | Yes (P1-14) |
 | `send` | `POST /send` (owner: approve, open_draft, mark_sent, cancel), `POST /send/tick`, `POST /send/report`, `POST /send/linkedin-warning` | Browser for `/send`; the sender routine, with its agent key, for the rest | Yes (0034, P1-26 to P1-29). Not deployed yet |
+| `outlook` | `GET /outlook/start?state=`, `GET /outlook/callback` | The owner's browser (a one-time state from `connection_oauth_begin`), then Microsoft | Yes (0037, 0038). Not deployed. Secrets `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_REDIRECT_URI`, `APP_URL`. See `functions/outlook/README.md` |
+| `connections` | `POST /connections/key` `{ provider, key }`, `POST /connections/disconnect` `{ provider }` | The owner's session | Yes (0037, 0038). Not deployed. No extra secrets |
 | `person` | `/person/find`, `/person/export`, `/person/delete` | Browser | The database functions exist (P1-46); the wrapper with rate limits is not yet written |
 | `export` | `POST /export` | Browser | Same as person |
 
