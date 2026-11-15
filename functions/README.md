@@ -28,7 +28,7 @@ supabase functions deploy send --no-verify-jwt
 
 The engine only decides and queues. A Claude cloud routine, created by Jason with his Outlook connector attached and the key of the Outlook sender row in Settings, Agents (Create key on its card), carries the messages:
 
-1. Every ten minutes between 08:00 and 18:00 New York time, `POST /functions/v1/send/tick` with `X-Agent-Name: sender` and `X-Agent-Key`. The reply lists up to 20 messages whose window has opened, each with the address, subject and body already filled.
+1. Three times an hour between 08:00 and 18:00 New York time (three routines at :05, :25 and :45, since a routine runs at most hourly), `POST /functions/v1/send/tick` with `X-Agent-Name: sender` and `X-Agent-Key`. The reply lists up to 20 messages whose window has opened, each with the address, subject and body already filled.
 2. For each one, send it from Jason's mailbox through the Outlook connector.
 3. `POST /functions/v1/send/report` with `{ message_id, ok, provider_ref }`, or `{ message_id, ok: false, error }` for a failure. The engine logs it, completes the follow-up and writes the KPI event.
 4. LinkedIn connection notes are never sent by the routine; they are copied by hand from the deck and marked sent there.
