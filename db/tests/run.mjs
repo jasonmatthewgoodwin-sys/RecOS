@@ -212,7 +212,7 @@ test('T-RLS-6: owner can neither read nor change agents.key_hash', async () => {
     assert.match(await refused(`select key_hash from agents`), /permission denied/)
     assert.match(await refused(`update agents set key_hash = 'x'`), /permission denied/)
     assert.equal(await refused(`update agents set enabled = false where code = 'a7_events' returning code`), null)
-    assert.equal((await rows(`select code from agents`)).length, 7)
+    assert.equal((await rows(`select code from agents`)).length, 8) // the seven agents and the sender (0039)
   })
 })
 

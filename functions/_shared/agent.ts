@@ -38,6 +38,8 @@ export function serviceClient(): SupabaseClient {
 }
 
 const AGENTS = ['a1_review', 'a2_content', 'a3_jobs', 'a4_signals', 'a5_followups', 'a6_calls', 'a7_events']
+// The sender routine (0034, 0039) carries queued email through /send/tick and /send/report only.
+AGENTS.push('sender')
 
 /** API-2: agent calls carry the agent name and key. Returns the agent code or an error response. */
 export async function authenticateAgent(req: Request, db: SupabaseClient): Promise<string | Response> {
