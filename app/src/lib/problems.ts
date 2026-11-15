@@ -70,3 +70,36 @@ export function captureContext(route: string): { route: string; userAgent: strin
     appVersion: (import.meta.env.VITE_APP_VERSION as string | undefined) ?? import.meta.env.MODE,
   }
 }
+
+/** A pasted or attached picture as a data URL, shrunk to 1600 pixels on its long side and 1.4 MB at most (0036). */
+export async function shrinkImage(file: Blob): Promise<string> {
+  const original = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result))
+    r.onerror = () => reject(new Error('unreadable'))
+    r.readAsDataURL(file)
+  })
+  const smaller = await new Promise<string | null>((resolve) => {
+    if (typeof Image === 'undefined' || typeof document === 'undefined') return resolve(null)
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, 1600 / Math.max(img.width, img.height, 1))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(img.width * scale))
+        canvas.height = Math.max(1, Math.round(img.height * scale))
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return resolve(null)
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      } catch {
+        resolve(null)
+      }
+    }
+    img.onerror = () => resolve(null)
+    img.src = original
+  })
+  const out = smaller ?? original
+  if (out.length > 1_400_000) throw new Error('too_big')
+  return out
+}

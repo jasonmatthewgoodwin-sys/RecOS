@@ -10,7 +10,7 @@ import { data, type AStarSuggestion } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { cityName } from '../../lib/leads'
-import { sections } from '../../lib/sections'
+import { usePeopleTabs } from '../../lib/peopleTabs'
 
 // People, A-star (31.1): suggestions from the weekly feed, one at a time,
 // with two controls only: Good and Not good. Good makes the person and
@@ -23,8 +23,7 @@ export function AStar() {
   const suggestions = useQuery(KEY, data.aStarSuggestions)
   const [deck, setDeck] = useState<AStarSuggestion[] | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  const tab = sections.find((s) => s.key === 'people')!
-  const tabs = tab.pages.map((p) => ({ label: p.label, route: `${tab.path}/${p.slug}` }))
+  const { tabs } = usePeopleTabs()
 
   useEffect(() => {
     if (deck === null && suggestions.status === 'ready' && suggestions.data) setDeck(suggestions.data)

@@ -15,10 +15,14 @@ export const listKeyOf = (slug: string) => slug.replace(/-/g, '_')
 export function usePeopleTabs(): { tabs: PeopleTab[]; lists: PeopleList[] | undefined } {
   const lists = useQuery(LISTS_KEY, data.lists)
   const section = sections.find((s) => s.key === 'people')!
-  const fixed = section.pages.filter((p) => !['senior-network', 'top-candidates', 'a-star'].includes(p.slug))
+  const fixed = section.pages.filter((p) => !['senior-network', 'top-candidates'].includes(p.slug))
   const live = (lists.data ?? []).filter((l) => !l.archived).sort((a, b) => a.position - b.position)
+  // The same tabs on every People page (Mia, 15 November 2026): until the lists load, or if they cannot, the two seeded lists stand in.
+  const listTabs: PeopleTab[] = lists.data
+    ? live.map((l) => ({ label: l.name, route: `${section.path}/${listSlug(l.key)}`, tone: l.colour === 'mist' ? undefined : l.colour, list: l }))
+    : section.pages.filter((p) => ['senior-network', 'top-candidates'].includes(p.slug)).map((p) => ({ label: p.label, route: `${section.path}/${p.slug}` }))
   const tabs: PeopleTab[] = [
-    ...live.map((l) => ({ label: l.name, route: `${section.path}/${listSlug(l.key)}`, tone: l.colour === 'mist' ? undefined : l.colour, list: l })),
+    ...listTabs,
     ...fixed.map((p) => ({ label: p.label, route: `${section.path}/${p.slug}` })),
   ]
   return { tabs, lists: lists.data }

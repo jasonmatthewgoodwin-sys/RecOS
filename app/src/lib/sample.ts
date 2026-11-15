@@ -12,7 +12,8 @@ import type {
   SearchCandidate,
   SearchNote,
   Problem,
-  ProblemNote, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
+  ProblemNote,
+  ProblemScreenshot, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { splitCopy, topicFrom } from './calendar'
 import type { SearchHit } from './capture'
@@ -462,10 +463,11 @@ export const pullsAsked: string[] = []
 function freshSampleTouches(): Record<string, Touch[]> {
   return {
     'p-ben': [
-      { id: 't1', touchedOn: daysAgo(4), channel: 'phone', kind: 'call', note: 'Talked about the Boston role' },
-      { id: 't2', touchedOn: daysAgo(40), channel: 'linkedin', kind: 'message_replied', note: null },
+      { id: 't1', touchedOn: daysAgo(4), channel: 'phone', kind: 'call', note: 'Talked about the Boston role', sourceUrl: 'https://notes.granola.ai/d/sample-ben-call' },
+      { id: 't0', touchedOn: daysAgo(6), channel: 'email', kind: 'message_replied', note: 'Replied about Thursday', sourceUrl: 'https://outlook.office.com/mail/inbox/id/SAMPLE-BEN-REPLY' },
+      { id: 't2', touchedOn: daysAgo(40), channel: 'linkedin', kind: 'message_replied', note: null, sourceUrl: 'https://www.linkedin.com/messaging/thread/sample-ben/' },
     ],
-    'p-cara': [{ id: 't3', touchedOn: daysAgo(45), channel: 'meeting', kind: 'meeting', note: 'Quarterly catch-up' }],
+    'p-cara': [{ id: 't3', touchedOn: daysAgo(45), channel: 'meeting', kind: 'meeting', note: 'Quarterly catch-up', sourceUrl: null }],
   }
 }
 
@@ -640,6 +642,7 @@ export function freshSampleProblems(): Problem[] {
   ]
 }
 let sampleProblems = freshSampleProblems()
+let sampleShots: ProblemScreenshot[] = []
 let sampleProblemNotes: ProblemNote[] = [{ id: 'n1', reportId: 'p2', author: 'Jason', body: 'Can reproduce on the laptop, not on the phone.', createdAt: `${daysAgo(1)}T09:00:00Z` }]
 export function resetSampleProblems() {
   sampleProblems = freshSampleProblems()
@@ -717,7 +720,7 @@ function freshSampleAgents(): Agent[] {
   })
   return [
     a('a1_review', 'Weekly review', 'Monday 08:17', { lastRun: { startedAt: hoursAgoIso(30), status: 'ok', itemsCreated: 1 }, spentThisMonth: 1.2 }),
-    a('a2_content', 'Content engine', 'Monday 08:58 and 09:15, Thursday 09:30', { lastRun: { startedAt: hoursAgoIso(26), status: 'ok', itemsCreated: 3 }, spentThisMonth: 6.4 }),
+    a('a2_content', 'Content engine', 'Monday 08:58 and 09:15, Thursday 09:30', { lastRun: { startedAt: hoursAgoIso(26), status: 'ok', itemsCreated: 3 }, spentThisMonth: 6.4, connections: ['granola', 'linkedin_read', 'claude'], criteria: { posts_a_week: 2 } }),
     a('a3_jobs', 'Jobs pipeline', 'Collect Tuesday and Friday 13:00. Match Wednesday 07:41', { lastRun: { startedAt: hoursAgoIso(5), status: 'ok', itemsCreated: 4 }, spentThisMonth: 12.4, connections: ['linkedin_scraper', 'outlook_mail', 'claude'], criteria: { lookback_days: 7, icp: 'B2B software, US, product marketing' } }),
     a('a4_signals', 'Relationship signals', 'Friday 12:47', { modelTier: 'light', monthlyBudget: 20, lastRun: { startedAt: hoursAgoIso(50), status: 'failed', itemsCreated: 0 }, consecutiveFailures: 1, spentThisMonth: 2.1, connections: ['linkedin_read', 'claude'], criteria: { lookback_days: 7, uk_to_us: true } }),
     a('a5_followups', 'Follow-up queue', 'Monday 07:30, Thursday 07:30, weekdays 08:45 for the calendar', { lastRun: { startedAt: hoursAgoIso(2), status: 'ok', itemsCreated: 2 }, spentThisMonth: 4.8 }),
@@ -1466,6 +1469,15 @@ export const sampleSource: DataSource = {
     sampleProblemNotes.push(made)
     return { ...made }
   },
+  async problemScreenshots(id) {
+    return sampleShots.filter((s) => s.reportId === id).map((s) => ({ ...s }))
+  },
+  async addProblemScreenshot(id, dataUrl) {
+    if (sampleShots.filter((s) => s.reportId === id).length >= 3) throw new Error('limit: Three pictures at most on one report')
+    const made: ProblemScreenshot = { id: `s-${Date.now()}-${sampleShots.length}`, reportId: id, data: dataUrl, createdAt: new Date().toISOString() }
+    sampleShots.push(made)
+    return { ...made }
+  },
   async searches() {
     return sampleSearches.map((x) => ({ ...x }))
   },
@@ -1584,6 +1596,11 @@ export const sampleSource: DataSource = {
     found.active = true
     for (const x of sampleTemplates) if (x.type === found.type && x.name === found.name && x.id !== id) x.active = false
     return 0
+  },
+  async seedContentIdeas() {
+    const before = sampleContent.length
+    for (const c of freshSampleContent()) if (!sampleContent.some((x) => x.topic === c.topic)) sampleContent.push({ ...c })
+    return sampleContent.length - before
   },
   async seedTemplates() {
     const before = sampleTemplates.length

@@ -5,6 +5,7 @@ import { PillButton } from '../../components/PillButton'
 import { TextLink } from '../../components/TextLink'
 import { cityName } from '../../lib/leads'
 import { data, type Member, type PeopleList, type Tier, type Touch } from '../../lib/data'
+import { isOutlookLink, sourceLabel } from '../../lib/links'
 import { signalWord, sinceWord, tierWord, tiers } from '../../lib/people'
 import { invalidate, useQuery } from '../../lib/query'
 
@@ -57,6 +58,8 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
 
   const history: Touch[] = touches.data ?? []
   const shown = showAll ? history : history.slice(0, 5)
+  // The last message with a link (Mia, 15 November 2026): the newest touch that came from an email or a LinkedIn thread.
+  const lastMessage = history.find((t) => t.sourceUrl && (t.channel === 'email' || t.channel === 'linkedin' || isOutlookLink(t.sourceUrl)))
 
   function confirmTier() {
     if (!reason.trim()) {
@@ -101,6 +104,7 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
                 {m.crmUrl && <TextLink label="Open in CRM" href={m.crmUrl} icon="open" />}
                 {/* Every person has a way to their LinkedIn profile (14 November 2026): the link held, or a search by name and company. */}
                 <TextLink label={m.profileUrl ? 'LinkedIn profile' : 'Find on LinkedIn'} href={m.profileUrl ?? linkedInSearch(m)} icon="open" />
+                {lastMessage?.sourceUrl && <TextLink label={isOutlookLink(lastMessage.sourceUrl) || lastMessage.channel === 'email' ? 'Last email' : 'Last message'} href={lastMessage.sourceUrl} icon={isOutlookLink(lastMessage.sourceUrl) || lastMessage.channel === 'email' ? 'mail' : 'open'} />}
               </p>
             </div>
           ),
@@ -216,6 +220,7 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
                       <span className="font-mono text-label text-ink-2">{t.touchedOn}</span>
                       <span>{kindWord[t.kind] ?? t.kind}</span>
                       {t.note && <span className="text-ink-2">{t.note}</span>}
+                      {t.sourceUrl && <TextLink label={sourceLabel(t.sourceUrl)} href={t.sourceUrl} icon="open" />}
                     </li>
                   ))}
                 </ul>

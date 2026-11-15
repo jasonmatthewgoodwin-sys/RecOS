@@ -123,9 +123,11 @@ describe('UK to US', () => {
 describe('Accounts', () => {
   it('lists open doors first and introduces a colleague, which raises a wider lead', async () => {
     const { account, wider } = mock()
-    open('/people/accounts')
-    await waitFor(() => expect(screen.getAllByTestId('hero-value')[0].textContent).toBe('02'))
-    const rows = Array.from(document.querySelectorAll('[data-row]')).map((r) => r.textContent ?? '')
+    open('/leads/wider')
+    // Accounts sit under Wider business only (15 November 2026); the first hero number on the group's clients block is open doors.
+    const group = await screen.findByRole('region', { name: "The group's clients" })
+    await waitFor(() => expect(group.querySelectorAll('[data-row]').length).toBe(2))
+    const rows = Array.from(group.querySelectorAll('[data-row]')).map((r) => r.textContent ?? '')
     expect(rows[0]).toMatch(/Contoso Demo Inc|Initech Mock/)
     expect(rows[0]).toContain('Open door')
     await userEvent.click(screen.getByRole('button', { name: /^Contoso Demo Inc/ }))
@@ -137,7 +139,7 @@ describe('Accounts', () => {
     await userEvent.click(within(card).getByRole('button', { name: 'Introduce' }))
     await waitFor(() => expect(account).toHaveBeenCalledWith('acc-1', { introducedTo: 'Sam Church' }))
     expect(wider).toHaveBeenCalledWith(expect.objectContaining({ company: 'Contoso Demo Inc', accountId: 'acc-1', existingClient: true, notes: 'Split: Half each' }))
-    await waitFor(() => expect(screen.getAllByTestId('hero-value')[0].textContent).toBe('01'))
+    await waitFor(() => expect(within(group).getByRole('button', { name: /^Contoso Demo Inc/ })).not.toHaveTextContent('Open door'))
   })
 
   it('the two lists also sit under Wider business', async () => {

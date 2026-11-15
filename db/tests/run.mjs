@@ -48,7 +48,7 @@ await db.exec(`insert into auth.users (email, raw_user_meta_data) values ('  Own
 await db.exec(`insert into auth.users (email) values ('stranger@example.test')`)
 const ownerId = (await db.query(`select id from app_users where role = 'owner'`)).rows[0]?.id
 
-for (const file of ['targets.sql', 'lists.sql', 'sample_week.sql', 'sample_league.sql', 'templates.sql']) {
+for (const file of ['targets.sql', 'lists.sql', 'sample_week.sql', 'sample_league.sql', 'templates.sql', 'content_ideas.sql']) {
   await db.exec(read('seed', file))
   // Seeds must be safe to run twice.
   await db.exec(read('seed', file))
@@ -1579,6 +1579,40 @@ test('0034: templates carry versions and approval; the engine decides, fills, qu
     assert.equal(w6.results[1].state, 'draft', 'one click waits for Send')
     assert.equal((await rows(`select level_at_creation, run_id from messages where id = $1`, [w6.results[1].id]))[0].level_at_creation, 'one_click')
     assert.equal((await rows(`select run_id from messages where id = $1`, [w6.results[1].id]))[0].run_id, r6.run_id)
+  })
+})
+
+test('0035: ten content ideas from the desk land once as drafts the owner reads and the reviewer cannot; the content agent carries the call notes connection', async () => {
+  await owner(async () => {
+    const ideas = await rows(`select topic, status, format_ok, run_source, word_count from content_items where kind = 'linkedin_post' and prompted_by is not null order by rank desc`)
+    assert.equal(ideas.length, 10, JSON.stringify(ideas.map((i) => i.topic)))
+    assert.ok(ideas.every((i) => i.status === 'draft' && i.format_ok && i.word_count >= 40 && i.word_count <= 90), 'drafts in the post format')
+    assert.equal(ideas[0].topic, 'First quarter hires')
+    const [{ n }] = await rows(`select content_ideas_seed() as n`)
+    assert.equal(Number(n), 0, 'safe to run again')
+    const [{ c }] = await rows(`select connections as c from agents where code = 'a2_content'`)
+    assert.ok(c.includes('granola'), 'content agent reads the call notes')
+  })
+  await reviewer(async () => {
+    assert.equal(await count('content_items'), 0, 'the reviewer sees no content')
+    await refused(`select content_ideas_seed()`, /not_allowed/)
+  })
+})
+
+test('0036: a picture attaches to a report as a data URL, three at most, never anything but an image, and the reviewer sees none', async () => {
+  await owner(async () => {
+    const [r] = await rows(`insert into problem_reports (description) values ('The window scrolls') returning id`)
+    const png = 'data:image/png;base64,iVBORw0KGgo='
+    await db.query(`insert into problem_screenshots (report_id, data) values ($1, $2), ($1, $2), ($1, $2)`, [r.id, png])
+    const [{ n, b }] = await rows(`select count(*) as n, min(bytes) as b from problem_screenshots where report_id = $1`, [r.id])
+    assert.equal(Number(n), 3)
+    assert.equal(Number(b), png.length, 'bytes is the length of the data')
+    await refused(`insert into problem_screenshots (report_id, data) values ('${r.id}', '${png}')`, /Three pictures at most/)
+    await refused(`insert into problem_screenshots (report_id, data) values ('${r.id}', 'data:text/html,<b>x</b>')`, /check|violates/)
+    await refused(`delete from problem_screenshots where report_id = '${r.id}'`, /permission denied/)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('problem_screenshots'), 0)
   })
 })
 

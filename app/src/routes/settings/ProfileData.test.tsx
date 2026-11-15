@@ -87,7 +87,7 @@ describe('Settings, Data', () => {
     const found = await within(find).findByRole('list', { name: 'People found' })
     expect(within(found).getAllByRole('listitem')).toHaveLength(1)
     expect(within(found).getByText('Ben Sample')).toBeInTheDocument()
-    expect(within(found).getByText(/Appears in 1 list place, 2 touches\./)).toBeInTheDocument()
+    expect(within(found).getByText(/Appears in 1 list place, 3 touches./)).toBeInTheDocument()
 
     await userEvent.click(within(found).getByRole('button', { name: 'Delete' }))
     const form = within(found).getByRole('form', { name: 'Delete Ben Sample' })
@@ -98,7 +98,7 @@ describe('Settings, Data', () => {
     await userEvent.type(within(form).getByLabelText('Type DELETE'), 'DELETE')
     await userEvent.click(within(form).getByRole('button', { name: 'Delete for good' }))
     expect(remove).toHaveBeenLastCalledWith('p-ben', 'DELETE')
-    expect(await within(find).findByText('Removed Ben Sample: 1 list place, 2 touches, 1 person row. The CRM record was not touched.')).toBeInTheDocument()
+    expect(await within(find).findByText('Removed Ben Sample: 1 list place, 3 touches, 1 person row. The CRM record was not touched.')).toBeInTheDocument()
     expect(within(find).queryByRole('list', { name: 'People found' })).not.toBeInTheDocument()
 
     const audit = screen.getByRole('region', { name: 'Audit log' })

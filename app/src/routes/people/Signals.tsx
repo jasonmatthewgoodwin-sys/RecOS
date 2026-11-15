@@ -191,12 +191,23 @@ export function Signals() {
           sections={[
             { body: <p className="text-ink-2">{changeWords(chosen)}{chosen.onList ? '. On the list' : ''}</p> },
             { label: 'Why it matters', body: <p>{whyWords(chosen)}</p> },
-            ...(chosen.detail ? [{ label: 'What was seen', body: <p>{chosen.detail}</p> }] : []),
+            // The source sits with what was seen (Mia, 15 November 2026): the post, the email or the page the agent read.
+            ...(chosen.detail || chosen.sourceUrl
+              ? [
+                  {
+                    label: 'What was seen',
+                    body: (
+                      <div className="flex flex-col gap-1">
+                        {chosen.detail && <p>{chosen.detail}</p>}
+                        {chosen.sourceUrl && <TextLink label={sourceLabel(chosen.sourceUrl)} href={chosen.sourceUrl} icon="open" />}
+                      </div>
+                    ),
+                  },
+                ]
+              : []),
             {
               body: (
-                <div className="max-w-prose">
-                  <Draft text={drafts[chosen.id] ?? draftWords(chosen)} original={draftWords(chosen)} onChange={(t) => setDrafts((d) => ({ ...d, [chosen.id]: t }))} />
-                </div>
+                <Draft text={drafts[chosen.id] ?? draftWords(chosen)} original={draftWords(chosen)} onChange={(t) => setDrafts((d) => ({ ...d, [chosen.id]: t }))} />
               ),
             },
           ]}
@@ -212,7 +223,6 @@ export function Signals() {
               {!chosen.onList && senior && <TextLink label="Add to league" onClick={() => void addToList(chosen).then(closeCard)} />}
               {chosen.signalType === 'open_to_work' && <TextLink label="Offer coaching" onClick={() => void move(chosen, 'actioned').then(closeCard)} />}
               <TextLink label="Ignore" onClick={() => void move(chosen, 'ignored').then(closeCard)} />
-              {chosen.sourceUrl && <TextLink label={sourceLabel(chosen.sourceUrl)} href={chosen.sourceUrl} icon="open" />}
             </>
           }
           foot={`Seen ${chosen.seenOn}, strength ${chosen.strength}`}

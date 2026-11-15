@@ -217,7 +217,7 @@ export type Member = {
   introsMade: number
 }
 
-export type Touch = { id: string; touchedOn: string; channel: string; kind: string; note: string | null }
+export type Touch = { id: string; touchedOn: string; channel: string; kind: string; note: string | null; sourceUrl: string | null }
 
 export type SignalStatus = 'new' | 'actioned' | 'added_to_league' | 'ignored' | 'expired'
 
@@ -670,6 +670,8 @@ export type Problem = {
   resolvedAt: string | null
 }
 export type ProblemNote = { id: string; reportId: string; author: string | null; body: string; createdAt: string }
+/** A picture pasted or attached to a report (0036): a shrunk image as a data URL, three at most. */
+export type ProblemScreenshot = { id: string; reportId: string; data: string; createdAt: string }
 export type ProblemReport = Pick<Problem, 'title' | 'description' | 'severity' | 'reporterName'> & { route: string; userAgent: string; viewport: string; appVersion: string }
 export type ProblemPatch = Partial<Pick<Problem, 'status' | 'severity' | 'assignee' | 'resolution' | 'title'>>
 
@@ -882,6 +884,8 @@ export interface DataSource {
   updateProblem(id: string, patch: ProblemPatch): Promise<void>
   problemNotes(id: string): Promise<ProblemNote[]>
   addProblemNote(id: string, body: string, author: string | null): Promise<ProblemNote>
+  problemScreenshots(id: string): Promise<ProblemScreenshot[]>
+  addProblemScreenshot(id: string, dataUrl: string): Promise<ProblemScreenshot>
 
   /** Searches and the candidates in play (30, 31.1). */
   searches(): Promise<Search[]>
@@ -911,6 +915,8 @@ export interface DataSource {
   /** Returns how many waiting messages were queued by the approval. */
   approveTemplate(id: string): Promise<number>
   seedTemplates(): Promise<number>
+  /** Ten post drafts from the owner's calls and the agents' work (0035). Returns how many were added. */
+  seedContentIdeas(): Promise<number>
   sendLog(limit?: number): Promise<SendLogRow[]>
   /** Through the send server function. Only the engine can queue, mark or cancel a message (MSG-4). */
   sendAction(messageId: string, action: SendAction): Promise<SendActionResult>
@@ -1589,13 +1595,13 @@ const live: DataSource = {
   async touches(personId, limit = 5) {
     const { data, error } = await supabase!
       .from('touches')
-      .select('id, touched_on, channel, kind, note')
+      .select('id, touched_on, channel, kind, note, source_url')
       .eq('person_id', personId)
       .order('touched_on', { ascending: false })
       .limit(limit)
     fail(error)
-    type Row = { id: string; touched_on: string; channel: string; kind: string; note: string | null }
-    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, touchedOn: r.touched_on, channel: r.channel, kind: r.kind, note: r.note }))
+    type Row = { id: string; touched_on: string; channel: string; kind: string; note: string | null; source_url: string | null }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, touchedOn: r.touched_on, channel: r.channel, kind: r.kind, note: r.note, sourceUrl: r.source_url }))
   },
 
   async logReply(personId) {
@@ -2258,6 +2264,19 @@ const live: DataSource = {
     return { id: n.id, reportId: n.report_id, author: n.author, body: n.body, createdAt: n.created_at }
   },
 
+  async problemScreenshots(id) {
+    const { data, error } = await supabase!.from('problem_screenshots').select('id, report_id, data, created_at').eq('report_id', id).order('created_at')
+    fail(error)
+    return ((data ?? []) as { id: string; report_id: string; data: string; created_at: string }[]).map((s) => ({ id: s.id, reportId: s.report_id, data: s.data, createdAt: s.created_at }))
+  },
+
+  async addProblemScreenshot(id, dataUrl) {
+    const { data, error } = await supabase!.from('problem_screenshots').insert({ report_id: id, data: dataUrl }).select('id, report_id, data, created_at').single()
+    fail(error)
+    const s = data as { id: string; report_id: string; data: string; created_at: string }
+    return { id: s.id, reportId: s.report_id, data: s.data, createdAt: s.created_at }
+  },
+
   async searches() {
     const { data, error } = await supabase!.from('searches').select('*').order('opened_on', { ascending: false })
     fail(error)
@@ -2417,6 +2436,12 @@ const live: DataSource = {
 
   async approveTemplate(id) {
     const { data, error } = await supabase!.rpc('template_approve', { p_id: id })
+    fail(error)
+    return Number(data ?? 0)
+  },
+
+  async seedContentIdeas() {
+    const { data, error } = await supabase!.rpc('content_ideas_seed')
     fail(error)
     return Number(data ?? 0)
   },

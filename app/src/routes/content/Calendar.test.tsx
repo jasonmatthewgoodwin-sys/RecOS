@@ -54,7 +54,6 @@ describe('Content calendar', () => {
     mock()
     open()
     await waitFor(() => expect(values()).toEqual(['1/2', '01']))
-    expect(screen.getByRole('img', { name: '1 of 2' })).toBeInTheDocument()
     expect(within(day('2026-11-09')).getByRole('button', { name: /^The best PMM hires/ }).textContent).toContain('Posted')
     expect(within(day('2026-11-12')).getByRole('button', { name: /^Three questions a CMO/ }).textContent).toContain('Planned')
     expect(within(day('2026-11-10')).getByRole('button', { name: 'Add a post on Tuesday 10 November' })).toBeInTheDocument()

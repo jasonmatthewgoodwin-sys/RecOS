@@ -124,7 +124,7 @@ What went wrong on 14 November, so it is not repeated: before the Site URL was c
 
 Migrations 0018 and 0019, the six new policy files, `db/seed/targets.sql` and `db/seed/sample_week.sql` were all run in the SQL editor. Home should show 07, 03, the calls left today, and 2/4.
 
-Migrations 0020 and 0021, with 0021's policies, view and seeds (`lists.sql`, `sample_league.sql`), were applied the same afternoon. Migrations 0022 to 0034, with their policies, views and seeds, are all applied as of 15 November. `docs/build-log.md` has a row per migration with the date it reached the test project.
+Migrations 0020 and 0021, with 0021's policies, view and seeds (`lists.sql`, `sample_league.sql`), were applied the same afternoon. Migrations 0022 to 0034, with their policies, views and seeds, are all applied as of 15 November. 0035 (content ideas) and 0036 (pictures on problem reports) are written and tested but not yet applied. `docs/build-log.md` has a row per migration with the date it reached the test project.
 
 ### 3. Jason reviews Home
 
@@ -175,7 +175,21 @@ Mia asked for the whole build overnight, one push, no phases. In the morning no 
 3. Deploy the `send` function from his laptop: `supabase functions deploy send --no-verify-jwt` (see `functions/README.md`).
 4. Settings, Agents: make an agent key named `sender`, then create the sender routine in Claude with his Outlook connector, as `functions/README.md` describes. Until it exists, queued emails wait and the log says so.
 5. Add one instruction to the signals agent's prompt: read `requests` from run-start and write `profile_summary` back for each `profile:<person id>`.
-6. Decide the rows marked Pending in `docs/decisions.md` dated 15 November (Send leaves the follow-up open until sent; Open in Outlook as a compose link; the two-hour pause; no bounce hold yet; the sender routine), and the LinkedIn sending tool and caps from the business-development brief.
+6. Apply migrations 0035 and 0036 with `db/policies/problem_screenshots.sql` and `db/seed/content_ideas.sql` to the test project (SQL editor, or the CLI). Then open Content, Drafts and press Add ideas from your calls if the seed was not run. Ten drafts in his voice appear; approve the good ones, bin the rest.
+7. Decide the rows marked Pending in `docs/decisions.md` dated 15 November (Send leaves the follow-up open until sent; Open in Outlook as a compose link; the two-hour pause; no bounce hold yet; the sender routine), and the LinkedIn sending tool and caps from the business-development brief.
+
+## Getting Jason's email sending, in plain steps
+
+RecOS never calls Claude itself and needs no Claude API key. Emails leave through Jason's own Outlook, carried by a Claude routine on his claude.ai account, the same way the seven agents run. The engine in RecOS decides what may go and when; the routine only carries it.
+
+1. **Deploy the send function** from Jason's laptop, in the repository folder: `supabase functions deploy send --no-verify-jwt`. One minute.
+2. **Approve the templates** in RecOS, Settings, Templates. Nothing sends by itself until a template is approved.
+3. **Make the sender key** in Settings, Agents: a key named `sender`. Copy it once.
+4. **Create the routine** in claude.ai: name it RecOS sender, attach the Outlook connector, add `RECOS_URL` and `RECOS_KEY_SENDER` as environment variables, schedule it every 10 minutes on weekdays 08:00 to 18:00 New York time, and paste the prompt from `agents/prompts/sender.md`.
+5. **Send one test** to himself: Settings, Send rules, pick a type, Send a test. Watch the Send log fill in. Until a test has passed, the engine holds every email of that type.
+6. **Switch on automatic** per message type in Send rules, one type at a time, starting with the thank-you after a call.
+
+Later, if he wants to drop the routine, the same function can send through Microsoft Graph directly: that needs an app registration in Microsoft Entra with Mail.Send on his mailbox and the token in the function's secrets (section 15.6, check P6). Not needed for day one.
 
 ## Hosting on Vercel, so Jason can sign in from a web address
 

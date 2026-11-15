@@ -93,6 +93,7 @@ export function Problems({ me }: { me: string | null }) {
 
 function ProblemCard({ problem: p, me, onPatch, onClose }: { problem: Problem; me: string | null; onPatch: (change: ProblemPatch) => void; onClose: () => void }) {
   const notes = useQuery(`${KEY}.notes.${p.id}`, () => data.problemNotes(p.id))
+  const shots = useQuery(`${KEY}.shots.${p.id}`, () => data.problemScreenshots(p.id))
   const [status, setStatus] = useState<ProblemStatus>(p.status)
   const [severity, setSeverity] = useState<ProblemSeverity>(p.severity)
   const [assignee, setAssignee] = useState(p.assignee ?? '')
@@ -164,6 +165,24 @@ function ProblemCard({ problem: p, me, onPatch, onClose }: { problem: Problem; m
             </div>
           ),
         },
+        ...((shots.data ?? []).length > 0
+          ? [
+              {
+                label: 'Pictures',
+                body: (
+                  <ul className="flex flex-wrap gap-3" aria-label="Pictures">
+                    {(shots.data ?? []).map((s, i) => (
+                      <li key={s.id}>
+                        <a href={s.data} target="_blank" rel="noopener">
+                          <img src={s.data} alt={`Picture ${i + 1}`} className="max-h-64 rounded-card border border-rule" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ),
+              },
+            ]
+          : []),
         {
           label: 'Notes',
           body: (

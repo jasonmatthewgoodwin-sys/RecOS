@@ -143,6 +143,17 @@ export function Drafts() {
     }
   }
 
+  async function seedIdeas() {
+    try {
+      const n = await data.seedContentIdeas()
+      invalidate(KEY)
+      setDeck(null)
+      setNote(n > 0 ? `${n} ideas added. Approve the ones worth posting.` : 'Those ideas are already here.')
+    } catch {
+      setNote('That did not save. Try again.')
+    }
+  }
+
   const deckView =
     deck === null ? (
       items.status === 'error' ? <EmptyLine text="Could not load. Try again." /> : <Dots />
@@ -186,6 +197,12 @@ export function Drafts() {
         tabs={tabs}
         aside={view === 'deck' ? <TextLink label="Gallery" onClick={() => setView('gallery')} icon="grid" /> : <TextLink label="Deck" onClick={() => setView('deck')} icon="inbox" />}
       />
+      {/* An empty Content tab offers the desk's own ideas (Mia, 15 November 2026): ten drafts from the owner's calls and the agents' work. */}
+      {items.status === 'ready' && all.length === 0 && (
+        <div>
+          <TextLink label="Add ideas from your calls" icon="plus" onClick={() => void seedIdeas()} />
+        </div>
+      )}
       {view === 'deck' ? (
         deckView
       ) : items.status === 'loading' ? (

@@ -66,7 +66,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
   return (
     <div
       data-card-backdrop
-      className={`absolute inset-0 z-20 flex items-start justify-center bg-paper/70 p-0 backdrop-blur-sm sm:items-center sm:p-8 ${closing ? 'animate-fade-out' : 'animate-fade'}`}
+      className={`absolute inset-0 z-20 flex items-start justify-center overflow-y-auto bg-paper/70 p-0 backdrop-blur-sm sm:px-8 sm:pb-8 sm:pt-6 ${closing ? 'animate-fade-out' : 'animate-fade'}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close()
       }}
@@ -92,7 +92,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
         onTouchEnd={() => {
           touchStart.current = null
         }}
-        className={`relative flex max-h-full w-full flex-col overflow-y-auto rounded-sheet border border-rule bg-sheet p-5 shadow-window outline-none sm:w-[46rem] sm:p-7 ${
+        className={`relative flex w-full flex-col rounded-sheet border border-rule bg-sheet p-5 shadow-window outline-none sm:w-[46rem] sm:p-7 ${
           closing ? 'animate-rise-out' : 'animate-rise'
         }`}
       >
@@ -110,7 +110,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
         </div>
         <h2 className="text-title text-ink">{title}</h2>
 
-        {/* Everything fits the window without scrolling (14 November 2026): tight sections, and from three sections on the rest sit in two columns on a laptop. */}
+        {/* Everything fits the window without scrolling (14 November 2026): tight sections. Every section runs the full width of the window, which opens near the top and never scrolls inside itself (Mia, 15 November 2026). */}
         {sections.slice(0, 1).map((s, i) => (
           <section key={i} className="mt-4 border-t border-rule pt-4">
             {s.label && <h3 className="label-caps mb-1 text-ink-2">{s.label}</h3>}
@@ -118,7 +118,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
           </section>
         ))}
         {sections.length > 1 && (
-          <div className={sections.length >= 3 ? 'sm:grid sm:grid-cols-2 sm:gap-x-8' : ''}>
+          <div>
             {sections.slice(1).map((s, i) => (
               <section key={i + 1} className="mt-4 border-t border-rule pt-4">
                 {s.label && <h3 className="label-caps mb-1 text-ink-2">{s.label}</h3>}

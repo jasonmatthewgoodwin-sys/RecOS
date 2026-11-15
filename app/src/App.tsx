@@ -30,7 +30,6 @@ import { ThisWeek } from './routes/numbers/ThisWeek'
 import { FollowUps } from './routes/leads/FollowUps'
 import { Jobs } from './routes/leads/Jobs'
 import { UkToUs } from './routes/leads/UkToUs'
-import { AccountsPage } from './routes/people/Accounts'
 import { Referrals } from './routes/leads/Referrals'
 import { Wider } from './routes/leads/Wider'
 import { Coaching } from './routes/people/Coaching'
@@ -64,7 +63,6 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'leads/follow-ups': <FollowUps />,
     'leads/referrals': <Referrals />,
     'leads/uk-us': <UkToUs />,
-    'people/accounts': <AccountsPage />,
     'leads/wider': <Wider />,
     'people/coaching': <Coaching />,
     'people/senior-network': <PeopleList listKey="senior_network" />,
@@ -88,9 +86,6 @@ function firstBuilt(section: Section, built: Record<string, ReactNode>): string 
 }
 
 function sectionRoutes(section: Section, built: Record<string, ReactNode>) {
-  if (section.key === 'events') {
-    return <Route key={section.key} path={`${section.path}/*`} element={<Navigate to="/content/events" replace />} />
-  }
   if (section.pages.length === 0) {
     return <Route key={section.key} path={`${section.path}/*`} element={<PhoneGate title={section.label}><SectionPage section={section} /></PhoneGate>} />
   }
@@ -155,6 +150,7 @@ export function SignedIn({ session }: { session: Session }) {
           {owner && <Route path="/inbox" element={<Inbox />} />}
           {owner && <Route path="/leads/follow-ups" element={<FollowUps />} />}
           {allowed.filter((s) => s.key !== 'home').map((s) => sectionRoutes(s, built))}
+          <Route path="/events/*" element={<Navigate to="/content/events" replace />} />
           {import.meta.env.DEV && <Route path="/gallery" element={<Gallery />} />}
           <Route path="*" element={<Navigate to={start} replace />} />
         </Routes>

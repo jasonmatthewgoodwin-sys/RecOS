@@ -12,7 +12,6 @@ import { TextLink } from '../../components/TextLink'
 import { data, type Account, type AccountKind } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
-import { sections } from '../../lib/sections'
 
 // Accounts (29.3, and Jason's notes of 14 November 2026): the group's
 // clients and the owner's own accounts, thin references only. Open doors
@@ -23,16 +22,6 @@ import { sections } from '../../lib/sections'
 export const ACCOUNTS_KEY = 'people.accounts'
 
 export const kindWord: Record<AccountKind, string> = { group_client: "The group's clients", my_account: 'Your accounts' }
-
-export function AccountsPage() {
-  const tab = sections.find((s) => s.key === 'people')!
-  const tabs = tab.pages.map((p) => ({ label: p.label, route: `${tab.path}/${p.slug}` }))
-  return (
-    <div className="flex flex-col gap-8">
-      <AccountsBody title="People" tabs={tabs} kinds={['my_account', 'group_client']} />
-    </div>
-  )
-}
 
 type BodyProps = { title: string; tabs: { label: string; route: string }[]; kinds: AccountKind[]; header?: boolean }
 

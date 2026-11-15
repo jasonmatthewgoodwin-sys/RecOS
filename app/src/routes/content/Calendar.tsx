@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Field } from '../../components/Field'
-import { HeroStat } from '../../components/HeroStat'
 import { Icon } from '../../components/Icon'
 import { Note } from '../../components/Note'
 import { PageHeader } from '../../components/PageHeader'
@@ -148,11 +147,21 @@ export function Calendar() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Content" tabs={tabs} />
-      <div className="grid grid-cols-2 gap-x-8 gap-y-8">
-        <HeroStat label="This week" value={`${posted}/${POSTS_A_WEEK}`} meter={{ filled: posted, total: POSTS_A_WEEK }} tone={posted >= POSTS_A_WEEK ? 'clear' : 'pending'} icon="pen" />
-        <HeroStat label="Ready" value={twoDigits(ready.length).text} tone={ready.length > 0 ? 'new' : undefined} icon="check" />
-      </div>
+      {/* The calendar sits at the top; the two numbers are small, in the top right (Mia, 15 November 2026). */}
+      <PageHeader
+        title="Content"
+        tabs={tabs}
+        aside={
+          <p className="flex items-baseline gap-6 font-mono text-label text-ink-2" aria-label="This month">
+            <span>
+              <span data-testid="hero-value" className="text-body text-ink tabular-nums">{posted}/{POSTS_A_WEEK}</span> this week
+            </span>
+            <span>
+              <span data-testid="hero-value" className="text-body text-ink tabular-nums">{twoDigits(ready.length).text}</span> ready
+            </span>
+          </p>
+        }
+      />
       {body}
       {composer && (composer.kind === 'day' || editing) && (
         <ComposerCard

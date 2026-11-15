@@ -30,14 +30,18 @@ const byRoute: [string, string[]][] = [
   ['/leads', ['a3_jobs']],
   ['/people/signals', ['a4_signals']],
   ['/people/coaching', ['a6_calls']],
-  ['/people/accounts', ['a3_jobs']],
   ['/people', ['a4_signals', 'a5_followups']],
   ['/content/events', ['a7_events']],
+  ['/content/calendar', ['a2_content', 'a7_events']],
+  ['/content/testimonials', ['a6_calls', 'a5_followups']],
+  ['/content/campaigns', ['a3_jobs', 'a5_followups']],
   ['/content', ['a2_content']],
-  ['/events', ['a7_events']],
   ['/inbox', ['a3_jobs', 'a4_signals', 'a5_followups', 'a6_calls', 'a7_events']],
   ['/numbers', ['a1_review']],
-  ['/searches', ['a6_calls', 'a5_followups']],
+  ['/searches/this-week', ['a6_calls']],
+  ['/searches', ['a6_calls', 'a3_jobs']],
+  ['/people/a-star', ['a3_jobs']],
+  ['/home', ['a5_followups']],
 ]
 
 export function agentsFor(pathname: string): string[] {

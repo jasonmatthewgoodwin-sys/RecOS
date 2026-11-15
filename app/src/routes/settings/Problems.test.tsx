@@ -23,6 +23,8 @@ function mock() {
   vi.spyOn(data, 'problemNotes').mockImplementation(sampleSource.problemNotes)
   return {
     report: vi.spyOn(data, 'reportProblem').mockImplementation((input) => sampleSource.reportProblem(input)),
+    shot: vi.spyOn(data, 'addProblemScreenshot').mockImplementation((id, d) => sampleSource.addProblemScreenshot(id, d)),
+    shots: vi.spyOn(data, 'problemScreenshots').mockImplementation((id) => sampleSource.problemScreenshots(id)),
     update: vi.spyOn(data, 'updateProblem').mockImplementation((id, patch) => sampleSource.updateProblem(id, patch)),
     addNote: vi.spyOn(data, 'addProblemNote').mockImplementation((id, body, author) => sampleSource.addProblemNote(id, body, author)),
   }
@@ -56,14 +58,13 @@ describe('Report a problem', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Report a problem' }))
     const dialog = await screen.findByRole('dialog', { name: 'Something wrong?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
-    expect(within(dialog).getByText('Say what happened.')).toBeInTheDocument()
+    expect(within(dialog).getByText('Say what happened, or paste a picture.')).toBeInTheDocument()
     expect(report).not.toHaveBeenCalled()
     await userEvent.type(within(dialog).getByLabelText('What happened'), 'The meter shows five ticks for four targets.')
-    await userEvent.selectOptions(within(dialog).getByLabelText('How bad'), 'low')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(report).toHaveBeenCalledTimes(1))
     const input = report.mock.calls[0][0]
-    expect(input).toMatchObject({ title: null, description: 'The meter shows five ticks for four targets.', severity: 'low', reporterName: 'Jason', route: '/numbers/this-week?x=1' })
+    expect(input).toMatchObject({ title: null, description: 'The meter shows five ticks for four targets.', severity: 'medium', reporterName: 'Jason', route: '/numbers/this-week?x=1' })
     expect(input.userAgent.length).toBeGreaterThan(0)
     expect(input.viewport).toMatch(/^\d+x\d+$/)
     expect(await screen.findByRole('dialog', { name: 'Raised as BUG-4' })).toBeInTheDocument()

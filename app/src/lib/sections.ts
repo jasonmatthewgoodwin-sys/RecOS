@@ -45,7 +45,7 @@ export const sections: Section[] = [
       { label: 'Top candidates', slug: 'top-candidates' },
       { label: 'A-star', slug: 'a-star' },
       { label: 'Signals', slug: 'signals' },
-      { label: 'Accounts', slug: 'accounts' },
+      // Accounts left People on 15 November 2026 (Mia): companies sit under Business development, Wider business, with the jobs they relate to.
       { label: 'Coaching', slug: 'coaching' },
     ],
   },
@@ -79,7 +79,7 @@ export const sections: Section[] = [
       { label: 'Campaigns', slug: 'campaigns' },
     ],
   },
-  { key: 'events', label: 'Events', path: '/events', arrives: 'phase 3', pages: [] },
+  // The Events file tab went on 15 November 2026 (Mia): Events lives under Content, and /events redirects there.
   {
     key: 'numbers',
     label: 'Numbers',
