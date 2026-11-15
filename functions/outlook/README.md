@@ -34,7 +34,7 @@ Type the secret values in the terminal, never in a chat. If his firm requires ad
 
 ## Where the secrets live
 
-The refresh token, and the Granola and Spott keys, are Vault secrets named `recos_conn_<provider>_<owner id>`. Only the definer functions in migration 0038 touch the vault, and all but `connection_oauth_begin` and `connection_owner` are granted to `service_role` alone. The browser sees the `connections` table: status, account label, when it was connected and last worked, the last error. Microsoft rotates the refresh token; `getAccessToken` stores the new one each time.
+The refresh token, and the Granola and Spott keys, are Vault secrets named `recos_conn_<provider>_<owner id>`. Only the definer functions in migration 0041 touch the vault, and all but `connection_oauth_begin` and `connection_owner` are granted to `service_role` alone. The browser sees the `connections` table: status, account label, when it was connected and last worked, the last error. Microsoft rotates the refresh token; `getAccessToken` stores the new one each time.
 
 Health (24.9): a good token refresh marks the connection `connected` and moves `last_ok_at`; `invalid_grant` or a 401 marks it `needs_sign_in`; a 403 or 5xx from Graph marks it `failing`.
 

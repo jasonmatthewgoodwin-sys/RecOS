@@ -1,4 +1,4 @@
--- Row-level security for connection_states (migration 0037). The short-lived
+-- Row-level security for connection_states (migration 0040). The short-lived
 -- Outlook sign-in state. Made by connection_oauth_begin for the owner and
 -- taken by the outlook function's callback, both definer functions, so no
 -- browser role holds a policy. Safe to run again.
