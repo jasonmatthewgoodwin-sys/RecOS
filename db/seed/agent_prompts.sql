@@ -344,16 +344,16 @@ You have called run-start. Keep from its response: run_id (call it RUN_ID), sett
 Every call carries both headers: -H "X-Agent-Name: $AGENT_NAME" -H "X-Agent-Key: $AGENT_KEY". Never print or store the key.
 
 Context (read once at the start):
-curl -s "$RECOS_URL/functions/v1/run-agent/context?want=dnc" -H "X-Agent-Name: $AGENT_NAME" -H "X-Agent-Key: $AGENT_KEY"
+curl -s "$RECOS_URL/run-agent/context?want=dnc" -H "X-Agent-Name: $AGENT_NAME" -H "X-Agent-Key: $AGENT_KEY"
 
 Write (batches of 50 records or fewer, numbered 1, 2, 3 within the run):
 cat > batch-1.json <<'JSON'
 {"run_id":"RUN_ID","records":[{"kind":"...","data":{}}]}
 JSON
-curl -s -X POST "$RECOS_URL/functions/v1/agent-write" -H "X-Agent-Name: $AGENT_NAME" -H "X-Agent-Key: $AGENT_KEY" -H "Content-Type: application/json" -H "Idempotency-Key: RUN_ID-1" --data @batch-1.json
+curl -s -X POST "$RECOS_URL/agent-write" -H "X-Agent-Name: $AGENT_NAME" -H "X-Agent-Key: $AGENT_KEY" -H "Content-Type: application/json" -H "Idempotency-Key: RUN_ID-1" --data @batch-1.json
 
 Finish (once, last):
-curl -s -X POST "$RECOS_URL/functions/v1/run-agent/run-finish" -H "X-Agent-Name: $AGENT_NAME" -H "X-Agent-Key: $AGENT_KEY" -H "Content-Type: application/json" --data '{"run_id":"RUN_ID","status":"ok","errors":[],"summary":"line one\nline two"}'
+curl -s -X POST "$RECOS_URL/run-agent/run-finish" -H "X-Agent-Name: $AGENT_NAME" -H "X-Agent-Key: $AGENT_KEY" -H "Content-Type: application/json" --data '{"run_id":"RUN_ID","status":"ok","errors":[],"summary":"line one\nline two"}'
 
 ## Write rules
 - data holds only the fields shown for that kind. An unknown field is refused, not ignored. Leave a field out rather than guess (AG-2). Never send IDs or duplicate keys you made up; the endpoint builds the keys.
