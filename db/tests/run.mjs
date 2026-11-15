@@ -963,7 +963,8 @@ test('P1-14, P1-15, P1-16: keys, run-start, the write contract with its merges a
   assert.deepEqual(fu.results.map((x) => x.outcome), ['created', 'merged', 'rejected', 'rejected', 'created', 'created', 'created', 'merged', 'rejected'], JSON.stringify(fu))
   assert.deepEqual(await rows(`select due_on::text as due_on from follow_ups where id = $1`, [fu.results[0].id]), [{ due_on: '2026-11-17' }])
   assert.equal(fu.results[3].code, 'not_found')
-  assert.equal(await count('calendar_today'), 2)
+  // 0045: the batch replaces only the day it covers, so the seeded rows stay.
+  assert.equal(await count(`calendar_today where event_ref in ('ev-1', 'ev-2')`), 2)
   assert.equal(fu.results[8].code, 'not_allowed')
 
   // Referrals (A6) count once through the trigger and land in the Inbox.
@@ -1092,8 +1093,11 @@ test('P1-47: the nightly job sweeps, retains and raises system notices; no brows
   await db.query(`update agents set consecutive_failures = 2 where code = 'a4_signals'`)
   await db.query(`insert into audit_log (actor, action) values ('test', 'old entry')`)
   await db.query(`update audit_log set at = now() - interval '25 months' where action = 'old entry'`)
-  const callsBefore = await count('calendar_today')
-  assert.ok(callsBefore > 0)
+  // 0045: a call from yesterday goes at night; today and the days ahead stay.
+  await db.query(`insert into calendar_today (owner_id, starts_at, title, event_ref) values ($1, now() - interval '30 hours', 'Yesterday', 'test:yesterday')`, [ownerId])
+  const callsBefore = await count(`calendar_today where starts_at < uk_day_start(uk_day(now()))`)
+  const callsAhead = await count(`calendar_today where starts_at >= uk_day_start(uk_day(now()))`)
+  assert.ok(callsBefore > 0 && callsAhead > 0)
 
   const [{ night }] = await rows(`select nightly() as night`)
   assert.equal(night.sweeps.inbox_stale, 1)
@@ -1107,7 +1111,7 @@ test('P1-47: the nightly job sweeps, retains and raises system notices; no brows
   assert.deepEqual(await rows(`select status from inbox_items where dedup_key = 'test:stale'`), [{ status: 'stale' }])
   assert.deepEqual(await rows(`select status from inbox_items where dedup_key = 'test:woken'`), [{ status: 'new' }])
   assert.deepEqual(await rows(`select status from follow_ups where dedup_key = 'test:fu:reopen'`), [{ status: 'open' }])
-  assert.equal(await count('calendar_today'), 0)
+  assert.equal(await count('calendar_today'), callsAhead)
   assert.equal(await count(`audit_log where action = 'old entry'`), 0)
 
   // The checks: a failed agent, a stuck queue and a timed-out run, each once a day.
@@ -1778,6 +1782,86 @@ test('0043: a test send goes to the owner\'s own address, queued now, and the ti
   await reviewer(async () => {
     await refused(`select send_test('thanks_after_call')`, /not_allowed/)
   })
+})
+
+test('0045: the calendar holds seven days; a batch replaces only the days it covers; the night keeps the days ahead', async () => {
+  const [{ today }] = await rows(`select uk_day(now())::text as today`)
+  const day = (n) => {
+    const d = new Date(`${today}T12:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+  const ev = (ref, n, hour, over = {}) => ({
+    event_ref: ref,
+    starts_at: `${day(n)}T${String(hour).padStart(2, '0')}:00:00Z`,
+    title: 'Candidate screen',
+    call_type: 'candidate_screen',
+    person_name: 'Ada Example',
+    ...over,
+  })
+  const perDay = async () =>
+    (await rows(`select uk_day(starts_at)::text as d, count(*)::int as n from calendar_today where event_ref like 'wk-%' group by 1 order by 1`)).map((r) => `${r.d}:${r.n}`)
+  const write = async (data) => {
+    const [{ s }] = await rows(`select agent_run_start('a5_followups', 'schedule') as s`)
+    const [{ w }] = await rows(`select agent_write($1, $2) as w`, [s.run_id, JSON.stringify([{ kind: 'calendar_today', data }])])
+    await rows(`select agent_run_finish($1, 'ok')`, [s.run_id])
+    return w.results[0]
+  }
+  const days = [0, 1, 2, 3, 4, 5, 6]
+
+  // A batch for seven days stores seven days: a call and a stand-up each day, day 3 a call only.
+  const week = []
+  for (const n of days) {
+    week.push(ev(`wk-${n}-a`, n, 10))
+    if (n !== 3) week.push(ev(`wk-${n}-b`, n, 14, { call_type: 'internal', is_external: false, title: 'Desk stand-up' }))
+  }
+  const r1 = await write({ from: day(0), to: day(6), events: week })
+  assert.equal(r1.outcome, 'created', JSON.stringify(r1))
+  assert.deepEqual(await perDay(), days.map((n) => `${day(n)}:${n === 3 ? 1 : 2}`))
+
+  // A second batch for one day replaces only that day; a call moved from day 5 to day 2 moves with it.
+  const r2 = await write({ events: [ev('wk-2-c', 2, 9), ev('wk-5-a', 2, 16)] })
+  assert.equal(r2.outcome, 'created', JSON.stringify(r2))
+  assert.deepEqual(await perDay(), days.map((n) => `${day(n)}:${n === 3 || n === 5 ? 1 : 2}`))
+  assert.deepEqual(
+    await rows(`select event_ref from calendar_today where event_ref like 'wk-2-%' or event_ref = 'wk-5-a' order by 1`),
+    [{ event_ref: 'wk-2-c' }, { event_ref: 'wk-5-a' }],
+  )
+
+  // An empty list with from and to clears those days and nothing else.
+  const r3 = await write({ from: day(4), to: day(4), events: [] })
+  assert.equal(r3.outcome, 'created')
+  assert.ok(!(await perDay()).some((x) => x.startsWith(day(4))))
+  assert.equal((await perDay()).length, 6)
+
+  // Events outside the range are skipped; a bad, backwards or too-long range is refused, as is an unknown field.
+  const r4 = await write({ from: day(6), to: day(6), events: [ev('wk-6-z', 1, 11), ev('wk-6-a', 6, 10)] })
+  assert.match(r4.note, /^1 events/)
+  assert.match(r4.note, /1 skipped/)
+  assert.equal((await write({ from: '15 November', to: day(1), events: [] })).code, 'invalid')
+  assert.equal((await write({ from: day(2), to: day(1), events: [] })).code, 'invalid')
+  assert.equal((await write({ from: day(0), to: day(14), events: [] })).code, 'invalid')
+  assert.equal((await write({ from: day(0), to: day(1), events: [], extra: 1 })).outcome, 'rejected')
+
+  // The night removes a call from before today and keeps today and the days ahead.
+  await db.query(`insert into calendar_today (owner_id, starts_at, title, event_ref) values ($1, uk_day_start(uk_day(now())) - interval '1 minute', 'Late call', 'wk-past')`, [ownerId])
+  const ahead = (await perDay()).filter((x) => x >= day(0))
+  const [{ night }] = await rows(`select retention_job() as night`)
+  assert.equal(night.errors, undefined, JSON.stringify(night))
+  assert.ok(night.calendar_today >= 1)
+  assert.equal(await count(`calendar_today where event_ref = 'wk-past'`), 0)
+  assert.deepEqual(await perDay(), ahead)
+  assert.equal(ahead.length, 6)
+
+  // Home's third number counts today only, and the reviewer reads none of it.
+  await owner(async () => {
+    const [{ n }] = await rows(`select count(*)::int as n from calendar_today where event_ref like 'wk-%' and is_external and uk_day(starts_at) = uk_day(now())`)
+    assert.equal(n, 1)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('calendar_today'), 0)
+  })
+  await db.query(`delete from calendar_today where event_ref like 'wk-%'`)
 })
 
 // ---------------------------------------------------------------- run
