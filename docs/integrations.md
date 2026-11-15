@@ -50,3 +50,14 @@ Mia asked three things on the ad and post chaser card: a button that puts the po
 **LinkedIn.** LinkedIn has no API for a person's connection or message state, and the browser must not scrape it (CLAUDE.md, rule 1 and the calm rules). Three honest routes: (1) SourceWhale, if it sends the LinkedIn steps for Jason, already knows the state and can report it (above); (2) the LinkedIn scraper the business runs can be asked to include connection state for each poster it finds, and A3 Jobs writes it as an `outreach_step`; (3) a Claude routine with LinkedIn open in Chrome reads the state of a short list of profiles once a day and writes `outreach_step` records, which is slow and fragile and the last resort. Until one of these is in place, the ladder is marked by hand on the card.
 
 **SourceWhale** stays the fallback if Spott's sequences prove too thin; the same `campaign_step` contract would carry it.
+**Jason decides** which tool runs the email campaign (Spott or SourceWhale), and asks that tool for API access. Then the routine is a day's work.
+
+## Direct connections: Outlook, Granola, Spott (15 November 2026)
+
+Route B of 24.1, built but not deployed. Settings, Connections shows each app's state (Connected, Needs sign-in, Failing, Not connected), the account and when it last worked, and connects or disconnects it.
+
+- **Outlook (Graph).** Jason presses Connect Outlook, signs in with his work account and consents as a user to `offline_access User.Read Mail.Send Mail.ReadWrite Calendars.Read`. The app registration is multi-tenant, in an Azure directory he owns. Function secrets `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, and optionally `MS_REDIRECT_URI` and `APP_URL`. The refresh token is kept in Supabase Vault, not in function secrets as the table above says, because it is per user and rotates. `functions/outlook/graph.ts` has the mail and calendar operations of 24.2 and 24.3 and `sendViaGraph` for the send engine. See `functions/outlook/README.md`.
+- **Granola.** Jason pastes an API key (Granola: Settings, API; Business plan). It is checked with one notes read and kept in Vault.
+- **Spott.** Jason pastes an API key (Spott: Settings, API; admin only). It is checked with a one-row candidate list (`GET https://api.gospott.com/candidates?limit=1`, `x-api-key`) and kept in Vault.
+
+Keys and tokens never reach the browser; the browser reads status only, from `connections` (migrations 0040 and 0041). The agents' Claude connectors keep working as before; nothing uses the stored Granola or Spott key yet.
