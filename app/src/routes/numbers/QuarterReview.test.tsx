@@ -79,7 +79,7 @@ describe('Numbers, Quarter', () => {
       ['Leads passed to colleagues', '1'],
       ['Follow-ups on time', '5 of 6'],
     ])
-    expect(screen.getByRole('main').querySelectorAll('svg, canvas')).toHaveLength(0)
+    expect(screen.getByRole('main').querySelectorAll('svg:not([data-icon]), canvas')).toHaveLength(0)
 
     await userEvent.click(screen.getByRole('button', { name: 'Show funnel' }))
     const line = await waitFor(() => screen.getByRole('main').querySelector('[data-number-line]')!)

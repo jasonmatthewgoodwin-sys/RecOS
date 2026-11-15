@@ -23,6 +23,8 @@ import { Review } from './routes/numbers/Review'
 import { ThisWeek } from './routes/numbers/ThisWeek'
 import { FollowUps } from './routes/leads/FollowUps'
 import { Jobs } from './routes/leads/Jobs'
+import { UkToUs } from './routes/leads/UkToUs'
+import { AccountsPage } from './routes/people/Accounts'
 import { Referrals } from './routes/leads/Referrals'
 import { Wider } from './routes/leads/Wider'
 import { Coaching } from './routes/people/Coaching'
@@ -47,6 +49,8 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'leads/jobs': <Jobs />,
     'leads/follow-ups': <FollowUps />,
     'leads/referrals': <Referrals />,
+    'leads/uk-us': <UkToUs />,
+    'people/accounts': <AccountsPage />,
     'leads/wider': <Wider />,
     'people/coaching': <Coaching />,
     'people/senior-network': <PeopleList listKey="senior_network" />,
@@ -135,6 +139,7 @@ export function SignedIn({ session }: { session: Session }) {
           {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
           {owner && <Route path="/settings/profile" element={<PhoneGate title="Settings"><Profile /></PhoneGate>} />}
           {owner && <Route path="/inbox" element={<Inbox />} />}
+          {owner && <Route path="/leads/follow-ups" element={<FollowUps />} />}
           {allowed.filter((s) => s.key !== 'home').map((s) => sectionRoutes(s, built))}
           {import.meta.env.DEV && <Route path="/gallery" element={<Gallery />} />}
           <Route path="*" element={<Navigate to={start} replace />} />

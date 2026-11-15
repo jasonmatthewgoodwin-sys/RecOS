@@ -8,15 +8,18 @@ import { PageHeader } from '../../components/PageHeader'
 import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
 import { daysSince, referralOpening } from '../../lib/bd'
-import { data, type Referral, type ReferralStage } from '../../lib/data'
+import { Field } from '../../components/Field'
+import { data, type Referral, type ReferralPatch, type ReferralStage } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { sections } from '../../lib/sections'
 import { ukClock } from '../../lib/time'
 
-// Referrals (28.4): one number, the new referrals oldest first, Contacted
-// and Not relevant on hover, and a card with the context and a draft
-// opening message that names the referrer.
+// Referrals and leads (28.4, and Jason's notes of 14 November 2026): one
+// number, the new referrals oldest first, Contacted and Not relevant on
+// hover, and a card with the context, a draft opening message that names
+// the referrer, the three questions to ask on the call, and one step to
+// turn a company lead into a job lead.
 
 const KEY = 'leads.referrals'
 
@@ -28,8 +31,27 @@ export function Referrals() {
 
   const referrals = useQuery(KEY, data.referrals)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [asked, setAsked] = useState<Record<string, ReferralPatch>>({})
   const [note, setNote] = useState<string | null>(null)
   const cardId = params.get('card')?.startsWith('referral:') ? params.get('card')!.slice(9) : null
+
+  // The three call questions save as they are answered (14 November 2026).
+  function answer(r: Referral, patch: ReferralPatch) {
+    setAsked((a) => ({ ...a, [r.id]: { ...a[r.id], ...patch } }))
+    setQueryData<Referral[]>(KEY, (rows) => (rows ?? []).map((x) => (x.id === r.id ? { ...x, ...patch } : x)))
+    void data.updateReferral(r.id, patch).catch(() => setNote('That did not save. Try again.'))
+  }
+
+  async function convert(r: Referral) {
+    try {
+      const leadId = await data.referralToJobLead(r.id)
+      setQueryData<Referral[]>(KEY, (rows) => (rows ?? []).map((x) => (x.id === r.id ? { ...x, jobLeadId: leadId } : x)))
+      invalidate('leads.jobs')
+      navigate(`/leads/jobs?card=job:${leadId}`)
+    } catch {
+      setNote('Could not make the lead. Try again.')
+    }
+  }
 
   const tab = sections.find((s) => s.key === 'leads')!
   const tabs = tab.pages.map((p) => ({ label: p.label, route: `${tab.path}/${p.slug}` }))
@@ -125,6 +147,17 @@ export function Referrals() {
               ),
             },
             ...(chosen.context ? [{ label: 'From the call', body: <p>{chosen.context}</p> }] : []),
+            {
+              label: 'Ask on the call',
+              body: (
+                <div className="grid gap-4 sm:grid-cols-2" data-testid="call-questions">
+                  <Field label="Hiring manager" value={asked[chosen.id]?.hiringManagerName ?? chosen.hiringManagerName ?? ''} onChange={(v) => setAsked((a) => ({ ...a, [chosen.id]: { ...a[chosen.id], hiringManagerName: v } }))} onBlur={() => answer(chosen, { hiringManagerName: (asked[chosen.id]?.hiringManagerName ?? chosen.hiringManagerName ?? '').trim() || null })} placeholder="Who hires" />
+                  <Field label="Their LinkedIn" value={asked[chosen.id]?.hiringManagerUrl ?? chosen.hiringManagerUrl ?? ''} onChange={(v) => setAsked((a) => ({ ...a, [chosen.id]: { ...a[chosen.id], hiringManagerUrl: v } }))} onBlur={() => answer(chosen, { hiringManagerUrl: (asked[chosen.id]?.hiringManagerUrl ?? chosen.hiringManagerUrl ?? '').trim() || null })} placeholder="https://" />
+                  <Field label="Sourced through" kind="choice" value={chosen.sourcedVia ?? ''} placeholder="Not asked yet" onChange={(v) => answer(chosen, { sourcedVia: v as Referral['sourcedVia'] })} choices={[{ value: 'recruiter', label: 'A recruiter' }, { value: 'direct', label: 'Direct' }, { value: 'unknown', label: 'Do not know' }]} />
+                  <Field label="Is the job open" kind="choice" value={chosen.jobOpen ?? ''} placeholder="Not asked yet" onChange={(v) => answer(chosen, { jobOpen: v as Referral['jobOpen'] })} choices={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, { value: 'unknown', label: 'Do not know' }]} />
+                </div>
+              ),
+            },
             ...(chosen.stage === 'new'
               ? [
                   {
@@ -144,12 +177,16 @@ export function Referrals() {
           ]}
           primaryAction={chosen.stage === 'new' ? { label: 'Contacted', onClick: () => void move(chosen, 'contacted').then(closeCard) } : undefined}
           links={
-            chosen.stage === 'new' ? (
-              <>
-                <TextLink label="Copy" onClick={() => void navigator.clipboard?.writeText(drafts[chosen.id] ?? referralOpening(chosen))} />
-                <TextLink label="Not relevant" onClick={() => void move(chosen, 'not_relevant').then(closeCard)} />
-              </>
-            ) : undefined
+            <>
+              {chosen.stage === 'new' && <TextLink label="Copy" onClick={() => void navigator.clipboard?.writeText(drafts[chosen.id] ?? referralOpening(chosen))} />}
+              {chosen.stage === 'new' && <TextLink label="Not relevant" onClick={() => void move(chosen, 'not_relevant').then(closeCard)} />}
+              {chosen.referredCompany &&
+                (chosen.jobLeadId ? (
+                  <TextLink label="Open the job lead" icon="briefcase" onClick={() => navigate(`/leads/jobs?card=job:${chosen.jobLeadId}`)} />
+                ) : (
+                  <TextLink label="Make it a job lead" icon="briefcase" onClick={() => void convert(chosen)} />
+                ))}
+            </>
           }
           foot={`Received ${chosen.receivedOn}${chosen.contactedOn ? `, contacted ${chosen.contactedOn}` : ''}`}
           onClose={closeCard}

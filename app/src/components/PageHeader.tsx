@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { Tone } from '../theme/tokens'
+import { PageAgent } from './AgentButton'
 import { IndexTabs } from './IndexTab'
 
 type Props = { title: string; tabs?: { label: string; route: string; tone?: Tone }[]; aside?: ReactNode }
@@ -13,7 +14,10 @@ export function PageHeader({ title, tabs = [], aside }: Props) {
       <h1 className="text-title text-ink">{title}</h1>
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-2 border-b border-rule">
         <IndexTabs tabs={tabs} />
-        {aside && <div className="flex items-center gap-6 pb-1">{aside}</div>}
+        <div className="flex items-center gap-6 pb-1">
+          {aside}
+          <PageAgent />
+        </div>
       </div>
     </header>
   )

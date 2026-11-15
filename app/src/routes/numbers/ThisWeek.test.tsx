@@ -53,7 +53,7 @@ describe('Numbers, This week', () => {
     await waitFor(() => expect(value()).toBe('20/20'))
     const main = screen.getByRole('main')
     expect(main.querySelectorAll('[data-hero-stat]')).toHaveLength(1)
-    expect(main.querySelectorAll('svg, canvas')).toHaveLength(0)
+    expect(main.querySelectorAll('svg:not([data-icon]), canvas')).toHaveLength(0)
     expect(screen.getByText('Job posts chased')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: '20 of 20' })).toBeInTheDocument()
     expect(stepper()).toBe('1 of 4')

@@ -1207,6 +1207,61 @@ test('0031: an event sits on the content calendar with a type and a time, and co
   })
 })
 
+test('0032: outreach steps move a lead up the ladder, a referral becomes a job lead, accounts reach the agents, uk_to_us lands, agents carry connections and criteria', async () => {
+  const [{ s3 }] = await rows(`select agent_run_start('a3_jobs', 'schedule', 'match') as s3`)
+  assert.ok(Array.isArray(s3.connections))
+  assert.ok(s3.connections.includes('linkedin_scraper'))
+  assert.equal(s3.criteria.lookback_days, 7)
+  const [{ out }] = await rows(`select agent_write($1, $2) as out`, [s3.run_id, JSON.stringify([
+    { kind: 'job_lead', data: { company: 'Umbrella Fiction', role: 'Senior PMM', source: 'linkedin_post', source_url: 'https://example.com/jobs/u1', poster_name: 'Pat Pretend', uk_to_us: true } },
+    { kind: 'outreach_step', data: { company: 'Umbrella Fiction', role: 'Senior PMM', step: 'connection_sent', note: "I'm the only product marketing headhunter in the world. Let's connect." } },
+    { kind: 'outreach_step', data: { company: 'Nobody Ltd', step: 'connected' } },
+    { kind: 'outreach_step', data: { company: 'Umbrella Fiction', step: 'replied', outcome: 'interested' } },
+    { kind: 'outreach_step', data: { company: 'Umbrella Fiction', step: 'ghosted' } },
+  ])])
+  assert.equal(out.results[0].outcome, 'created')
+  assert.equal(out.results[1].outcome, 'merged')
+  assert.equal(out.results[2].code, 'not_found')
+  assert.equal(out.results[3].outcome, 'merged')
+  assert.deepEqual([out.results[4].code, out.results[4].field], ['invalid', 'step'])
+  const leadId = out.results[0].id
+  const [lead] = await rows(`select outreach_stage, outreach_connection_on, outreach_replied_on, reply_outcome, connection_note, uk_to_us from job_leads where id = $1`, [leadId])
+  assert.equal(lead.outreach_stage, 'replied')
+  assert.notEqual(lead.outreach_connection_on, null)
+  assert.notEqual(lead.outreach_replied_on, null)
+  assert.equal(lead.reply_outcome, 'interested')
+  assert.match(lead.connection_note, /only product marketing headhunter/)
+  assert.equal(lead.uk_to_us, true)
+  await rows(`select agent_run_finish($1, 'ok')`, [s3.run_id])
+
+  await owner(async () => {
+    const [r] = await rows(`insert into referrals (referred_name, referred_company, referred_by_name, kind, hiring_manager_name, hiring_manager_url, sourced_via, job_open, dedup_key) values ('Hiring at Globex', 'Globex Fiction', 'Ada Example', 'company', 'Max Madeup', 'https://example.com/in/max', 'direct', 'yes', 'test:ref:globex') returning id`)
+    const [{ made }] = await rows(`select referral_to_job_lead($1) as made`, [r.id])
+    assert.ok(made)
+    assert.deepEqual(await rows(`select company, poster_name, sources, outreach_stage from job_leads where id = $1`, [made]), [{ company: 'Globex Fiction', poster_name: 'Max Madeup', sources: ['referral'], outreach_stage: 'found' }])
+    assert.deepEqual(await rows(`select referral_to_job_lead($1) = $2::uuid as same`, [r.id, made]), [{ same: true }])
+    assert.match(await refused(`update referrals set sourced_via = 'friend' where id = '${r.id}'`), /check constraint/)
+    await db.query(`update job_leads set outreach_stage = 'messaged' where id = $1`, [made])
+    assert.notEqual((await rows(`select outreach_messaged_on from job_leads where id = $1`, [made]))[0].outreach_messaged_on, null)
+    await db.query(`insert into accounts (company, company_key, kind, colleague) values ('Initech Mock', 'initech mock', 'group_client', 'Sam Church')`)
+    assert.equal(await count(`accounts where kind = 'group_client'`), 1)
+    assert.match(await refused(`insert into accounts (company, company_key, kind) values ('X', 'x', 'friend')`), /check constraint/)
+    await db.query(`update agents set connections = array['linkedin_scraper', 'claude'], criteria = '{"lookback_days": 10}' where code = 'a3_jobs'`)
+    assert.deepEqual(await rows(`select connections, criteria from agents where code = 'a3_jobs'`), [{ connections: ['linkedin_scraper', 'claude'], criteria: { lookback_days: 10 } }])
+  })
+
+  // The owner block rolled back, so an account is planted as the database would hold it.
+  await db.query(`insert into accounts (owner_id, company, company_key, kind, colleague) values ($1, 'Initech Mock', 'initech mock', 'my_account', 'Sam Church')`, [ownerId])
+  const [{ ctx }] = await rows(`select agent_context('a4_signals', array['accounts']) as ctx`)
+  assert.deepEqual(ctx.accounts, [{ company: 'Initech Mock', company_key: 'initech mock', kind: 'my_account', colleague: 'Sam Church' }])
+  await reviewer(async () => {
+    assert.equal(await count('accounts'), 0)
+  })
+  await db.query(`delete from accounts where company_key = 'initech mock'`)
+  await db.query(`delete from inbox_items where ref_table = 'job_leads' and ref_id = $1`, [leadId])
+  await db.query(`delete from job_leads where id = $1`, [leadId])
+})
+
 // ---------------------------------------------------------------- run
 
 let failed = 0

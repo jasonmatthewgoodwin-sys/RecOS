@@ -8,6 +8,7 @@ import { Note } from '../../components/Note'
 import { PageHeader } from '../../components/PageHeader'
 import { PillButton } from '../../components/PillButton'
 import { RowList } from '../../components/RowList'
+import { AccountsBody } from '../people/Accounts'
 import { TextLink } from '../../components/TextLink'
 import { byWiderOrder, daysSince, functionWord, passedThisQuarter, widerIntroduction, widerSourceWord, widerStatusPills, widerStatusWord, widerTitle } from '../../lib/bd'
 import { data, type WiderLead, type WiderLeadStatus } from '../../lib/data'
@@ -132,6 +133,16 @@ export function Wider() {
       </div>
 
       <RowList icon="flag" variant="band" rows={rows} state={leads.status} emptyText="Nothing to pass on" />
+
+      {/* Wider means the group (Jason, 14 November 2026): every client across Eleven Investments watched for hiring, and the owner's own accounts, where a hiring signal becomes a lead for a colleague. */}
+      <section className="flex flex-col gap-4" aria-label="The group's clients">
+        <h2 className="label-caps text-ink-2">The group's clients</h2>
+        <AccountsBody title={tab.label} tabs={tabs} kinds={['group_client']} header={false} />
+      </section>
+      <section className="flex flex-col gap-4" aria-label="Your accounts">
+        <h2 className="label-caps text-ink-2">Your accounts</h2>
+        <AccountsBody title={tab.label} tabs={tabs} kinds={['my_account']} header={false} />
+      </section>
 
       {chosen && (
         <Card

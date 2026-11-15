@@ -12,6 +12,7 @@ import { TextLink } from '../../components/TextLink'
 import { data, type Agent } from '../../lib/data'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { settings } from '../../lib/sections'
+import { connectionWord, criteriaWord } from '../../lib/agents'
 import { agentMeta, costWords, runLine } from '../../lib/settings'
 
 // Settings, Agents (32.4): one row per agent, and a card with the on and off
@@ -113,6 +114,21 @@ function AgentCard({ agent, onClose, onNote }: { agent: Agent; onClose: () => vo
       sections={[
         { body: <Switch on={agent.enabled} label={agent.enabled ? 'On' : 'Off'} onChange={(on) => void toggle(on)} /> },
         { label: 'Schedule', body: <p className="text-body text-ink">{agent.schedule}</p> },
+        {
+          label: 'Connects to',
+          body: (
+            <div className="flex flex-col gap-2">
+              <p className="text-body text-ink">{agent.connections.map((c) => connectionWord[c] ?? c).join(', ') || 'Nothing yet'}</p>
+              {Object.keys(agent.criteria).length > 0 && (
+                <p className="font-mono text-label text-ink-2">
+                  {Object.entries(agent.criteria)
+                    .map(([k, v]) => `${criteriaWord[k] ?? k}: ${String(v)}`)
+                    .join('. ')}
+                </p>
+              )}
+            </div>
+          ),
+        },
         {
           label: 'Last runs',
           body:

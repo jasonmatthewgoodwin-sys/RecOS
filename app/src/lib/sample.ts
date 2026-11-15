@@ -2,6 +2,7 @@
 // Local). Every name here is made up. Nothing in this file is real.
 
 import type {
+  Account,
   ContentItem,
   Problem,
   ProblemNote, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
@@ -39,6 +40,15 @@ function lead(over: Partial<JobLead> & Pick<JobLead, 'id' | 'company' | 'role' |
     existingClient: false,
     stage: 'new',
     deadReason: null,
+    outreachStage: 'found',
+    outreachConnectionOn: null,
+    outreachConnectedOn: null,
+    outreachMessagedOn: null,
+    outreachRepliedOn: null,
+    replyOutcome: null,
+    connectionNote: null,
+    firstMessage: null,
+    ukToUs: false,
     matched: [],
     draft: null,
     chasedOn: null,
@@ -74,6 +84,10 @@ export function freshSampleLeads(): JobLead[] {
       matched: [{ personId: 'person-ada', name: 'Ada Example', reason: 'Senior PMM in New York, open to a move' }],
       draft: chase,
       firstSeenOn: daysAgo(2),
+      outreachStage: 'connection_sent',
+      outreachConnectionOn: daysAgo(1),
+      connectionNote: "I'm the only product marketing headhunter in the world. Let's connect.",
+      ukToUs: true,
     }),
     lead({
       id: 'job-contoso',
@@ -353,9 +367,9 @@ export function freshSampleCoaching(): CoachingSession[] {
 
 export function freshSampleReferrals(): Referral[] {
   return [
-    { id: 'rf-hal', referredName: 'Hal Hypothetical', referredCompany: 'Northwind Sample Co', referredTitle: 'Group PMM', referredById: 'p-eve', referredByName: 'Eve Invented', context: 'Worked together before. Said to be looking.', kind: 'person', stage: 'new', thanked: false, receivedOn: daysAgo(3), contactedOn: null },
-    { id: 'rf-pat', referredName: 'Pat Example', referredCompany: 'Globex Fiction', referredTitle: 'Head of Marketing', referredById: 'p-dev', referredByName: 'Dev Madeup', context: 'Hiring two PMMs in the new year.', kind: 'person', stage: 'new', thanked: false, receivedOn: daysAgo(1), contactedOn: null },
-    { id: 'rf-quin', referredName: 'Quin Sample', referredCompany: 'Umbrella Sample', referredTitle: null, referredById: 'p-finn', referredByName: 'Finn Fictional', context: 'Mentioned in passing.', kind: 'person', stage: 'contacted', thanked: true, receivedOn: daysAgo(9), contactedOn: daysAgo(6) },
+    { id: 'rf-hal', referredName: 'Hal Hypothetical', referredCompany: 'Northwind Sample Co', referredTitle: 'Group PMM', referredById: 'p-eve', referredByName: 'Eve Invented', context: 'Worked together before. Said to be looking.', kind: 'person', stage: 'new', thanked: false, receivedOn: daysAgo(3), contactedOn: null, hiringManagerName: null, hiringManagerUrl: null, sourcedVia: null, jobOpen: null, jobLeadId: null },
+    { id: 'rf-pat', referredName: 'Pat Example', referredCompany: 'Globex Fiction', referredTitle: 'Head of Marketing', referredById: 'p-dev', referredByName: 'Dev Madeup', context: 'Hiring two PMMs in the new year.', kind: 'company', stage: 'new', thanked: false, receivedOn: daysAgo(1), contactedOn: null, hiringManagerName: null, hiringManagerUrl: null, sourcedVia: null, jobOpen: null, jobLeadId: null },
+    { id: 'rf-quin', referredName: 'Quin Sample', referredCompany: 'Umbrella Sample', referredTitle: null, referredById: 'p-finn', referredByName: 'Finn Fictional', context: 'Mentioned in passing.', kind: 'person', stage: 'contacted', thanked: true, receivedOn: daysAgo(9), contactedOn: daysAgo(6), hiringManagerName: null, hiringManagerUrl: null, sourcedVia: null, jobOpen: null, jobLeadId: null },
   ]
 }
 
@@ -458,11 +472,11 @@ export function resetSampleMembers() {
 // already on a list, so his card offers no Add to league (T-PEO-6).
 export function freshSampleSignals(): Signal[] {
   return [
-    { id: 'sig-ben', personId: 'p-ben', personName: 'Ben Sample', company: 'Contoso Demo Inc', title: 'VP Product Marketing', city: 'boston', signalType: 'promoted', strength: 3, detail: 'Now VP. Likely to build a team.', source: 'linkedin_alert', sourceUrl: 'https://example.com/in/ben', seenOn: daysAgo(1), status: 'new', onList: true },
-    { id: 'sig-gia', personId: null, personName: 'Gia Imaginary', company: 'Initech Mock', title: 'Head of Marketing', city: 'san_francisco', signalType: 'new_role', strength: 3, detail: 'Started as Head of Marketing this month.', source: 'linkedin_alert', sourceUrl: 'https://example.com/in/gia', seenOn: daysAgo(3), status: 'new', onList: false },
-    { id: 'sig-sol', personId: null, personName: 'Sol Example', company: 'Stark Sample', title: 'CMO', city: null, signalType: 'company_raised', strength: 3, detail: 'Series C announced on Tuesday.', source: 'alex_leads', sourceUrl: null, seenOn: daysAgo(2), status: 'new', onList: false },
-    { id: 'sig-hal', personId: null, personName: 'Hal Hypothetical', company: 'Northwind Sample Co', title: 'Group PMM', city: 'new_york', signalType: 'open_to_work', strength: 2, detail: 'Open to work badge.', source: 'linkedin_alert', sourceUrl: null, seenOn: daysAgo(5), status: 'new', onList: false },
-    { id: 'sig-tam', personId: null, personName: 'Tam Placeholder', company: 'Wonka Imaginary Ltd', title: 'Director of PMM', city: 'london', signalType: 'left_company', strength: 2, detail: 'Left after four years.', source: 'linkedin_alert', sourceUrl: null, seenOn: daysAgo(9), status: 'new', onList: false },
+    { id: 'sig-ben', personId: 'p-ben', personName: 'Ben Sample', company: 'Contoso Demo Inc', title: 'VP Product Marketing', city: 'boston', signalType: 'promoted', strength: 3, detail: 'Now VP. Likely to build a team.', source: 'linkedin_alert', sourceUrl: 'https://example.com/in/ben', seenOn: daysAgo(1), status: 'new', onList: true, ukToUs: false },
+    { id: 'sig-gia', personId: null, personName: 'Gia Imaginary', company: 'Initech Mock', title: 'Head of Marketing', city: 'san_francisco', signalType: 'new_role', strength: 3, detail: 'Started as Head of Marketing this month.', source: 'linkedin_alert', sourceUrl: 'https://example.com/in/gia', seenOn: daysAgo(3), status: 'new', onList: false, ukToUs: false },
+    { id: 'sig-sol', personId: null, personName: 'Sol Example', company: 'Stark Sample', title: 'CMO', city: null, signalType: 'company_raised', strength: 3, detail: 'Series C announced on Tuesday.', source: 'alex_leads', sourceUrl: null, seenOn: daysAgo(2), status: 'new', onList: false, ukToUs: false },
+    { id: 'sig-hal', personId: null, personName: 'Hal Hypothetical', company: 'Northwind Sample Co', title: 'Group PMM', city: 'new_york', signalType: 'open_to_work', strength: 2, detail: 'Open to work badge.', source: 'linkedin_alert', sourceUrl: null, seenOn: daysAgo(5), status: 'new', onList: false, ukToUs: false },
+    { id: 'sig-tam', personId: null, personName: 'Tam Placeholder', company: 'Wonka Imaginary Ltd', title: 'Director of PMM', city: 'london', signalType: 'left_company', strength: 2, detail: 'Left after four years.', source: 'linkedin_alert', sourceUrl: null, seenOn: daysAgo(9), status: 'new', onList: false, ukToUs: true },
   ]
 }
 
@@ -573,13 +587,13 @@ function hoursAgoIso(h: number): string {
 
 function freshSampleAgents(): Agent[] {
   const a = (code: string, name: string, schedule: string, over: Partial<Agent> = {}): Agent => ({
-    code, name, schedule, enabled: true, modelTier: 'standard', monthlyBudget: 50, keyCreatedAt: daysAgo(10) + 'T09:00:00Z', consecutiveFailures: 0, lastRun: null, spentThisMonth: 0, ...over,
+    code, name, schedule, enabled: true, modelTier: 'standard', monthlyBudget: 50, keyCreatedAt: daysAgo(10) + 'T09:00:00Z', consecutiveFailures: 0, lastRun: null, spentThisMonth: 0, connections: ['claude'], criteria: {}, ...over,
   })
   return [
     a('a1_review', 'Weekly review', 'Monday 08:17', { lastRun: { startedAt: hoursAgoIso(30), status: 'ok', itemsCreated: 1 }, spentThisMonth: 1.2 }),
     a('a2_content', 'Content engine', 'Monday 08:58 and 09:15, Thursday 09:30', { lastRun: { startedAt: hoursAgoIso(26), status: 'ok', itemsCreated: 3 }, spentThisMonth: 6.4 }),
-    a('a3_jobs', 'Jobs pipeline', 'Collect Tuesday and Friday 13:00. Match Wednesday 07:41', { lastRun: { startedAt: hoursAgoIso(5), status: 'ok', itemsCreated: 4 }, spentThisMonth: 12.4 }),
-    a('a4_signals', 'Relationship signals', 'Friday 12:47', { modelTier: 'light', monthlyBudget: 20, lastRun: { startedAt: hoursAgoIso(50), status: 'failed', itemsCreated: 0 }, consecutiveFailures: 1, spentThisMonth: 2.1 }),
+    a('a3_jobs', 'Jobs pipeline', 'Collect Tuesday and Friday 13:00. Match Wednesday 07:41', { lastRun: { startedAt: hoursAgoIso(5), status: 'ok', itemsCreated: 4 }, spentThisMonth: 12.4, connections: ['linkedin_scraper', 'outlook_mail', 'claude'], criteria: { lookback_days: 7, icp: 'B2B software, US, product marketing' } }),
+    a('a4_signals', 'Relationship signals', 'Friday 12:47', { modelTier: 'light', monthlyBudget: 20, lastRun: { startedAt: hoursAgoIso(50), status: 'failed', itemsCreated: 0 }, consecutiveFailures: 1, spentThisMonth: 2.1, connections: ['linkedin_read', 'claude'], criteria: { lookback_days: 7, uk_to_us: true } }),
     a('a5_followups', 'Follow-up queue', 'Monday 07:30, Thursday 07:30, weekdays 08:45 for the calendar', { lastRun: { startedAt: hoursAgoIso(2), status: 'ok', itemsCreated: 2 }, spentThisMonth: 4.8 }),
     a('a6_calls', 'Call-to-CRM', 'Monday to Thursday 19:30, Friday 16:30', { lastRun: { startedAt: hoursAgoIso(18), status: 'partial', itemsCreated: 1 }, spentThisMonth: 9.9 }),
     a('a7_events', 'Event ideas', '1st of the month', { enabled: false, monthlyBudget: null, keyCreatedAt: null }),
@@ -641,6 +655,20 @@ function freshSampleTargets(): Target[] {
 }
 
 let sampleAgents = freshSampleAgents()
+
+// Accounts (29.3): two of the group's clients and two of the owner's own.
+export function freshSampleAccounts(): Account[] {
+  return [
+    { id: 'acc-1', company: 'Contoso Demo Inc', kind: 'group_client', colleague: 'Sam Church', contactName: 'Priya Example', contactTitle: 'VP Sales', functions: ['sales', 'cs'], crmUrl: 'https://example.com/crm/contoso', notes: null, active: true, introducedTo: null },
+    { id: 'acc-2', company: 'Fabrikam Test Ltd', kind: 'group_client', colleague: 'Lee Sample', contactName: null, contactTitle: null, functions: [], crmUrl: null, notes: null, active: true, introducedTo: null },
+    { id: 'acc-3', company: 'Northwind Sample Co', kind: 'my_account', colleague: null, contactName: 'Ada Example', contactTitle: 'Senior PMM', functions: ['sales'], crmUrl: 'https://example.com/crm/northwind', notes: 'Placed two PMMs in 2025.', active: true, introducedTo: 'Sam Church' },
+    { id: 'acc-4', company: 'Initech Mock', kind: 'my_account', colleague: null, contactName: 'Max Madeup', contactTitle: 'CMO', functions: ['marketing', 'sales'], crmUrl: null, notes: null, active: true, introducedTo: null },
+  ]
+}
+let sampleAccounts = freshSampleAccounts()
+export function resetSampleAccounts() {
+  sampleAccounts = freshSampleAccounts()
+}
 let sampleRuns = freshSampleRuns()
 let samplePrompts = freshSamplePrompts()
 let samplePolicies = freshSamplePolicies()
@@ -918,6 +946,47 @@ export const sampleSource: DataSource = {
   async widerLeads() {
     return sampleWider.filter((w) => ['spotted', 'passed', 'meeting_booked'].includes(w.status)).map((w) => ({ ...w }))
   },
+  async addWiderLead(input) {
+    sampleWider.unshift({
+      id: `w-${Date.now()}`, company: input.company, role: input.role, function: input.function, country: input.country, location: null, source: input.source,
+      mentionedByName: input.mentionedByName, existingClient: input.existingClient, passedTo: null, passedOn: null, splitNote: null, status: 'spotted', notes: input.notes, createdAt: new Date().toISOString(), accountId: input.accountId,
+    })
+  },
+  async setOutreach(id, patch) {
+    const found = sampleLeads.find((l) => l.id === id)
+    if (!found) throw new Error('No such lead')
+    Object.assign(found, patch)
+    const today = daysAgo(0)
+    if (patch.outreachStage === 'connection_sent' && !found.outreachConnectionOn) found.outreachConnectionOn = today
+    if (patch.outreachStage === 'connected' && !found.outreachConnectedOn) found.outreachConnectedOn = today
+    if (patch.outreachStage === 'messaged' && !found.outreachMessagedOn) found.outreachMessagedOn = today
+    if (patch.outreachStage === 'replied' && !found.outreachRepliedOn) found.outreachRepliedOn = today
+  },
+  async updateReferral(id, patch) {
+    const found = sampleReferrals.find((r) => r.id === id)
+    if (!found) throw new Error('No such referral')
+    Object.assign(found, patch)
+  },
+  async referralToJobLead(id) {
+    const r = sampleReferrals.find((x) => x.id === id)
+    if (!r) throw new Error('No such referral')
+    if (r.jobLeadId) return r.jobLeadId
+    const made = lead({ id: `lead-${Date.now()}`, company: r.referredCompany ?? 'Unknown', role: 'Product marketing hire', firstSeenOn: daysAgo(0), sources: ['referral'], posterName: r.hiringManagerName, posterProfileUrl: r.hiringManagerUrl })
+    sampleLeads.unshift(made)
+    r.jobLeadId = made.id
+    return made.id
+  },
+  async accounts() {
+    return sampleAccounts.map((a) => ({ ...a }))
+  },
+  async addAccount(input) {
+    sampleAccounts.push({ id: `acc-${Date.now()}`, ...input, notes: null, active: true, introducedTo: null })
+  },
+  async updateAccount(id, patch) {
+    const found = sampleAccounts.find((a) => a.id === id)
+    if (!found) throw new Error('No such account')
+    Object.assign(found, patch)
+  },
   async passWiderLead(id, colleague, split) {
     const found = sampleWider.find((w) => w.id === id)
     if (!found) throw new Error('No such lead')
@@ -1065,6 +1134,12 @@ export const sampleSource: DataSource = {
   },
   async agents() {
     return sampleAgents.map((a) => ({ ...a, lastRun: a.lastRun ? { ...a.lastRun } : null }))
+  },
+  async updateAgentSetup(code, patch) {
+    const found = sampleAgents.find((a) => a.code === code)
+    if (!found) throw new Error('No such agent')
+    if (patch.connections) found.connections = patch.connections
+    if (patch.criteria) found.criteria = patch.criteria
   },
   async setAgentEnabled(code, enabled) {
     const a = sampleAgents.find((x) => x.code === code)

@@ -7,7 +7,8 @@ import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
 import { Steps } from '../../components/Steps'
 import { TextLink } from '../../components/TextLink'
-import type { JobLead, JobStage } from '../../lib/data'
+import type { JobLead, JobStage, OutreachPatch, ReplyOutcome } from '../../lib/data'
+import { defaultConnectionNote, nextOutreach, outcomeWord, outreachDate, outreachSteps, outreachWord } from '../../lib/outreach'
 import { cityName, deadReasonWord, deadReasons, nextStage, primaryLabel, sourceWord, stagePills, stageWord } from '../../lib/leads'
 
 export type CardMode = 'view' | 'bin' | 'pass'
@@ -18,6 +19,8 @@ type Props = {
   onMode: (mode: CardMode) => void
   onStage: (stage: JobStage, deadReason?: string) => void
   onPass: (colleague: string) => void
+  /** The outreach ladder, by hand (14 November 2026). */
+  onOutreach?: (patch: OutreachPatch) => void
   onClose: () => void
 }
 
@@ -28,7 +31,11 @@ function longDate(date: string): string {
 // The job card (28.2): header, fit, sources, poster, suggested people, draft,
 // stage pills, one primary and the quiet links. Names only, never contact
 // details (CLAUDE.md, rule 1).
-export function JobCard({ lead, mode, onMode, onStage, onPass, onClose }: Props) {
+export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onClose }: Props) {
+  const [connectionNote, setConnectionNote] = useState(lead.connectionNote ?? defaultConnectionNote)
+  const [firstMessage, setFirstMessage] = useState(lead.firstMessage ?? '')
+  const [outcome, setOutcome] = useState<ReplyOutcome>(lead.replyOutcome ?? 'interested')
+  const nextStep = nextOutreach(lead.outreachStage)
   const navigate = useNavigate()
   const [draft, setDraft] = useState(lead.draft ?? '')
   const [reason, setReason] = useState('')
@@ -93,6 +100,40 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onClose }: Props)
         ? [{ label: 'Passed', body: <p>Handed to a colleague. It lives under Wider business now.</p> }]
         : []),
     ...(lead.fitReason ? [{ label: 'Fit', body: <p>{lead.fitReason}</p> }] : []),
+    ...(open && onOutreach
+      ? [
+          {
+            label: 'Outreach',
+            body: (
+              <div className="flex flex-col gap-4" data-outreach={lead.outreachStage}>
+                <Steps steps={outreachSteps} at={lead.outreachStage} tone={lead.outreachStage === 'replied' ? 'clear' : lead.outreachStage === 'found' ? 'new' : 'pending'} label="Outreach" />
+                <p className="font-mono text-label text-ink-2">
+                  {lead.outreachStage === 'found' ? 'Not contacted yet' : `${outreachWord[lead.outreachStage]} ${outreachDate(lead) ?? ''}`}
+                  {lead.outreachStage === 'replied' && lead.replyOutcome ? `, ${outcomeWord[lead.replyOutcome].toLowerCase()}` : ''}
+                  {lead.ukToUs ? '. UK to US' : ''}
+                </p>
+                {lead.outreachStage === 'found' && (
+                  <Field label="Connection note" kind="lines" rows={2} value={connectionNote} onChange={setConnectionNote} onBlur={() => connectionNote !== (lead.connectionNote ?? '') && onOutreach({ connectionNote })} />
+                )}
+                {(lead.outreachStage === 'connection_sent' || lead.outreachStage === 'connected') && (
+                  <Field label="First message, once connected" kind="lines" rows={3} value={firstMessage} onChange={setFirstMessage} placeholder="Staged here. The agent sends it once you are connected, at the level in Send rules." onBlur={() => firstMessage !== (lead.firstMessage ?? '') && onOutreach({ firstMessage })} />
+                )}
+                {lead.outreachStage === 'messaged' && (
+                  <div className="flex flex-wrap items-end gap-4">
+                    <Field label="How they replied" kind="choice" value={outcome} onChange={(v) => setOutcome(v as ReplyOutcome)} choices={[{ value: 'interested', label: 'Interested' }, { value: 'not_interested', label: 'Not interested' }, { value: 'no_answer', label: 'No answer' }]} />
+                    <TextLink label="Mark replied" onClick={() => onOutreach({ outreachStage: 'replied', replyOutcome: outcome })} />
+                  </div>
+                )}
+                {nextStep && nextStep !== 'replied' && (
+                  <div>
+                    <TextLink label={`Mark ${outreachWord[nextStep].toLowerCase()}`} onClick={() => onOutreach({ outreachStage: nextStep, ...(nextStep === 'connection_sent' ? { connectionNote } : nextStep === 'messaged' ? { firstMessage } : {}) })} />
+                  </div>
+                )}
+              </div>
+            ),
+          },
+        ]
+      : []),
     ...(lead.sources.length > 0
       ? [
           {

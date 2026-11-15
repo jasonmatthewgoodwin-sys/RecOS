@@ -35,6 +35,9 @@ export type FollowUpsDue = {
 export type WeekTargets = { hit: number; total: number }
 
 export type JobStage = 'new' | 'chased' | 'replied' | 'meeting_booked' | 'job_won' | 'dead' | 'passed'
+/** The outreach ladder on a lead (14 November 2026): the agent connects, then messages; the owner marks replies. */
+export type OutreachStage = 'found' | 'connection_sent' | 'connected' | 'messaged' | 'replied'
+export type ReplyOutcome = 'interested' | 'not_interested' | 'no_answer'
 
 /** A thin reference to a role at a company (section 9.1). Names only, never contact details. */
 export type JobLead = {
@@ -65,7 +68,19 @@ export type JobLead = {
   repliedOn: string | null
   meetingOn: string | null
   wonOn: string | null
+  outreachStage: OutreachStage
+  outreachConnectionOn: string | null
+  outreachConnectedOn: string | null
+  outreachMessagedOn: string | null
+  outreachRepliedOn: string | null
+  replyOutcome: ReplyOutcome | null
+  /** The two staged messages: the connection note and the first message once connected. */
+  connectionNote: string | null
+  firstMessage: string | null
+  /** A UK-headquartered company hiring, or likely to hire, in the US. */
+  ukToUs: boolean
 }
+export type OutreachPatch = Partial<Pick<JobLead, 'outreachStage' | 'replyOutcome' | 'connectionNote' | 'firstMessage'>>
 
 /** Hero 1 on the Jobs page: posts chased this week against the weekly target. */
 export type ChasedThisWeek = { total: number; target: number | null }
@@ -155,7 +170,14 @@ export type Referral = {
   /** Plain dates */
   receivedOn: string
   contactedOn: string | null
+  /** The three questions for the call (14 November 2026): who hires, through whom, and is the job open. */
+  hiringManagerName: string | null
+  hiringManagerUrl: string | null
+  sourcedVia: 'recruiter' | 'direct' | 'unknown' | null
+  jobOpen: 'yes' | 'no' | 'unknown' | null
+  jobLeadId: string | null
 }
+export type ReferralPatch = Partial<Pick<Referral, 'hiringManagerName' | 'hiringManagerUrl' | 'sourcedVia' | 'jobOpen'>>
 
 export type WiderLeadStatus = 'spotted' | 'passed' | 'meeting_booked' | 'job_won' | 'placed' | 'not_pursued'
 
@@ -273,6 +295,9 @@ export type Agent = {
   lastRun: { startedAt: string; status: AgentRunStatus; itemsCreated: number } | null
   /** Sum of cost estimates for runs this month. */
   spentThisMonth: number
+  /** What it connects to and the plain criteria it works to (14 November 2026). */
+  connections: string[]
+  criteria: Record<string, unknown>
 }
 
 export type AgentRunStatus = 'running' | 'ok' | 'partial' | 'failed' | 'timed_out'
@@ -374,6 +399,7 @@ export type Signal = {
   status: SignalStatus
   /** True when the person is already on a list (SIG-2, T-PEO-6). */
   onList: boolean
+  ukToUs: boolean
 }
 
 /** A lead for the rest of the business (section 9.4). */
@@ -393,7 +419,26 @@ export type WiderLead = {
   status: WiderLeadStatus
   notes: string | null
   createdAt: string
+  accountId?: string | null
 }
+export type NewWiderLead = { company: string; role: string | null; function: string; country: 'US' | 'UK' | 'other'; source: string; accountId: string | null; existingClient: boolean; notes: string | null; mentionedByName: string | null }
+
+/** An account (29.3, 14 November 2026): a group client or one of the owner's own, as a thin reference. */
+export type AccountKind = 'group_client' | 'my_account'
+export type Account = {
+  id: string
+  company: string
+  kind: AccountKind
+  colleague: string | null
+  contactName: string | null
+  contactTitle: string | null
+  functions: string[]
+  crmUrl: string | null
+  notes: string | null
+  active: boolean
+  introducedTo: string | null
+}
+export type NewAccount = Pick<Account, 'company' | 'kind' | 'colleague' | 'contactName' | 'contactTitle' | 'functions' | 'crmUrl'>
 
 /** One next action owed to a person, or awaited from them (section 8.2). */
 /** Content (12.1, 31.2): a post, a draft, an idea or a testimonial. Never a feed. */
@@ -550,6 +595,17 @@ export interface DataSource {
   setReferralStage(id: string, stage: ReferralStage): Promise<void>
   /** Spotted leads and passed leads awaiting an outcome (28.8). */
   widerLeads(): Promise<WiderLead[]>
+  /** A wider lead raised by hand, such as introducing a colleague to an account. */
+  addWiderLead(input: NewWiderLead): Promise<void>
+  /** The outreach ladder on a job lead, by hand: the agent moves it through agent-write. */
+  setOutreach(id: string, patch: OutreachPatch): Promise<void>
+  /** The three call questions on a referral. */
+  updateReferral(id: string, patch: ReferralPatch): Promise<void>
+  /** Turn a company lead from a call into a job lead; returns the lead's id. */
+  referralToJobLead(id: string): Promise<string>
+  accounts(): Promise<Account[]>
+  addAccount(input: NewAccount): Promise<void>
+  updateAccount(id: string, patch: Partial<Pick<Account, 'introducedTo' | 'notes' | 'active' | 'colleague' | 'functions'>>): Promise<void>
   /** WID-1 and WID-2: pass on needs the colleague and the split. */
   passWiderLead(id: string, colleague: string, split: string): Promise<void>
   setWiderLeadStatus(id: string, status: WiderLeadStatus): Promise<void>
@@ -594,6 +650,7 @@ export interface DataSource {
   /** Settings, Agents (32.4). */
   agents(): Promise<Agent[]>
   setAgentEnabled(code: string, enabled: boolean): Promise<void>
+  updateAgentSetup(code: string, patch: { connections?: string[]; criteria?: Record<string, unknown> }): Promise<void>
   agentRuns(code: string): Promise<AgentRun[]>
   agentPrompts(code: string): Promise<AgentPrompt[]>
   /** Save as new version: the next number, made active in one transaction (AGT-1). */
@@ -749,7 +806,7 @@ const live: DataSource = {
     const { data, error } = await supabase!
       .from('job_leads')
       .select(
-        'id, company, role, city, country, level, sources, source_urls, poster_name, poster_title, poster_profile_url, ' +
+        'id, company, role, city, country, level, sources, source_urls, poster_name, poster_title, poster_profile_url, outreach_stage, outreach_connection_on, outreach_connected_on, outreach_messaged_on, outreach_replied_on, reply_outcome, connection_note, first_message, uk_to_us, ' +
           'fit_score, fit_reason, existing_client, stage, dead_reason, matched, first_seen_on, chased_on, replied_on, ' +
           'meeting_on, won_on, spec_message:messages!spec_message_id (body)',
       )
@@ -779,6 +836,15 @@ const live: DataSource = {
       meeting_on: string | null
       won_on: string | null
       spec_message: { body: string | null } | null
+      outreach_stage: OutreachStage
+      outreach_connection_on: string | null
+      outreach_connected_on: string | null
+      outreach_messaged_on: string | null
+      outreach_replied_on: string | null
+      reply_outcome: ReplyOutcome | null
+      connection_note: string | null
+      first_message: string | null
+      uk_to_us: boolean
     }
     return ((data ?? []) as unknown as Row[]).map((r) => ({
       id: r.id,
@@ -797,6 +863,15 @@ const live: DataSource = {
       existingClient: r.existing_client,
       stage: r.stage,
       deadReason: r.dead_reason,
+      outreachStage: r.outreach_stage ?? 'found',
+      outreachConnectionOn: r.outreach_connection_on,
+      outreachConnectedOn: r.outreach_connected_on,
+      outreachMessagedOn: r.outreach_messaged_on,
+      outreachRepliedOn: r.outreach_replied_on,
+      replyOutcome: r.reply_outcome,
+      connectionNote: r.connection_note,
+      firstMessage: r.first_message,
+      ukToUs: r.uk_to_us ?? false,
       matched: (Array.isArray(r.matched) ? r.matched : [])
         .filter((m) => typeof m.name === 'string')
         .map((m) => ({ personId: m.person_id ?? null, name: m.name!, reason: m.reason ?? '' })),
@@ -1061,7 +1136,7 @@ const live: DataSource = {
   async referrals() {
     const { data, error } = await supabase!
       .from('referrals')
-      .select('id, referred_name, referred_company, referred_title, referred_by_id, referred_by_name, context, kind, stage, thanked, received_on, contacted_on')
+      .select('id, referred_name, referred_company, referred_title, referred_by_id, referred_by_name, context, kind, stage, thanked, received_on, contacted_on, hiring_manager_name, hiring_manager_url, sourced_via, job_open, job_lead_id')
       .in('stage', ['new', 'contacted', 'spoken'])
       .order('received_on', { ascending: true })
     fail(error)
@@ -1078,6 +1153,11 @@ const live: DataSource = {
       thanked: boolean
       received_on: string
       contacted_on: string | null
+      hiring_manager_name: string | null
+      hiring_manager_url: string | null
+      sourced_via: Referral['sourcedVia']
+      job_open: Referral['jobOpen']
+      job_lead_id: string | null
     }
     return ((data ?? []) as Row[]).map((r) => ({
       id: r.id,
@@ -1086,6 +1166,11 @@ const live: DataSource = {
       referredTitle: r.referred_title,
       referredById: r.referred_by_id,
       referredByName: r.referred_by_name,
+      hiringManagerName: r.hiring_manager_name,
+      hiringManagerUrl: r.hiring_manager_url,
+      sourcedVia: r.sourced_via,
+      jobOpen: r.job_open,
+      jobLeadId: r.job_lead_id,
       context: r.context,
       kind: r.kind,
       stage: r.stage,
@@ -1141,6 +1226,64 @@ const live: DataSource = {
       notes: r.notes,
       createdAt: r.created_at,
     }))
+  },
+
+  async addWiderLead(input) {
+    const { error } = await supabase!.from('wider_leads').insert({
+      company: input.company, role: input.role, function: input.function, country: input.country, source: input.source,
+      account_id: input.accountId, existing_client: input.existingClient, notes: input.notes, mentioned_by_name: input.mentionedByName,
+    })
+    fail(error)
+  },
+
+  async setOutreach(id, patch) {
+    const row: Record<string, unknown> = {}
+    if (patch.outreachStage !== undefined) row.outreach_stage = patch.outreachStage
+    if (patch.replyOutcome !== undefined) row.reply_outcome = patch.replyOutcome
+    if (patch.connectionNote !== undefined) row.connection_note = patch.connectionNote
+    if (patch.firstMessage !== undefined) row.first_message = patch.firstMessage
+    const { error } = await supabase!.from('job_leads').update(row).eq('id', id)
+    fail(error)
+  },
+
+  async updateReferral(id, patch) {
+    const row: Record<string, unknown> = {}
+    if (patch.hiringManagerName !== undefined) row.hiring_manager_name = patch.hiringManagerName
+    if (patch.hiringManagerUrl !== undefined) row.hiring_manager_url = patch.hiringManagerUrl
+    if (patch.sourcedVia !== undefined) row.sourced_via = patch.sourcedVia
+    if (patch.jobOpen !== undefined) row.job_open = patch.jobOpen
+    const { error } = await supabase!.from('referrals').update(row).eq('id', id)
+    fail(error)
+  },
+
+  async referralToJobLead(id) {
+    const { data, error } = await supabase!.rpc('referral_to_job_lead', { p_id: id })
+    fail(error)
+    return data as string
+  },
+
+  async accounts() {
+    const { data, error } = await supabase!.from('accounts').select('id, company, kind, colleague, contact_name, contact_title, functions, crm_url, notes, active, introduced_to').order('company')
+    fail(error)
+    type Row = { id: string; company: string; kind: AccountKind; colleague: string | null; contact_name: string | null; contact_title: string | null; functions: string[] | null; crm_url: string | null; notes: string | null; active: boolean; introduced_to: string | null }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, company: r.company, kind: r.kind, colleague: r.colleague, contactName: r.contact_name, contactTitle: r.contact_title, functions: r.functions ?? [], crmUrl: r.crm_url, notes: r.notes, active: r.active, introducedTo: r.introduced_to }))
+  },
+
+  async addAccount(input) {
+    const key = input.company.trim().toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+    const { error } = await supabase!.from('accounts').insert({ company: input.company, company_key: key, kind: input.kind, colleague: input.colleague, contact_name: input.contactName, contact_title: input.contactTitle, functions: input.functions, crm_url: input.crmUrl })
+    fail(error)
+  },
+
+  async updateAccount(id, patch) {
+    const row: Record<string, unknown> = {}
+    if (patch.introducedTo !== undefined) row.introduced_to = patch.introducedTo
+    if (patch.notes !== undefined) row.notes = patch.notes
+    if (patch.active !== undefined) row.active = patch.active
+    if (patch.colleague !== undefined) row.colleague = patch.colleague
+    if (patch.functions !== undefined) row.functions = patch.functions
+    const { error } = await supabase!.from('accounts').update(row).eq('id', id)
+    fail(error)
   },
 
   async passWiderLead(id, colleague, split) {
@@ -1457,10 +1600,10 @@ const live: DataSource = {
   async agents() {
     const { data, error } = await supabase!
       .from('agents')
-      .select('code, name, schedule, enabled, model_tier, monthly_budget, key_created_at, consecutive_failures')
+      .select('code, name, schedule, enabled, model_tier, monthly_budget, key_created_at, consecutive_failures, connections, criteria')
       .order('code')
     fail(error)
-    type Row = { code: string; name: string; schedule: string; enabled: boolean; model_tier: 'light' | 'standard'; monthly_budget: number | null; key_created_at: string | null; consecutive_failures: number }
+    type Row = { code: string; name: string; schedule: string; enabled: boolean; model_tier: 'light' | 'standard'; monthly_budget: number | null; key_created_at: string | null; consecutive_failures: number; connections: string[] | null; criteria: Record<string, unknown> | null }
     const rows = (data ?? []) as Row[]
     const monthStart = new Date()
     monthStart.setUTCDate(1)
@@ -1477,6 +1620,8 @@ const live: DataSource = {
       const mine = all.filter((x) => x.agent === r.code)
       const last = mine[0]
       return {
+        connections: r.connections ?? [],
+        criteria: r.criteria ?? {},
         code: r.code,
         name: r.name,
         schedule: r.schedule,
@@ -1489,6 +1634,14 @@ const live: DataSource = {
         spentThisMonth: mine.filter((x) => x.started_at >= monthStart.toISOString()).reduce((n, x) => n + Number(x.cost_estimate ?? 0), 0),
       }
     })
+  },
+
+  async updateAgentSetup(code, patch) {
+    const row: Record<string, unknown> = {}
+    if (patch.connections !== undefined) row.connections = patch.connections
+    if (patch.criteria !== undefined) row.criteria = patch.criteria
+    const { error } = await supabase!.from('agents').update(row).eq('code', code)
+    fail(error)
   },
 
   async setAgentEnabled(code, enabled) {
@@ -2016,7 +2169,7 @@ const live: DataSource = {
   async signals() {
     const { data, error } = await supabase!
       .from('signals')
-      .select('id, person_id, person_name, company, title, city, signal_type, strength, detail, source, source_url, seen_on, status')
+      .select('id, person_id, person_name, company, title, city, signal_type, strength, detail, source, source_url, seen_on, status, uk_to_us')
       .eq('status', 'new')
       .order('strength', { ascending: false })
       .order('seen_on', { ascending: false })
@@ -2056,6 +2209,7 @@ const live: DataSource = {
       detail: r.detail,
       source: r.source,
       sourceUrl: r.source_url,
+      ukToUs: (r as { uk_to_us?: boolean }).uk_to_us ?? false,
       seenOn: r.seen_on,
       status: r.status,
       onList: r.person_id !== null && onList.has(r.person_id),

@@ -25,11 +25,10 @@ export const sections: Section[] = [
     path: '/leads',
     arrives: 'weeks 2 and 3',
     pages: [
+      // Follow-ups and Campaigns left this tab on 14 November 2026 at Jason's ask (docs/decisions.md): follow-ups still run from Home and the Inbox; campaigns sit under Content.
       { label: 'Jobs', slug: 'jobs' },
-      { label: 'Referrals', slug: 'referrals' },
-      { label: 'Follow-ups', slug: 'follow-ups' },
+      { label: 'Referrals and leads', slug: 'referrals' },
       { label: 'UK to US', slug: 'uk-us' },
-      { label: 'Campaigns', slug: 'campaigns' },
       { label: 'Wider business', slug: 'wider' },
     ],
   },

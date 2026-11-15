@@ -6,7 +6,7 @@ import { NumberLine } from '../../components/NumberLine'
 import { PageHeader } from '../../components/PageHeader'
 import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
-import { data, type JobLead, type JobStage } from '../../lib/data'
+import { data, type JobLead, type JobStage, type OutreachPatch } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { isTyping } from '../../lib/keyboard'
 import {
@@ -170,6 +170,24 @@ export function Jobs() {
   const newCount = leads.data === undefined ? undefined : twoDigits(all.filter((l) => l.stage === 'new').length)
   const card = cardId ? all.find((l) => l.id === cardId) : undefined
 
+  // The ladder, by hand: the screen first, the server second (25.5).
+  async function outreach(l: JobLead, change: OutreachPatch) {
+    const before = leads.data
+    const today = ukClock(new Date()).date
+    const dated: Partial<JobLead> = { ...change }
+    if (change.outreachStage === 'connection_sent') dated.outreachConnectionOn = l.outreachConnectionOn ?? today
+    if (change.outreachStage === 'connected') dated.outreachConnectedOn = l.outreachConnectedOn ?? today
+    if (change.outreachStage === 'messaged') dated.outreachMessagedOn = l.outreachMessagedOn ?? today
+    if (change.outreachStage === 'replied') dated.outreachRepliedOn = l.outreachRepliedOn ?? today
+    setQueryData<JobLead[]>(LEADS_KEY, (rows) => (rows ?? []).map((x) => (x.id === l.id ? { ...x, ...dated } : x)))
+    try {
+      await data.setOutreach(l.id, change)
+    } catch {
+      setQueryData<JobLead[]>(LEADS_KEY, () => before ?? [])
+      setNote('That did not save. Try again.')
+    }
+  }
+
   const rows = visible.map((l) => {
     const open = l.stage !== 'dead' && l.stage !== 'passed'
     const actions = []
@@ -231,6 +249,7 @@ export function Jobs() {
           onMode={setMode}
           onStage={(stage, reason) => move(card, stage, reason)}
           onPass={(colleague) => pass(card, colleague)}
+          onOutreach={(change) => void outreach(card, change)}
           onClose={closeCard}
         />
       )}
