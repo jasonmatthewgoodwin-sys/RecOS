@@ -197,7 +197,7 @@ Mia chose Spott to run the email campaigns. Add to campaign on an ad and post ch
 
 1. In Spott, make two sequences named exactly **RecOS spec** (for a hiring manager behind a job ad) and **RecOS candidate** (for a candidate being introduced). Their emails are written in Spott, where they belong.
 2. In RecOS, Settings, Agents: open Campaign runner and press Create key (migration 0040 adds the row).
-3. In claude.ai, a routine named RecOS campaign runner with the Spott connector attached, the same bootstrap as the other agents (it calls run-start as `a8_campaigns` and follows the stored prompt), `RECOS_URL` and `RECOS_KEY_A8_CAMPAIGNS` in its environment, weekdays at 09:10 and 15:10 London time.
+3. In claude.ai, a routine named RecOS campaign runner with the Spott connector attached, `RECOS_URL` and `RECOS_KEY_A8_CAMPAIGNS` in its environment, weekdays at 09:10 and 15:10 London time, and the bootstrap prompt from `agents/prompts/bootstrap.md` pasted in (it calls run-start as `a8_campaigns` and follows the stored prompt).
 
 Then: Add to campaign on a chaser, and within a run the card under Content, Campaigns says In Spott since, the steps tick as Spott sends and the replies count moves.
 
