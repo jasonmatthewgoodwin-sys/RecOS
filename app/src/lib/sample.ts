@@ -14,7 +14,7 @@ import type {
   SearchNote,
   Problem,
   ProblemNote,
-  ProblemScreenshot, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
+  ProblemScreenshot, Agent, Connection, ConnectionProvider, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { splitCopy, topicFrom } from './calendar'
 import type { SearchHit } from './capture'
@@ -809,7 +809,25 @@ let sampleTargets = freshSampleTargets()
 let samplePaused = false
 let sampleHeld = 0
 
+// Settings, Connections in sample mode: fake statuses, no keys anywhere.
+function freshSampleConnections(): Connection[] {
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
+  return [
+    { provider: 'granola', status: 'connected', accountLabel: 'Granola', connectedAt: hoursAgo(72), lastOkAt: hoursAgo(2), lastError: null },
+    { provider: 'spott', status: 'failing', accountLabel: 'Spott', connectedAt: hoursAgo(200), lastOkAt: hoursAgo(30), lastError: 'Spott did not accept the key.' },
+  ]
+}
+let sampleConnections: Connection[] = freshSampleConnections()
+
+function sampleConnect(provider: ConnectionProvider, accountLabel: string): Connection {
+  const now = new Date().toISOString()
+  const c: Connection = { provider, status: 'connected', accountLabel, connectedAt: now, lastOkAt: now, lastError: null }
+  sampleConnections = [...sampleConnections.filter((x) => x.provider !== provider), c]
+  return c
+}
+
 export function resetSampleSettings() {
+  sampleConnections = freshSampleConnections()
   sampleAgents = freshSampleAgents()
   sampleRuns = freshSampleRuns()
   samplePrompts = freshSamplePrompts()
@@ -1311,6 +1329,22 @@ export const sampleSource: DataSource = {
   },
   async requestRun(code) {
     if (!sampleAgents.some((x) => x.code === code)) throw new Error('No such agent')
+  },
+  async connections() {
+    return sampleConnections.map((c) => ({ ...c }))
+  },
+  async outlookStartUrl() {
+    // No Microsoft in sample mode: pretend the sign-in came straight back.
+    sampleConnect('outlook', 'Owner Sample (owner@example.test)')
+    return '/settings/connections?outlook=connected'
+  },
+  async saveConnectionKey(provider, key) {
+    if (key.trim().length < 8) throw new Error('Paste the whole key.')
+    if (provider === 'granola' && !key.trim().startsWith('grn_')) throw new Error('A Granola key starts grn_.')
+    return sampleConnect(provider, provider === 'granola' ? 'Granola' : 'Spott')
+  },
+  async disconnect(provider) {
+    sampleConnections = sampleConnections.filter((c) => c.provider !== provider)
   },
   async sendingPaused() {
     return samplePaused

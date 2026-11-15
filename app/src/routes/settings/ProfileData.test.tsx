@@ -123,7 +123,8 @@ describe('Settings, Data', () => {
     expect(within(list).getAllByRole('listitem')[0]).toHaveTextContent('Kit Invented')
 
     expect(screen.getByRole('table', { name: 'Retention periods' })).toBeInTheDocument()
-    expect(within(screen.getByRole('list', { name: 'Integrations' })).getAllByRole('listitem')).toHaveLength(4)
+    expect(within(screen.getByRole('list', { name: 'Integrations' })).getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Open Connections' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Export everything' })).toHaveAttribute('data-kind', 'primary')
   })
 

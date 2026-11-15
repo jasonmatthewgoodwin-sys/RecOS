@@ -103,6 +103,7 @@ export const settings: Section = {
   arrives: 'week 4',
   pages: [
     { label: 'Agents', slug: 'agents' },
+    { label: 'Connections', slug: 'connections' },
     { label: 'Send rules', slug: 'send-rules' },
     { label: 'Targets', slug: 'targets' },
     { label: 'Templates', slug: 'templates' },

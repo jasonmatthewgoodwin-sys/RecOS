@@ -37,6 +37,7 @@ import { PeopleList, PeopleListByKey } from './routes/people/PeopleList'
 import { Signals } from './routes/people/Signals'
 import { SectionPage } from './routes/SectionPage'
 import { Agents } from './routes/settings/Agents'
+import { Connections } from './routes/settings/Connections'
 import { Data } from './routes/settings/Data'
 import { Problems } from './routes/settings/Problems'
 import { Profile } from './routes/settings/Profile'
@@ -75,6 +76,7 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'settings/send-rules': <SendRules />,
     'settings/targets': <Targets />,
     'settings/templates': <Templates />,
+    'settings/connections': <Connections />,
     'settings/data': <Data />,
     'settings/problems': <Problems me={session.firstName} />,
   }

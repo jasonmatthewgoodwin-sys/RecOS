@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Field } from '../../components/Field'
 import { Note } from '../../components/Note'
 import { PageHeader } from '../../components/PageHeader'
@@ -248,6 +249,7 @@ export function Data() {
   const audit = useQuery(AUDIT_KEY, () => data.auditLog(50))
   const [note, setNote] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const navigate = useNavigate()
   const tabs = settings.pages.map((p) => ({ label: p.label, route: `${settings.path}/${p.slug}` }))
 
   async function exportAll() {
@@ -280,14 +282,16 @@ export function Data() {
 
         <section className="flex flex-col gap-4" aria-label="Integrations">
           <Heading text="Integrations" />
+          <p className="text-body text-ink-2">Outlook, Granola and Spott are connected, checked and disconnected under Connections.</p>
+          <div>
+            <TextLink label="Open Connections" onClick={() => navigate('/settings/connections')} />
+          </div>
           <ul className="flex flex-col divide-y divide-rule" aria-label="Integrations">
-            {['Outlook', 'Granola', 'CRM', 'Drive'].map((name) => (
-              <li key={name} className="flex min-h-10 items-center gap-6 py-1 text-body">
-                <span className="w-24 text-ink">{name}</span>
-                <span className="label-caps text-ink-2">Not connected</span>
-                <span className="text-ink-2">Arrives with the adapters</span>
-              </li>
-            ))}
+            <li className="flex min-h-10 items-center gap-6 py-1 text-body">
+              <span className="w-24 text-ink">Drive</span>
+              <span className="label-caps text-ink-2">Not connected</span>
+              <span className="text-ink-2">Arrives with the weekly export</span>
+            </li>
           </ul>
         </section>
 

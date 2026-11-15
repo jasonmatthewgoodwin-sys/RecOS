@@ -708,6 +708,18 @@ export type InboxActionExtra = {
   on?: string
 }
 
+export type ConnectionProvider = 'outlook' | 'granola' | 'spott'
+/** How a connection stands (24.9). not_connected when there is no row. */
+export type ConnectionStatus = 'connected' | 'needs_sign_in' | 'failing' | 'not_connected'
+export type Connection = {
+  provider: ConnectionProvider
+  status: ConnectionStatus
+  accountLabel: string | null
+  connectedAt: string | null
+  lastOkAt: string | null
+  lastError: string | null
+}
+
 export interface DataSource {
   needsYou(): Promise<number>
   followUpsDue(): Promise<FollowUpsDue>
@@ -831,6 +843,13 @@ export interface DataSource {
   revokeAgentKey(code: string): Promise<void>
   /** E9: ask for a manual run. The agent picks it up at the top of its schedule. */
   requestRun(code: string): Promise<void>
+  /** Settings, Connections (24.9): status only. Secrets never reach the browser. */
+  connections(): Promise<Connection[]>
+  /** The address that starts the Outlook sign-in, carrying a one-time state made for the owner. */
+  outlookStartUrl(): Promise<string>
+  /** Check a Granola or Spott key with one read, keep it server side, return the new status. The key is not returned. */
+  saveConnectionKey(provider: 'granola' | 'spott', key: string): Promise<Connection>
+  disconnect(provider: ConnectionProvider): Promise<void>
   /** Settings, Send rules (20.9, 32.4). */
   sendingPaused(): Promise<boolean>
   setSendingPaused(paused: boolean): Promise<void>
@@ -935,6 +954,25 @@ export interface DataSource {
 
 function fail(error: { message: string } | null): void {
   if (error) throw new Error(error.message)
+}
+
+/** Call an edge function and read its error in the owner's words (API-6) when it gives one. */
+async function invokeFunction<T = unknown>(name: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase!.functions.invoke(name, { body })
+  if (error) {
+    let message = error.message
+    try {
+      const ctx = (error as { context?: Response }).context
+      if (ctx) {
+        const b = (await ctx.json()) as { error?: { message?: string } }
+        if (b?.error?.message) message = b.error.message
+      }
+    } catch {
+      // keep the client's message
+    }
+    throw new Error(message)
+  }
+  return data as T
 }
 
 const live: DataSource = {
@@ -1910,6 +1948,29 @@ const live: DataSource = {
   async requestRun(code) {
     const { error } = await supabase!.rpc('request_run', { p_agent: code })
     fail(error)
+  },
+
+  async connections() {
+    const { data, error } = await supabase!.from('connections').select('provider, status, account_label, connected_at, last_ok_at, last_error')
+    fail(error)
+    type Row = { provider: ConnectionProvider; status: ConnectionStatus; account_label: string | null; connected_at: string | null; last_ok_at: string | null; last_error: string | null }
+    return ((data ?? []) as Row[]).map((r) => ({ provider: r.provider, status: r.status, accountLabel: r.account_label, connectedAt: r.connected_at, lastOkAt: r.last_ok_at, lastError: r.last_error }))
+  },
+
+  async outlookStartUrl() {
+    const { data, error } = await supabase!.rpc('connection_oauth_begin', { p_provider: 'outlook' })
+    fail(error)
+    const base = (import.meta.env.VITE_SUPABASE_URL as string).replace(/\/+$/, '')
+    return `${base}/functions/v1/outlook/start?state=${encodeURIComponent(String(data))}`
+  },
+
+  async saveConnectionKey(provider, key) {
+    const r = await invokeFunction<{ status: ConnectionStatus; account_label: string | null; connected_at: string | null; last_ok_at: string | null }>('connections/key', { provider, key })
+    return { provider, status: r.status, accountLabel: r.account_label, connectedAt: r.connected_at, lastOkAt: r.last_ok_at, lastError: null }
+  },
+
+  async disconnect(provider) {
+    await invokeFunction('connections/disconnect', { provider })
   },
 
   async sendingPaused() {
