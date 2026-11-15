@@ -440,6 +440,131 @@ export type Account = {
 }
 export type NewAccount = Pick<Account, 'company' | 'kind' | 'colleague' | 'contactName' | 'contactTitle' | 'functions' | 'crmUrl'>
 
+/** Searches (11.1, 30): the working layer of a search. The record of each candidate stays in the CRM. */
+export type SearchPriority = 'focus' | 'active' | 'maintenance' | 'dormant'
+export type SearchStatus = 'intake' | 'open' | 'offer' | 'placed' | 'lost' | 'on_hold' | 'closed'
+export type SearchHealth = 'warm' | 'cooling' | 'cold'
+export type Search = {
+  id: string
+  client: string
+  role: string
+  function: string
+  level: string | null
+  location: string | null
+  city: string | null
+  country: string
+  confidential: boolean
+  crmUrl: string | null
+  crmJobRef: string | null
+  priority: SearchPriority
+  status: SearchStatus
+  /** Plain dates */
+  openedOn: string
+  firstSubmissionOn: string | null
+  placedOn: string | null
+  lastClientContactOn: string | null
+  waitingOn: 'client' | 'candidate' | 'desk' | 'nobody' | null
+  nextStep: string | null
+  nextStepOn: string | null
+  health: SearchHealth
+  healthReason: string | null
+  nSourced: number
+  nSpoken: number
+  nSubmitted: number
+  nFirstStage: number
+  nLaterStage: number
+  nOffer: number
+  feeEstimate: number | null
+  wonFromJobLead: string | null
+  createdAt: string
+}
+export type NewSearch = { client: string; role: string; function: string; crmUrl: string | null; priority: SearchPriority; confidential?: boolean; wonFromJobLead?: string | null }
+export type SearchPatch = Partial<Pick<Search, 'priority' | 'status' | 'waitingOn' | 'nextStep' | 'nextStepOn' | 'health' | 'healthReason' | 'nSourced' | 'nSpoken' | 'nSubmitted' | 'nFirstStage' | 'nLaterStage' | 'nOffer' | 'confidential' | 'crmUrl' | 'level' | 'location' | 'feeEstimate' | 'lastClientContactOn'>>
+
+export type CandidateStage = 'sourced' | 'spoken' | 'submitted' | 'first_stage' | 'later_stage' | 'offer' | 'placed' | 'rejected' | 'withdrew'
+export type OfferStatus = 'expected' | 'verbal' | 'written' | 'accepted' | 'declined'
+/** A candidate in play on a search (11.3): names and clocks only (CAN-5). */
+export type SearchCandidate = {
+  id: string
+  searchId: string
+  personId: string
+  name: string
+  title: string | null
+  company: string | null
+  crmUrl: string | null
+  profileUrl: string | null
+  stage: CandidateStage
+  stageChangedOn: string
+  submittedOn: string | null
+  feedbackReceivedOn: string | null
+  feedbackNudges: number
+  consentToSubmit: boolean
+  nextInterviewAt: string | null
+  prepSent: boolean
+  lastCandidateContactOn: string | null
+  outcomeReason: string | null
+  offerStatus: OfferStatus | null
+  decisionDueOn: string | null
+  startOn: string | null
+  referencesTaken: number
+  referencesNeeded: number
+  competingProcess: boolean
+  risks: string | null
+  wouldSwing: string | null
+  aftercareOn: string | null
+}
+export type CandidatePatch = Partial<Pick<SearchCandidate, 'stage' | 'consentToSubmit' | 'feedbackReceivedOn' | 'feedbackNudges' | 'nextInterviewAt' | 'prepSent' | 'lastCandidateContactOn' | 'outcomeReason' | 'offerStatus' | 'decisionDueOn' | 'startOn' | 'referencesTaken' | 'referencesNeeded' | 'competingProcess' | 'risks' | 'wouldSwing'>>
+
+export type SearchNoteTab = 'brief' | 'map' | 'calibration' | 'client_updates' | 'interviews' | 'offer' | 'close_out'
+export type SearchNote = { id: string; searchId: string; tab: SearchNoteTab; title: string | null; content: string; structured: Record<string, unknown> | null; version: number; updatedAt: string }
+
+/** A recorded conversation (11.4): the five write-up ticks and the links. No note text, ever. */
+export type Call = {
+  id: string
+  granolaUrl: string | null
+  title: string | null
+  heldAt: string
+  minutes: number | null
+  callType: string
+  personId: string | null
+  personName: string | null
+  crmUrl: string | null
+  searchId: string | null
+  matchConfidence: 'confirmed' | 'high' | 'low' | 'none'
+  wRecord: boolean
+  wCv: boolean
+  wNote: boolean
+  wOnSearch: boolean
+  wFollowUp: boolean
+  cvRequested: boolean
+  isNewAStar: boolean
+  skipReason: string | null
+}
+export type CallPatch = Partial<Pick<Call, 'searchId' | 'matchConfidence' | 'wRecord' | 'wCv' | 'wNote' | 'wOnSearch' | 'wFollowUp' | 'cvRequested' | 'skipReason'>>
+
+export type AStarSuggestion = { id: string; name: string; title: string | null; company: string | null; city: string | null; linkedinUrl: string | null; why: string | null; week: string; verdict: 'pending' | 'good' | 'not_good' }
+
+/** A warm spec (31.1): someone worth putting in front of companies, with the open leads they match. */
+export type WarmSpec = { personId: string; name: string; title: string | null; company: string | null; crmUrl: string | null; profileUrl: string | null; matches: { leadId: string; company: string; role: string }[] }
+
+export type CampaignStep = { channel: string; note: string; doneOn?: string | null }
+export type Campaign = {
+  id: string
+  name: string
+  tool: string
+  jobLeadId: string | null
+  candidatePersonId: string | null
+  steps: CampaignStep[]
+  contacted: number
+  replies: number
+  callsBooked: number
+  status: 'planned' | 'running' | 'done'
+  startedOn: string | null
+  endedOn: string | null
+  createdAt: string
+}
+export type CampaignPatch = Partial<Pick<Campaign, 'name' | 'tool' | 'contacted' | 'replies' | 'callsBooked' | 'status' | 'steps' | 'startedOn' | 'endedOn' | 'jobLeadId' | 'candidatePersonId'>>
+
 /** One next action owed to a person, or awaited from them (section 8.2). */
 /** Content (12.1, 31.2): a post, a draft, an idea or a testimonial. Never a feed. */
 export type ContentKind = 'linkedin_post' | 'job_post' | 'blog' | 'testimonial' | 'case_study' | 'idea' | 'event'
@@ -474,12 +599,18 @@ export type ContentItem = {
   /** For an event (14 November 2026): what kind, and the time of day as HH:mm. */
   eventType: EventType | null
   eventTime: string | null
+  /** Testimonials (31.2): the search it came from, when asked, when received, where used. */
+  searchId: string | null
+  requestedOn: string | null
+  receivedOn: string | null
+  usedWhere: string | null
   createdAt: string
 }
-export type ContentPatch = Partial<Pick<ContentItem, 'status' | 'topic' | 'hook' | 'body' | 'closeLine' | 'heldReason' | 'plannedFor' | 'postedOn' | 'postUrl' | 'impressions' | 'comments' | 'inboundMessages' | 'eventType' | 'eventTime'>>
+export type ContentPatch = Partial<Pick<ContentItem, 'status' | 'topic' | 'hook' | 'body' | 'closeLine' | 'heldReason' | 'plannedFor' | 'postedOn' | 'postUrl' | 'impressions' | 'comments' | 'inboundMessages' | 'eventType' | 'eventTime' | 'requestedOn' | 'receivedOn' | 'usedWhere'>>
 export type NewContent =
   | { kind: 'linkedin_post'; copy: string; plannedFor: string | null; status: ContentStatus }
   | { kind: 'event'; copy: string; topic: string; eventType: EventType; eventTime: string | null; plannedFor: string | null; status: ContentStatus }
+  | { kind: 'testimonial'; copy: string; topic: string; plannedFor: string | null; status: ContentStatus }
 
 /** A problem report (the bug handover of 14 November 2026): raised from any page, worked under Settings. */
 export type ProblemSeverity = 'low' | 'medium' | 'high'
@@ -716,6 +847,26 @@ export interface DataSource {
   updateProblem(id: string, patch: ProblemPatch): Promise<void>
   problemNotes(id: string): Promise<ProblemNote[]>
   addProblemNote(id: string, body: string, author: string | null): Promise<ProblemNote>
+
+  /** Searches and the candidates in play (30, 31.1). */
+  searches(): Promise<Search[]>
+  addSearch(input: NewSearch): Promise<Search>
+  updateSearch(id: string, patch: SearchPatch): Promise<void>
+  searchCandidates(): Promise<SearchCandidate[]>
+  addCandidate(searchId: string, personId: string): Promise<void>
+  updateCandidate(id: string, patch: CandidatePatch): Promise<void>
+  searchNotes(searchId: string): Promise<SearchNote[]>
+  saveSearchNote(searchId: string, tab: SearchNoteTab, content: string, structured: Record<string, unknown> | null): Promise<void>
+  /** Calls of the last 60 days, newest first. */
+  calls(): Promise<Call[]>
+  updateCall(id: string, patch: CallPatch): Promise<void>
+  aStarSuggestions(): Promise<AStarSuggestion[]>
+  aStarVerdict(id: string, verdict: 'good' | 'not_good'): Promise<void>
+  warmSpecs(): Promise<WarmSpec[]>
+  setWarmSpec(personId: string, on: boolean): Promise<void>
+  campaigns(): Promise<Campaign[]>
+  addCampaign(input: { name: string; tool: string; jobLeadId: string | null; candidatePersonId: string | null }): Promise<void>
+  updateCampaign(id: string, patch: CampaignPatch): Promise<void>
 
   signals(): Promise<Signal[]>
   setSignalStatus(id: string, status: SignalStatus): Promise<void>
@@ -2060,10 +2211,142 @@ const live: DataSource = {
     return { id: n.id, reportId: n.report_id, author: n.author, body: n.body, createdAt: n.created_at }
   },
 
+  async searches() {
+    const { data, error } = await supabase!.from('searches').select('*').order('opened_on', { ascending: false })
+    fail(error)
+    return ((data ?? []) as SearchRow[]).map(searchFrom)
+  },
+
+  async addSearch(input) {
+    const key = input.client.trim().toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+    const { data, error } = await supabase!
+      .from('searches')
+      .insert({ client: input.client.trim(), client_key: key, role: input.role.trim(), function: input.function, crm_url: input.crmUrl, priority: input.priority, confidential: input.confidential ?? false, won_from_job_lead: input.wonFromJobLead ?? null, status: 'intake' })
+      .select('*')
+      .single()
+    fail(error)
+    return searchFrom(data as SearchRow)
+  },
+
+  async updateSearch(id, patch) {
+    const row: Record<string, unknown> = {}
+    const map: Record<string, string> = { priority: 'priority', status: 'status', waitingOn: 'waiting_on', nextStep: 'next_step', nextStepOn: 'next_step_on', health: 'health', healthReason: 'health_reason', nSourced: 'n_sourced', nSpoken: 'n_spoken', nSubmitted: 'n_submitted', nFirstStage: 'n_first_stage', nLaterStage: 'n_later_stage', nOffer: 'n_offer', confidential: 'confidential', crmUrl: 'crm_url', level: 'level', location: 'location', feeEstimate: 'fee_estimate', lastClientContactOn: 'last_client_contact_on' }
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined && map[k]) row[map[k]] = v
+    const { error } = await supabase!.from('searches').update(row).eq('id', id)
+    fail(error)
+  },
+
+  async searchCandidates() {
+    const { data, error } = await supabase!.from('search_candidates').select('*, person:people!person_id (display_name, display_title, display_company, crm_url, linkedin_url)').order('stage_changed_on', { ascending: false })
+    fail(error)
+    return ((data ?? []) as unknown as CandidateRow[]).map(candidateFrom)
+  },
+
+  async addCandidate(searchId, personId) {
+    const { error } = await supabase!.from('search_candidates').insert({ search_id: searchId, person_id: personId, stage: 'sourced' })
+    fail(error)
+  },
+
+  async updateCandidate(id, patch) {
+    const row: Record<string, unknown> = {}
+    const map: Record<string, string> = { stage: 'stage', consentToSubmit: 'consent_to_submit', feedbackReceivedOn: 'feedback_received_on', feedbackNudges: 'feedback_nudges', nextInterviewAt: 'next_interview_at', prepSent: 'prep_sent', lastCandidateContactOn: 'last_candidate_contact_on', outcomeReason: 'outcome_reason', offerStatus: 'offer_status', decisionDueOn: 'decision_due_on', startOn: 'start_on', referencesTaken: 'references_taken', referencesNeeded: 'references_needed', competingProcess: 'competing_process', risks: 'risks', wouldSwing: 'would_swing' }
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined && map[k]) row[map[k]] = v
+    const { error } = await supabase!.from('search_candidates').update(row).eq('id', id)
+    fail(error)
+  },
+
+  async searchNotes(searchId) {
+    const { data, error } = await supabase!.from('search_notes').select('id, search_id, tab, title, content, structured, version, updated_at').eq('search_id', searchId).order('version', { ascending: false })
+    fail(error)
+    type Row = { id: string; search_id: string; tab: SearchNoteTab; title: string | null; content: string; structured: Record<string, unknown> | null; version: number; updated_at: string }
+    return ((data ?? []) as Row[]).map((n) => ({ id: n.id, searchId: n.search_id, tab: n.tab, title: n.title, content: n.content, structured: n.structured, version: n.version, updatedAt: n.updated_at }))
+  },
+
+  async saveSearchNote(searchId, tab, content, structured) {
+    // The owner's edits overwrite the current version (11.2).
+    const { data, error } = await supabase!.from('search_notes').select('id').eq('search_id', searchId).eq('tab', tab).order('version', { ascending: false }).limit(1)
+    fail(error)
+    const current = (data ?? [])[0] as { id: string } | undefined
+    if (current) {
+      const { error: e2 } = await supabase!.from('search_notes').update({ content, structured }).eq('id', current.id)
+      fail(e2)
+    } else {
+      const { error: e3 } = await supabase!.from('search_notes').insert({ search_id: searchId, tab, content, structured })
+      fail(e3)
+    }
+  },
+
+  async calls() {
+    const since = new Date(Date.now() - 60 * 86_400_000).toISOString()
+    const { data, error } = await supabase!.from('calls').select('*, person:people!person_id (display_name, crm_url)').gte('held_at', since).order('held_at', { ascending: false })
+    fail(error)
+    type Row = { id: string; granola_url: string | null; title: string | null; held_at: string; minutes: number | null; call_type: string; person_id: string | null; search_id: string | null; match_confidence: Call['matchConfidence']; w_record: boolean; w_cv: boolean; w_note: boolean; w_on_search: boolean; w_follow_up: boolean; cv_requested: boolean; is_new_a_star: boolean; skip_reason: string | null; person: { display_name: string; crm_url: string | null } | null }
+    return ((data ?? []) as unknown as Row[]).map((r) => ({
+      id: r.id, granolaUrl: r.granola_url, title: r.title, heldAt: r.held_at, minutes: r.minutes, callType: r.call_type, personId: r.person_id, personName: r.person?.display_name ?? null, crmUrl: r.person?.crm_url ?? null,
+      searchId: r.search_id, matchConfidence: r.match_confidence, wRecord: r.w_record, wCv: r.w_cv, wNote: r.w_note, wOnSearch: r.w_on_search, wFollowUp: r.w_follow_up, cvRequested: r.cv_requested, isNewAStar: r.is_new_a_star, skipReason: r.skip_reason,
+    }))
+  },
+
+  async updateCall(id, patch) {
+    const row: Record<string, unknown> = {}
+    const map: Record<string, string> = { searchId: 'search_id', matchConfidence: 'match_confidence', wRecord: 'w_record', wCv: 'w_cv', wNote: 'w_note', wOnSearch: 'w_on_search', wFollowUp: 'w_follow_up', cvRequested: 'cv_requested', skipReason: 'skip_reason' }
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined && map[k]) row[map[k]] = v
+    const { error } = await supabase!.from('calls').update(row).eq('id', id)
+    fail(error)
+  },
+
+  async aStarSuggestions() {
+    const { data, error } = await supabase!.from('a_star_suggestions').select('id, name, title, company, city, linkedin_url, why, week, verdict').eq('verdict', 'pending').order('week', { ascending: false })
+    fail(error)
+    type Row = { id: string; name: string; title: string | null; company: string | null; city: string | null; linkedin_url: string | null; why: string | null; week: string; verdict: AStarSuggestion['verdict'] }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, name: r.name, title: r.title, company: r.company, city: r.city, linkedinUrl: r.linkedin_url, why: r.why, week: r.week, verdict: r.verdict }))
+  },
+
+  async aStarVerdict(id, verdict) {
+    const { error } = await supabase!.rpc('a_star_verdict', { p_id: id, p_verdict: verdict })
+    fail(error)
+  },
+
+  async warmSpecs() {
+    const { data, error } = await supabase!.from('people').select('id, display_name, display_title, display_company, crm_url, linkedin_url').eq('warm_spec', true).order('display_name')
+    fail(error)
+    type Row = { id: string; display_name: string; display_title: string | null; display_company: string | null; crm_url: string | null; linkedin_url: string | null }
+    const leads = await this.jobLeads()
+    return ((data ?? []) as Row[]).map((p) => ({
+      personId: p.id, name: p.display_name, title: p.display_title, company: p.display_company, crmUrl: p.crm_url, profileUrl: p.linkedin_url,
+      matches: leads.filter((l) => l.stage !== 'dead' && l.stage !== 'passed' && l.matched.some((m) => m.personId === p.id || m.name === p.display_name)).map((l) => ({ leadId: l.id, company: l.company, role: l.role })),
+    }))
+  },
+
+  async setWarmSpec(personId, on) {
+    const { error } = await supabase!.from('people').update({ warm_spec: on }).eq('id', personId)
+    fail(error)
+  },
+
+  async campaigns() {
+    const { data, error } = await supabase!.from('campaigns').select('id, name, tool, job_lead_id, candidate_person_id, steps, contacted, replies, calls_booked, status, started_on, ended_on, created_at').order('created_at', { ascending: false })
+    fail(error)
+    type Row = { id: string; name: string; tool: string | null; job_lead_id: string | null; candidate_person_id: string | null; steps: CampaignStep[] | null; contacted: number; replies: number; calls_booked: number; status: Campaign['status']; started_on: string | null; ended_on: string | null; created_at: string }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, name: r.name, tool: r.tool ?? 'other', jobLeadId: r.job_lead_id, candidatePersonId: r.candidate_person_id, steps: r.steps ?? [], contacted: r.contacted, replies: r.replies, callsBooked: r.calls_booked, status: r.status, startedOn: r.started_on, endedOn: r.ended_on, createdAt: r.created_at }))
+  },
+
+  async addCampaign(input) {
+    const { error } = await supabase!.from('campaigns').insert({ name: input.name, tool: input.tool, job_lead_id: input.jobLeadId, candidate_person_id: input.candidatePersonId })
+    fail(error)
+  },
+
+  async updateCampaign(id, patch) {
+    const row: Record<string, unknown> = {}
+    const map: Record<string, string> = { name: 'name', tool: 'tool', contacted: 'contacted', replies: 'replies', callsBooked: 'calls_booked', status: 'status', steps: 'steps', startedOn: 'started_on', endedOn: 'ended_on', jobLeadId: 'job_lead_id', candidatePersonId: 'candidate_person_id' }
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined && map[k]) row[map[k]] = v
+    const { error } = await supabase!.from('campaigns').update(row).eq('id', id)
+    fail(error)
+  },
+
   async contentItems() {
     const { data, error } = await supabase!
       .from('content_items')
-      .select('id, kind, run_source, angle, topic, hook, body, close_line, hashtags, data_point, data_point_url, prompted_by, format_ok, format_reason, rank, status, held_reason, planned_for, posted_on, post_url, impressions, comments, inbound_messages, event_type, event_time, created_at')
+      .select('id, kind, run_source, angle, topic, hook, body, close_line, hashtags, data_point, data_point_url, prompted_by, format_ok, format_reason, rank, status, held_reason, planned_for, posted_on, post_url, impressions, comments, inbound_messages, event_type, event_time, search_id, requested_on, received_on, used_where, created_at')
       .neq('status', 'binned')
       .order('rank', { ascending: false })
       .order('created_at', { ascending: false })
@@ -2094,6 +2377,10 @@ const live: DataSource = {
       inbound_messages: number | null
       event_type: EventType | null
       event_time: string | null
+      search_id: string | null
+      requested_on: string | null
+      received_on: string | null
+      used_where: string | null
       created_at: string
     }
     return ((data ?? []) as Row[]).map((r) => ({
@@ -2122,14 +2409,18 @@ const live: DataSource = {
       inboundMessages: r.inbound_messages,
       eventType: r.event_type,
       eventTime: r.event_time,
+      searchId: r.search_id,
+      requestedOn: r.requested_on,
+      receivedOn: r.received_on,
+      usedWhere: r.used_where,
       createdAt: r.created_at,
     }))
   },
 
   async addContent(input) {
     const { copy, plannedFor, status } = input
-    const parts = input.kind === 'event' ? { hook: null, body: copy || null, closeLine: null } : splitCopy(copy)
-    const topic = input.kind === 'event' ? input.topic : topicFrom(copy)
+    const parts = input.kind !== 'linkedin_post' ? { hook: input.kind === 'testimonial' ? copy || null : null, body: input.kind === 'event' ? copy || null : null, closeLine: null } : splitCopy(copy)
+    const topic = input.kind !== 'linkedin_post' ? input.topic : topicFrom(copy)
     const { data, error } = await supabase!
       .from('content_items')
       .insert({
@@ -2162,6 +2453,9 @@ const live: DataSource = {
     if (patch.topic !== undefined) row.topic = patch.topic
     if (patch.eventType !== undefined) row.event_type = patch.eventType
     if (patch.eventTime !== undefined) row.event_time = patch.eventTime
+    if (patch.requestedOn !== undefined) row.requested_on = patch.requestedOn
+    if (patch.receivedOn !== undefined) row.received_on = patch.receivedOn
+    if (patch.usedWhere !== undefined) row.used_where = patch.usedWhere
     const { error } = await supabase!.from('content_items').update(row).eq('id', id)
     fail(error)
   },
@@ -2316,6 +2610,32 @@ export function inboxStatusAfter(action: InboxAction): InboxStatus {
       return 'snoozed'
     default:
       return 'done'
+  }
+}
+
+type SearchRow = {
+  id: string; client: string; role: string; function: string; level: string | null; location: string | null; city: string | null; country: string; confidential: boolean; crm_url: string | null; crm_job_ref: string | null
+  priority: SearchPriority; status: SearchStatus; opened_on: string; first_submission_on: string | null; placed_on: string | null; last_client_contact_on: string | null; waiting_on: Search['waitingOn']; next_step: string | null; next_step_on: string | null
+  health: SearchHealth; health_reason: string | null; n_sourced: number; n_spoken: number; n_submitted: number; n_first_stage: number; n_later_stage: number; n_offer: number; fee_estimate: number | string | null; won_from_job_lead: string | null; created_at: string
+}
+function searchFrom(r: SearchRow): Search {
+  return {
+    id: r.id, client: r.client, role: r.role, function: r.function, level: r.level, location: r.location, city: r.city, country: r.country, confidential: r.confidential, crmUrl: r.crm_url, crmJobRef: r.crm_job_ref,
+    priority: r.priority, status: r.status, openedOn: r.opened_on, firstSubmissionOn: r.first_submission_on, placedOn: r.placed_on, lastClientContactOn: r.last_client_contact_on, waitingOn: r.waiting_on, nextStep: r.next_step, nextStepOn: r.next_step_on,
+    health: r.health, healthReason: r.health_reason, nSourced: r.n_sourced, nSpoken: r.n_spoken, nSubmitted: r.n_submitted, nFirstStage: r.n_first_stage, nLaterStage: r.n_later_stage, nOffer: r.n_offer,
+    feeEstimate: r.fee_estimate === null ? null : Number(r.fee_estimate), wonFromJobLead: r.won_from_job_lead, createdAt: r.created_at,
+  }
+}
+type CandidateRow = {
+  id: string; search_id: string; person_id: string; stage: CandidateStage; stage_changed_on: string; submitted_on: string | null; feedback_received_on: string | null; feedback_nudges: number; consent_to_submit: boolean; next_interview_at: string | null; prep_sent: boolean
+  last_candidate_contact_on: string | null; outcome_reason: string | null; offer_status: OfferStatus | null; decision_due_on: string | null; start_on: string | null; references_taken: number; references_needed: number; competing_process: boolean; risks: string | null; would_swing: string | null; aftercare_on: string | null
+  person: { display_name: string; display_title: string | null; display_company: string | null; crm_url: string | null; linkedin_url: string | null } | null
+}
+function candidateFrom(r: CandidateRow): SearchCandidate {
+  return {
+    id: r.id, searchId: r.search_id, personId: r.person_id, name: r.person?.display_name ?? 'Someone', title: r.person?.display_title ?? null, company: r.person?.display_company ?? null, crmUrl: r.person?.crm_url ?? null, profileUrl: r.person?.linkedin_url ?? null,
+    stage: r.stage, stageChangedOn: r.stage_changed_on, submittedOn: r.submitted_on, feedbackReceivedOn: r.feedback_received_on, feedbackNudges: r.feedback_nudges, consentToSubmit: r.consent_to_submit, nextInterviewAt: r.next_interview_at, prepSent: r.prep_sent,
+    lastCandidateContactOn: r.last_candidate_contact_on, outcomeReason: r.outcome_reason, offerStatus: r.offer_status, decisionDueOn: r.decision_due_on, startOn: r.start_on, referencesTaken: r.references_taken, referencesNeeded: r.references_needed, competingProcess: r.competing_process, risks: r.risks, wouldSwing: r.would_swing, aftercareOn: r.aftercare_on,
   }
 }
 

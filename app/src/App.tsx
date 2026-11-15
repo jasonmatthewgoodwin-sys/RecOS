@@ -14,6 +14,12 @@ import { applyTheme } from './lib/theme'
 import { landing, sectionFor, sections, settings, visibleSections, type Section } from './lib/sections'
 import { Gallery } from './routes/gallery/Gallery'
 import { Calendar } from './routes/content/Calendar'
+import { Campaigns } from './routes/content/Campaigns'
+import { Testimonials } from './routes/content/Testimonials'
+import { AStar } from './routes/people/AStar'
+import { InProcess, Placed, WarmSpecs } from './routes/searches/Candidates'
+import { Open } from './routes/searches/Open'
+import { ThisWeek as CallsThisWeek } from './routes/searches/ThisWeek'
 import { Drafts } from './routes/content/Drafts'
 import { Events } from './routes/content/Events'
 import { Home } from './routes/home/Home'
@@ -46,6 +52,14 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'content/calendar': <Calendar />,
     'content/drafts': <Drafts />,
     'content/events': <Events />,
+    'content/testimonials': <Testimonials />,
+    'content/campaigns': <Campaigns />,
+    'people/a-star': <AStar />,
+    'searches/open': <Open role={session.role} />,
+    'searches/this-week': <CallsThisWeek />,
+    'searches/in-process': <InProcess />,
+    'searches/warm-specs': <WarmSpecs />,
+    'searches/placed': <Placed />,
     'leads/jobs': <Jobs />,
     'leads/follow-ups': <FollowUps />,
     'leads/referrals': <Referrals />,

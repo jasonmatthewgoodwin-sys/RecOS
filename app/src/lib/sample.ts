@@ -3,7 +3,13 @@
 
 import type {
   Account,
+  AStarSuggestion,
+  Call,
+  Campaign,
   ContentItem,
+  Search,
+  SearchCandidate,
+  SearchNote,
   Problem,
   ProblemNote, Agent, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
@@ -488,7 +494,7 @@ export function freshSampleContent(): ContentItem[] {
   const base: ContentItem = {
     id: '', kind: 'linkedin_post', runSource: 'calls', angle: 'hiring_manager', topic: '', hook: null, body: sampleBody, closeLine: 'Fix the brief first.', hashtags: ['productmarketing'],
     dataPoint: null, dataPointUrl: null, promptedBy: null, formatOk: true, formatReason: null, rank: 0, status: 'draft', heldReason: null,
-    plannedFor: null, postedOn: null, postUrl: null, impressions: null, comments: null, inboundMessages: null, eventType: null, eventTime: null, createdAt: `${daysAgo(1)}T07:00:00Z`,
+    plannedFor: null, postedOn: null, postUrl: null, impressions: null, comments: null, inboundMessages: null, eventType: null, eventTime: null, searchId: null, requestedOn: null, receivedOn: null, usedWhere: null, createdAt: `${daysAgo(1)}T07:00:00Z`,
   }
   return [
     { ...base, id: 'c1', runSource: 'recruiting_news', angle: 'talent_market', topic: 'PMM job posts asking for AI tooling', hook: 'Four in ten PMM job posts now ask for AI tooling.', dataPoint: '41% of PMM roles now ask for AI tooling', dataPointUrl: 'https://example.com/report', rank: 75, hashtags: ['productmarketing', 'hiring'] },
@@ -498,10 +504,95 @@ export function freshSampleContent(): ContentItem[] {
     { ...base, id: 'c5', topic: 'The best PMM hires this year', hook: 'The best PMM hires I see this year have one thing in common.', status: 'posted', postedOn: daysAgo(2), postUrl: 'https://example.com/post', impressions: 1200, comments: 14, inboundMessages: 3, rank: 70, createdAt: `${daysAgo(9)}T07:00:00Z` },
     { ...base, id: 'c7', topic: 'Three questions a CMO should ask before hiring a PMM', hook: 'Three questions a CMO should ask before hiring a PMM.', status: 'planned', plannedFor: daysAgo(-1), rank: 55, createdAt: `${daysAgo(4)}T07:00:00Z` },
     { ...base, id: 'c8', kind: 'event', runSource: 'manual', angle: null, topic: 'PMM breakfast on pricing pages', body: 'Eight seats at the club. Bring the pricing page data point.', closeLine: null, hashtags: [], status: 'planned', plannedFor: daysAgo(-6), eventType: 'breakfast', eventTime: '08:30', createdAt: `${daysAgo(7)}T07:00:00Z` },
+    { ...base, id: 'c9', kind: 'testimonial', runSource: null, angle: null, topic: 'Testimonial from Northwind Sample Co', hook: 'Would you write a few lines on how the search went?', body: null, closeLine: null, hashtags: [], status: 'approved', requestedOn: daysAgo(5), searchId: 's-northwind', createdAt: `${daysAgo(12)}T07:00:00Z` },
+    { ...base, id: 'c10', kind: 'testimonial', runSource: null, angle: null, topic: 'Testimonial from the candidate, Senior PMM', hook: 'Would you write a few lines on how we worked together?', body: 'Jason found the role I did not know I wanted, and told me the truth at every step.', closeLine: null, hashtags: [], status: 'posted', requestedOn: daysAgo(20), receivedOn: daysAgo(9), usedWhere: 'Website', searchId: 's-northwind', createdAt: `${daysAgo(30)}T07:00:00Z` },
     { ...base, id: 'c6', kind: 'idea', runSource: 'manual', angle: null, topic: 'A post on levelling', body: null, closeLine: null, hashtags: [], status: 'idea', createdAt: `${daysAgo(3)}T07:00:00Z` },
   ]
 }
 let sampleContent = freshSampleContent()
+
+// Searches (30): four live, one placed; candidates in play; this week's calls; two A-star suggestions; campaigns.
+function search(over: Partial<Search> & Pick<Search, 'id' | 'client' | 'role' | 'openedOn'>): Search {
+  return {
+    function: 'pmm', level: null, location: null, city: 'new_york', country: 'US', confidential: false, crmUrl: 'https://example.com/crm/job/' + over.id, crmJobRef: null, priority: 'active', status: 'open',
+    firstSubmissionOn: null, placedOn: null, lastClientContactOn: over.openedOn, waitingOn: null, nextStep: null, nextStepOn: null, health: 'warm', healthReason: null,
+    nSourced: 0, nSpoken: 0, nSubmitted: 0, nFirstStage: 0, nLaterStage: 0, nOffer: 0, feeEstimate: null, wonFromJobLead: null, createdAt: `${over.openedOn}T09:00:00Z`, ...over,
+  }
+}
+export function freshSampleSearches(): Search[] {
+  return [
+    search({ id: 's-northwind', client: 'Northwind Sample Co', role: 'Head of Product Marketing', openedOn: daysAgo(24), priority: 'focus', nSourced: 40, nSpoken: 10, nSubmitted: 6, nFirstStage: 3, nLaterStage: 1, nOffer: 1, status: 'offer', lastClientContactOn: daysAgo(1), waitingOn: 'client', firstSubmissionOn: daysAgo(15), feeEstimate: 45000 }),
+    search({ id: 's-contoso', client: 'Contoso Demo Inc', role: 'Senior Product Marketing Manager', openedOn: daysAgo(10), priority: 'active', nSourced: 22, nSpoken: 6, nSubmitted: 2, lastClientContactOn: daysAgo(2), waitingOn: 'desk', firstSubmissionOn: daysAgo(3), city: 'boston' }),
+    search({ id: 's-globex', client: 'Globex Fiction', role: 'Director of Product Marketing', openedOn: daysAgo(31), priority: 'active', nSourced: 18, nSpoken: 5, nSubmitted: 1, lastClientContactOn: daysAgo(9), health: 'cold', healthReason: 'No client contact for 7 working days', waitingOn: 'client', confidential: true }),
+    search({ id: 's-initech', client: 'Initech Mock', role: 'Product Marketing Lead', openedOn: daysAgo(45), priority: 'maintenance', nSourced: 12, nSpoken: 3, lastClientContactOn: daysAgo(6), health: 'cooling', healthReason: 'No client contact for 4 working days', city: 'san_francisco' }),
+    search({ id: 's-wonka', client: 'Wonka Imaginary Ltd', role: 'Product Marketing Manager', openedOn: daysAgo(70), priority: 'dormant', nSourced: 5, nSpoken: 1, lastClientContactOn: daysAgo(30), status: 'on_hold', country: 'UK', city: 'london' }),
+    search({ id: 's-fabrikam', client: 'Fabrikam Test Ltd', role: 'VP Product Marketing', openedOn: daysAgo(120), priority: 'maintenance', status: 'placed', placedOn: daysAgo(40), firstSubmissionOn: daysAgo(100), nSourced: 30, nSpoken: 8, nSubmitted: 4, nFirstStage: 2, nLaterStage: 1, nOffer: 1, feeEstimate: 60000 }),
+  ]
+}
+let sampleSearches = freshSampleSearches()
+
+function candidate(over: Partial<SearchCandidate> & Pick<SearchCandidate, 'id' | 'searchId' | 'personId' | 'name' | 'stage' | 'stageChangedOn'>): SearchCandidate {
+  return {
+    title: null, company: null, crmUrl: 'https://example.com/crm/person/' + over.personId, profileUrl: null, submittedOn: null, feedbackReceivedOn: null, feedbackNudges: 0, consentToSubmit: false, nextInterviewAt: null, prepSent: false,
+    lastCandidateContactOn: null, outcomeReason: null, offerStatus: null, decisionDueOn: null, startOn: null, referencesTaken: 0, referencesNeeded: 2, competingProcess: false, risks: null, wouldSwing: null, aftercareOn: null, ...over,
+  }
+}
+export function freshSampleCandidates(): SearchCandidate[] {
+  return [
+    candidate({ id: 'sc-1', searchId: 's-northwind', personId: 'p-ada', name: 'Ada Example', title: 'Senior PMM', company: 'Northwind Sample Co', stage: 'offer', stageChangedOn: daysAgo(2), consentToSubmit: true, submittedOn: daysAgo(14), feedbackReceivedOn: daysAgo(12), offerStatus: 'verbal', decisionDueOn: daysAgo(-5), referencesTaken: 1, risks: 'Counter-offer likely', wouldSwing: 'Title and a clear first-year plan', profileUrl: 'https://example.com/in/ada' }),
+    candidate({ id: 'sc-2', searchId: 's-northwind', personId: 'p-dev', name: 'Dev Madeup', title: 'PMM Lead', company: 'Initech Mock', stage: 'later_stage', stageChangedOn: daysAgo(4), consentToSubmit: true, submittedOn: daysAgo(13), feedbackReceivedOn: daysAgo(11), nextInterviewAt: todayAt(26), prepSent: false }),
+    candidate({ id: 'sc-3', searchId: 's-northwind', personId: 'p-eve', name: 'Eve Invented', title: 'Group PMM', company: 'Stark Sample', stage: 'first_stage', stageChangedOn: daysAgo(3), consentToSubmit: true, submittedOn: daysAgo(10), feedbackReceivedOn: daysAgo(8) }),
+    candidate({ id: 'sc-4', searchId: 's-contoso', personId: 'p-ben', name: 'Ben Sample', title: 'VP Product Marketing', company: 'Contoso Demo Inc', stage: 'submitted', stageChangedOn: daysAgo(6), consentToSubmit: true, submittedOn: daysAgo(6) }),
+    candidate({ id: 'sc-5', searchId: 's-contoso', personId: 'p-finn', name: 'Finn Fictional', title: 'PMM', company: 'Globex Fiction', stage: 'spoken', stageChangedOn: daysAgo(1) }),
+    candidate({ id: 'sc-6', searchId: 's-globex', personId: 'p-cara', name: 'Cara Placeholder', title: 'Director of PMM', company: 'Umbrella Sample', stage: 'sourced', stageChangedOn: daysAgo(2) }),
+    candidate({ id: 'sc-7', searchId: 's-fabrikam', personId: 'p-hal', name: 'Hal Hypothetical', title: 'VP Product Marketing', company: 'Fabrikam Test Ltd', stage: 'placed', stageChangedOn: daysAgo(40), consentToSubmit: true, submittedOn: daysAgo(95), offerStatus: 'accepted', startOn: daysAgo(20), aftercareOn: daysAgo(-10) }),
+  ]
+}
+let sampleCandidates = freshSampleCandidates()
+let sampleNotes: SearchNote[] = [
+  { id: 'n-brief-1', searchId: 's-northwind', tab: 'brief', title: null, content: '', structured: { why_open: 'The last head moved to a VP role in-house', reports_to: 'CMO', first_90: 'Own the launch calendar and rebuild the messaging house', must_have: 'B2B SaaS, launches at scale, has managed two or more' }, version: 1, updatedAt: `${daysAgo(20)}T10:00:00Z` },
+  { id: 'n-close-1', searchId: 's-fabrikam', tab: 'close_out', title: null, content: '', structured: { crm_placement: true, start_date: true, aftercare: true, testimonial_client: false, testimonial_candidate: true, referral_ask: false, account_growth: false }, version: 1, updatedAt: `${daysAgo(30)}T10:00:00Z` },
+]
+
+export function freshSampleCalls(): Call[] {
+  const c = (over: Partial<Call> & Pick<Call, 'id' | 'heldAt' | 'callType'>): Call => ({
+    granolaUrl: 'https://example.com/granola/' + over.id, title: null, minutes: 30, personId: null, personName: null, crmUrl: null, searchId: null, matchConfidence: 'none',
+    wRecord: false, wCv: false, wNote: false, wOnSearch: false, wFollowUp: false, cvRequested: false, isNewAStar: false, skipReason: null, ...over,
+  })
+  return [
+    c({ id: 'call-1', heldAt: `${daysAgo(0)}T09:00:00Z`, callType: 'candidate_screen', personId: 'p-finn', personName: 'Finn Fictional', crmUrl: 'https://example.com/crm/person/p-finn', searchId: 's-contoso', matchConfidence: 'high', wRecord: true, wNote: true, wOnSearch: true }),
+    c({ id: 'call-2', heldAt: `${daysAgo(1)}T14:00:00Z`, callType: 'candidate_screen', personId: null, personName: 'Someone New', matchConfidence: 'none', wRecord: true }),
+    c({ id: 'call-3', heldAt: `${daysAgo(1)}T16:30:00Z`, callType: 'coaching', personId: 'p-ben', personName: 'Ben Sample', crmUrl: 'https://example.com/crm/person/p-ben', wRecord: true, wNote: true, wFollowUp: true, isNewAStar: true }),
+    c({ id: 'call-4', heldAt: `${daysAgo(2)}T11:00:00Z`, callType: 'client_update', searchId: 's-northwind', matchConfidence: 'confirmed', wRecord: true, wNote: true, wOnSearch: true, wFollowUp: true, wCv: true }),
+    c({ id: 'call-5', heldAt: `${daysAgo(9)}T11:00:00Z`, callType: 'candidate_screen', personId: 'p-dev', personName: 'Dev Madeup', searchId: 's-northwind', matchConfidence: 'confirmed', wRecord: true, wNote: true, wOnSearch: true, wFollowUp: true, wCv: true }),
+  ]
+}
+let sampleCalls = freshSampleCalls()
+
+export function freshSampleAStar(): AStarSuggestion[] {
+  return [
+    { id: 'as-1', name: 'Zed Fictional', title: 'Director of PMM', company: 'Stark Sample', city: 'boston', linkedinUrl: 'https://example.com/in/zed', why: 'Two launches a year, B2B SaaS, posts about pricing', week: thisMonday(), verdict: 'pending' },
+    { id: 'as-2', name: 'Yas Imaginary', title: 'Head of Product Marketing', company: 'Umbrella Sample', city: 'new_york', linkedinUrl: 'https://example.com/in/yas', why: 'Built a team of six from nothing', week: thisMonday(), verdict: 'pending' },
+  ]
+}
+let sampleAStar = freshSampleAStar()
+let sampleWarm = new Set<string>(['p-ada'])
+
+export function freshSampleCampaigns(): Campaign[] {
+  return [
+    { id: 'cp-1', name: 'Ada to the New York PMM leads', tool: 'email', jobLeadId: 'job-northwind', candidatePersonId: 'p-ada', steps: [{ channel: 'email', note: 'Send the two-line profile', doneOn: daysAgo(3) }, { channel: 'phone', note: 'Call the hiring manager on Thursday' }, { channel: 'linkedin', note: 'Message if no answer by Monday' }], contacted: 4, replies: 2, callsBooked: 1, status: 'running', startedOn: daysAgo(3), endedOn: null, createdAt: `${daysAgo(3)}T09:00:00Z` },
+    { id: 'cp-2', name: 'Spring CMO breakfast invitations', tool: 'linkedin', jobLeadId: null, candidatePersonId: null, steps: [], contacted: 30, replies: 9, callsBooked: 3, status: 'done', startedOn: daysAgo(60), endedOn: daysAgo(40), createdAt: `${daysAgo(60)}T09:00:00Z` },
+  ]
+}
+let sampleCampaigns = freshSampleCampaigns()
+export function resetSampleSearches() {
+  sampleSearches = freshSampleSearches()
+  sampleCandidates = freshSampleCandidates()
+  sampleCalls = freshSampleCalls()
+  sampleAStar = freshSampleAStar()
+  sampleCampaigns = freshSampleCampaigns()
+  sampleWarm = new Set(['p-ada'])
+}
 
 // Problem reports: one closed, one being worked, one new.
 const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
@@ -1340,14 +1431,104 @@ export const sampleSource: DataSource = {
     sampleProblemNotes.push(made)
     return { ...made }
   },
+  async searches() {
+    return sampleSearches.map((x) => ({ ...x }))
+  },
+  async addSearch(input) {
+    const made = search({ id: `s-${Date.now()}`, client: input.client, role: input.role, function: input.function, crmUrl: input.crmUrl, priority: input.priority, confidential: input.confidential ?? false, wonFromJobLead: input.wonFromJobLead ?? null, status: 'intake', openedOn: daysAgo(0) })
+    sampleSearches.unshift(made)
+    return { ...made }
+  },
+  async updateSearch(id, patch) {
+    const found = sampleSearches.find((x) => x.id === id)
+    if (!found) throw new Error('No such search')
+    Object.assign(found, patch)
+    if (patch.status === 'placed' && !found.placedOn) found.placedOn = daysAgo(0)
+  },
+  async searchCandidates() {
+    return sampleCandidates.map((x) => ({ ...x }))
+  },
+  async addCandidate(searchId, personId) {
+    const m = sampleMembers.find((x) => x.personId === personId)
+    sampleCandidates.push(candidate({ id: `sc-${Date.now()}`, searchId, personId, name: m?.name ?? 'Someone', title: m?.title ?? null, company: m?.company ?? null, stage: 'sourced', stageChangedOn: daysAgo(0) }))
+  },
+  async updateCandidate(id, patch) {
+    const found = sampleCandidates.find((x) => x.id === id)
+    if (!found) throw new Error('No such candidate')
+    if (patch.stage === 'submitted' && !(patch.consentToSubmit ?? found.consentToSubmit)) throw new Error('Agreed to be put forward must be on first')
+    const today = daysAgo(0)
+    if (patch.stage && patch.stage !== found.stage) found.stageChangedOn = today
+    Object.assign(found, patch)
+    if (patch.stage === 'submitted' && !found.submittedOn) found.submittedOn = today
+    if (patch.offerStatus === 'accepted') found.stage = 'placed'
+    if (found.stage === 'placed' && !found.aftercareOn) found.aftercareOn = plusDays(found.startOn ?? today, 30)
+    if (found.stage === 'placed') {
+      const s = sampleSearches.find((x) => x.id === found.searchId)
+      if (s && s.status !== 'placed') {
+        s.status = 'placed'
+        s.placedOn = today
+      }
+    }
+  },
+  async searchNotes(searchId) {
+    return sampleNotes.filter((n) => n.searchId === searchId).map((n) => ({ ...n }))
+  },
+  async saveSearchNote(searchId, tab, content, structured) {
+    const found = sampleNotes.find((n) => n.searchId === searchId && n.tab === tab)
+    if (found) Object.assign(found, { content, structured, updatedAt: new Date().toISOString() })
+    else sampleNotes.push({ id: `n-${Date.now()}`, searchId, tab, title: null, content, structured, version: 1, updatedAt: new Date().toISOString() })
+  },
+  async calls() {
+    return sampleCalls.map((x) => ({ ...x }))
+  },
+  async updateCall(id, patch) {
+    const found = sampleCalls.find((x) => x.id === id)
+    if (!found) throw new Error('No such call')
+    Object.assign(found, patch)
+  },
+  async aStarSuggestions() {
+    return sampleAStar.filter((x) => x.verdict === 'pending').map((x) => ({ ...x }))
+  },
+  async aStarVerdict(id, verdict) {
+    const found = sampleAStar.find((x) => x.id === id)
+    if (!found) throw new Error('No such suggestion')
+    found.verdict = verdict
+    if (verdict === 'good') {
+      const personId = `p-${found.name.toLowerCase().replace(/\s+/g, '-')}`
+      sampleMembers.push(member({ id: `m-${personId}`, personId, name: found.name, title: found.title, company: found.company, city: found.city, listId: 'list-top', tier: 'league_one', why: found.why ?? 'From the A-star feed', lastTouchOn: null, profileUrl: found.linkedinUrl }))
+    }
+  },
+  async warmSpecs() {
+    return sampleMembers
+      .filter((m) => sampleWarm.has(m.personId))
+      .map((m) => ({
+        personId: m.personId, name: m.name, title: m.title, company: m.company, crmUrl: m.crmUrl, profileUrl: m.profileUrl,
+        matches: sampleLeads.filter((l) => l.stage !== 'dead' && l.stage !== 'passed' && l.matched.some((x) => x.personId === m.personId || x.name === m.name)).map((l) => ({ leadId: l.id, company: l.company, role: l.role })),
+      }))
+  },
+  async setWarmSpec(personId, on) {
+    if (on) sampleWarm.add(personId)
+    else sampleWarm.delete(personId)
+  },
+  async campaigns() {
+    return sampleCampaigns.map((x) => ({ ...x, steps: x.steps.map((st) => ({ ...st })) }))
+  },
+  async addCampaign(input) {
+    sampleCampaigns.unshift({ id: `cp-${Date.now()}`, name: input.name, tool: input.tool, jobLeadId: input.jobLeadId, candidatePersonId: input.candidatePersonId, steps: [], contacted: 0, replies: 0, callsBooked: 0, status: 'planned', startedOn: null, endedOn: null, createdAt: new Date().toISOString() })
+  },
+  async updateCampaign(id, patch) {
+    const found = sampleCampaigns.find((x) => x.id === id)
+    if (!found) throw new Error('No such campaign')
+    Object.assign(found, patch)
+  },
   async contentItems() {
     return sampleContent.filter((c) => c.status !== 'binned').map((c) => ({ ...c })).sort((a, b) => b.rank - a.rank || b.createdAt.localeCompare(a.createdAt))
   },
   async addContent(input) {
     const { copy, plannedFor, status } = input
-    const parts = input.kind === 'event' ? { hook: null, body: copy || null, closeLine: null } : splitCopy(copy)
+    const parts = input.kind !== 'linkedin_post' ? { hook: input.kind === 'testimonial' ? copy || null : null, body: input.kind === 'event' ? copy || null : null, closeLine: null } : splitCopy(copy)
     const made: ContentItem = {
-      id: `c-${Date.now()}`, kind: input.kind, runSource: 'manual', angle: null, topic: input.kind === 'event' ? input.topic : topicFrom(copy), hook: parts.hook, body: parts.body, closeLine: parts.closeLine, hashtags: [],
+      id: `c-${Date.now()}`, kind: input.kind, runSource: 'manual', angle: null, topic: input.kind !== 'linkedin_post' ? input.topic : topicFrom(copy), searchId: null, requestedOn: null, receivedOn: null, usedWhere: null, hook: parts.hook, body: parts.body, closeLine: parts.closeLine, hashtags: [],
       eventType: input.kind === 'event' ? input.eventType : null, eventTime: input.kind === 'event' ? input.eventTime : null,
       dataPoint: null, dataPointUrl: null, promptedBy: null, formatOk: true, formatReason: null, rank: 0, status, heldReason: null,
       plannedFor, postedOn: status === 'posted' ? plannedFor : null, postUrl: null, impressions: null, comments: null, inboundMessages: null, createdAt: new Date().toISOString(),

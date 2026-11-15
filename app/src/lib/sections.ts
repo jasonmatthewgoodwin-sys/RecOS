@@ -76,6 +76,7 @@ export const sections: Section[] = [
       { label: 'Drafts', slug: 'drafts' },
       { label: 'Events', slug: 'events' },
       { label: 'Testimonials', slug: 'testimonials' },
+      { label: 'Campaigns', slug: 'campaigns' },
     ],
   },
   { key: 'events', label: 'Events', path: '/events', arrives: 'phase 3', pages: [] },

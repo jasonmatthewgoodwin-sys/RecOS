@@ -165,6 +165,7 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
               <Field label="In a few lines" kind="lines" rows={3} value={summary} onChange={setSummary} placeholder="Nothing pulled in yet. Ask below, or write it." />
               <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
                 {summary !== (m.profileSummary ?? '') && <TextLink label="Save profile" onClick={() => onProfile(summary)} />}
+                <TextLink label="Flag as a warm spec" icon="flag" onClick={() => void data.setWarmSpec(m.personId, true)} />
                 {!asked && (
                   <TextLink
                     label="Pull in from LinkedIn"

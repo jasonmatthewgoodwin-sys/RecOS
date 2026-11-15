@@ -893,7 +893,7 @@ test('P1-14, P1-15, P1-16: keys, run-start, the write contract with its merges a
     { kind: 'job_lead', data: { company: 'Initech Mock', role: 'PMM', source: 'linkedin_post' } },
     { kind: 'job_lead', data: { company: 'Initech Mock', role: 'PMM', source: 'linkedin_post', source_url: 'https://example.com/jobs/4', salary: '200k' } },
     { kind: 'signal', data: { person_name: 'Someone', signal_type: 'promoted', source: 'linkedin_alert' } },
-    { kind: 'call', data: { ref: 'x' } },
+    { kind: 'nonsense', data: {} },
   ]
   const [{ out }] = await rows(`select agent_write($1, $2) as out`, [run, JSON.stringify(batch)])
   assert.deepEqual([out.created, out.merged, out.rejected], [2, 1, 4], JSON.stringify(out))
@@ -907,7 +907,7 @@ test('P1-14, P1-15, P1-16: keys, run-start, the write contract with its merges a
   assert.deepEqual([r[3].code, r[3].field], ['invalid', 'source_url'])
   assert.deepEqual([r[4].code, r[4].field], ['invalid', 'salary'])
   assert.equal(r[5].code, 'not_allowed')
-  assert.match(r[6].message, /later phase/)
+  assert.match(r[6].message, /Unknown kind/)
   // The merged lead gained a source and there is one inbox item for it; the poster is a thin person row.
   assert.deepEqual(await rows(`select sources, stage from job_leads where id = $1`, [r[0].id]), [{ sources: ['linkedin_post', 'indeed'], stage: 'new' }])
   assert.equal(await count(`inbox_items where ref_table = 'job_leads' and ref_id = '${r[0].id}'`), 1)
@@ -1260,6 +1260,106 @@ test('0032: outreach steps move a lead up the ladder, a referral becomes a job l
   await db.query(`delete from accounts where company_key = 'initech mock'`)
   await db.query(`delete from inbox_items where ref_table = 'job_leads' and ref_id = $1`, [leadId])
   await db.query(`delete from job_leads where id = $1`, [leadId])
+})
+
+test('0033: a search from a won lead counts, candidates move under CAN-1 to CAN-4 with the KPI events, placing opens testimonials, calls and counts arrive from A6, A-star suggestions from A3 and the verdict makes the person', async () => {
+  let searchId
+  let candId
+  await owner(async () => {
+    const [lead] = await rows(`select id, company, role from job_leads where stage <> 'dead' order by created_at limit 1`)
+    const [s] = await rows(`insert into searches (client, client_key, role, won_from_job_lead, crm, crm_url) values ($1, norm_company($1), $2, $3, 'spott', 'https://example.com/crm/job/1') returning id, status, health`, [lead.company, lead.role, lead.id])
+    searchId = s.id
+    assert.equal(s.status, 'open')
+    assert.equal(await count(`kpi_events where kpi = 'jobs_won' and source_id = '${s.id}'`), 1)
+    const [p] = await rows(`select id from people where name_key = 'ada example'`)
+    const [c] = await rows(`insert into search_candidates (search_id, person_id, stage) values ($1, $2, 'spoken') returning id`, [s.id, p.id])
+    candId = c.id
+    // CAN-1: no consent, no submission.
+    assert.match(await refused(`update search_candidates set stage = 'submitted' where id = '${c.id}'`), /Agreed to be put forward/)
+    await db.query(`update search_candidates set consent_to_submit = true, stage = 'submitted' where id = $1`, [c.id])
+    const [after] = await rows(`select submitted_on, consent_on, stage_changed_on from search_candidates where id = $1`, [c.id])
+    assert.notEqual(after.submitted_on, null)
+    assert.notEqual(after.consent_on, null)
+    // SEA-2 through CAN-2: the first submission is the shortlist.
+    assert.notEqual((await rows(`select first_submission_on from searches where id = $1`, [s.id]))[0].first_submission_on, null)
+    assert.equal(await count(`kpi_events where kpi = 'shortlists' and source_id = '${s.id}'`), 1)
+    await db.query(`update search_candidates set stage = 'first_stage' where id = $1`, [c.id])
+    assert.equal(await count(`kpi_events where kpi = 'first_interviews' and source_id = '${c.id}'`), 1)
+    await db.query(`update search_candidates set stage = 'offer' where id = $1`, [c.id])
+    assert.equal(await count(`kpi_events where kpi = 'offers' and source_id = '${c.id}'`), 1)
+    assert.deepEqual(await rows(`select offer_status from search_candidates where id = $1`, [c.id]), [{ offer_status: 'expected' }])
+    // Offer accepted: placed, the search placed, two testimonial requests, aftercare set.
+    await db.query(`update search_candidates set offer_status = 'accepted', start_on = current_date + 21 where id = $1`, [c.id])
+    assert.deepEqual(await rows(`select stage, aftercare_on is not null as aftercare from search_candidates where id = $1`, [c.id]), [{ stage: 'placed', aftercare: true }])
+    assert.deepEqual(await rows(`select status, placed_on is not null as placed from searches where id = $1`, [s.id]), [{ status: 'placed', placed: true }])
+    assert.equal(await count(`kpi_events where kpi = 'placements' and source_id = '${s.id}'`), 1)
+    assert.equal(await count(`content_items where kind = 'testimonial' and search_id = '${s.id}'`), 2)
+    // CAN-4: a rejection owes a kind word within a working day.
+    const [p2] = await rows(`select id from people where name_key = 'ben sample'`)
+    const [c2] = await rows(`insert into search_candidates (search_id, person_id, stage) values ($1, $2, 'spoken') returning id`, [s.id, p2.id])
+    await db.query(`update search_candidates set stage = 'rejected', outcome_reason = 'Too senior' where id = $1`, [c2.id])
+    assert.deepEqual(await rows(`select kind, reason, person_name from follow_ups where dedup_key = $1`, [`rejection:${c2.id}`]), [{ kind: 'rejection', reason: 'Tell them it is a no, kindly: Too senior', person_name: 'Ben Sample' }])
+    // Campaigns and the warm spec switch.
+    await db.query(`insert into campaigns (name, tool, job_lead_id, candidate_person_id, steps) values ('Ada to the lead', 'email', $1, $2, '[{"channel": "email", "note": "Send the profile"}]')`, [lead.id, p.id])
+    assert.equal(await count(`campaigns where name = 'Ada to the lead' and status = 'planned'`), 1)
+    await db.query(`update people set warm_spec = true where id = $1`, [p.id])
+    assert.equal(await count(`people where warm_spec`), 1)
+  })
+
+  // The owner block rolled back; plant a search the agents can find.
+  const [{ sid }] = await rows(`insert into searches (owner_id, client, client_key, role) values ($1, 'Contoso Demo Inc', 'contoso demo', 'Head of Product Marketing') returning id as sid`, [ownerId])
+  const [{ s6 }] = await rows(`select agent_run_start('a6_calls', 'after_call') as s6`)
+  const [{ out }] = await rows(`select agent_write($1, $2) as out`, [s6.run_id, JSON.stringify([
+    { kind: 'call', data: { granola_ref: 'g-1', granola_url: 'https://example.com/granola/1', held_at: '2026-11-11T14:00:00Z', minutes: 30, call_type: 'candidate_screen', person_name: 'Ada Example', company: 'Northwind Sample Co', search_client: 'Contoso Demo Inc', search_role: 'Head of Product Marketing', match_confidence: 'high', w_record: true, w_note: true } },
+    { kind: 'call', data: { granola_ref: 'g-1', held_at: '2026-11-11T14:00:00Z', w_cv: true, is_new_a_star: true } },
+    { kind: 'call', data: { granola_ref: 'g-2', held_at: '2026-11-11T16:00:00Z', call_type: 'candidate_screen', person_name: 'Someone New' } },
+    { kind: 'call', data: { granola_ref: 'g-3', call_type: 'coaching' } },
+    { kind: 'search_counts', data: { search_client: 'Contoso Demo Inc', n_spoken: 6, n_submitted: 3, waiting_on: 'client' } },
+    { kind: 'search_counts', data: { search_client: 'Nobody Ltd', n_spoken: 1 } },
+  ])])
+  const r = out.results
+  assert.equal(r[0].outcome, 'created')
+  assert.equal(r[1].outcome, 'merged')
+  assert.equal(r[1].id, r[0].id)
+  assert.equal(r[2].outcome, 'created')
+  assert.match(r[2].note, /confirming/)
+  assert.deepEqual([r[3].code, r[3].field], ['invalid', 'held_at'])
+  assert.equal(r[4].outcome, 'merged')
+  assert.equal(r[5].code, 'not_found')
+  assert.deepEqual(await rows(`select w_record, w_cv, w_note, is_new_a_star, match_confidence, search_id from calls where id = $1`, [r[0].id]), [{ w_record: true, w_cv: true, w_note: true, is_new_a_star: true, match_confidence: 'high', search_id: sid }])
+  assert.equal(await count(`kpi_events where kpi = 'new_a_star' and source_id = '${r[0].id}'`), 1)
+  assert.equal(await count(`inbox_items where type = 'call_writeup' and ref_id = '${r[2].id}'`), 1)
+  assert.deepEqual(await rows(`select n_spoken, n_submitted, waiting_on from searches where id = $1`, [sid]), [{ n_spoken: 6, n_submitted: 3, waiting_on: 'client' }])
+  const [{ ctx }] = await rows(`select agent_context('a6_calls', array['searches']) as ctx`)
+  assert.ok(ctx.searches.some((x) => x.id === sid && x.client === 'Contoso Demo Inc'))
+  await rows(`select agent_run_finish($1, 'ok')`, [s6.run_id])
+
+  const [{ s3 }] = await rows(`select agent_run_start('a3_jobs', 'schedule', 'collect') as s3`)
+  const [{ star }] = await rows(`select agent_write($1, $2) as star`, [s3.run_id, JSON.stringify([
+    { kind: 'a_star_suggestion', data: { name: 'Zed Fictional', title: 'Director of PMM', company: 'Stark Sample', city: 'boston', linkedin_url: 'https://example.com/in/zed', why: 'Two launches a year, B2B SaaS', week: '2026-11-09' } },
+    { kind: 'a_star_suggestion', data: { name: 'Zed Fictional', linkedin_url: 'https://example.com/in/zed' } },
+  ])])
+  assert.equal(star.results[0].outcome, 'created')
+  assert.equal(star.results[1].code, 'duplicate')
+  await rows(`select agent_run_finish($1, 'ok')`, [s3.run_id])
+  await owner(async () => {
+    const [{ pid }] = await rows(`select a_star_verdict($1, 'good') as pid`, [star.results[0].id])
+    assert.ok(pid)
+    assert.deepEqual(await rows(`select display_name, kind from people where id = $1`, [pid]), [{ display_name: 'Zed Fictional', kind: 'candidate' }])
+    assert.equal(await count(`league_members m join lists l on l.id = m.list_id where m.person_id = '${pid}' and l.kind = 'a_star' and m.added_from = 'a_star_feed'`), 1)
+    assert.deepEqual(await rows(`select verdict from a_star_suggestions where id = $1`, [star.results[0].id]), [{ verdict: 'good' }])
+    assert.match(await refused(`insert into a_star_suggestions (name, week, dedup_key) values ('x', current_date, 'x')`), /permission denied|row-level security/)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('search_candidates'), 0)
+    assert.equal(await count('calls'), 0)
+    assert.equal(await count(`searches where id = '${sid}'`), 1, 'a shared search is read-only for the reviewer')
+    assert.ok(await refused(`update searches set priority = 'focus' where id = '${sid}'`))
+  })
+  await db.query(`delete from inbox_items where ref_table = 'calls'`)
+  await db.query(`delete from calls`)
+  await db.query(`delete from a_star_suggestions`)
+  await db.query(`delete from searches where id = $1`, [sid])
 })
 
 // ---------------------------------------------------------------- run
