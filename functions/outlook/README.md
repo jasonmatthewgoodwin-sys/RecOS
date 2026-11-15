@@ -40,7 +40,7 @@ Health (24.9): a good token refresh marks the connection `connected` and moves `
 
 ## The send engine hook
 
-Today the send engine (migration 0034, `functions/send`) hands queued email to the `a8_sender` routine, a Claude cloud routine that calls `/send/tick`, sends each message through Jason's Outlook connector and posts `/send/report`. That stays as it is.
+Today the send engine (migration 0034, `functions/send`) hands queued email to the Outlook sender routine (agent `sender`), a Claude cloud routine that calls `/send/tick`, sends each message through Jason's Outlook connector and posts `/send/report`. That stays as it is.
 
 Once Outlook is connected, the tick can carry email itself. In a later commit to `functions/send` (its builder's file, not changed here):
 

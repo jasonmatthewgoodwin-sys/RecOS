@@ -284,7 +284,7 @@ export type GraphSendResult = { sent: true; ref: string } | { sent: false; fallb
  *
  * Returns fallback: true, without reporting, when Graph cannot carry it
  * (Outlook not connected, no address held): the caller leaves the message
- * for the a8_sender routine. A Graph failure is reported as a failed try, so
+ * for the sender routine. A Graph failure is reported as a failed try, so
  * the engine's retry and pause rules apply (20.8).
  */
 export async function sendViaGraph(messageId: string, db: SupabaseClient = serviceClient()): Promise<GraphSendResult> {
