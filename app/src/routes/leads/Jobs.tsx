@@ -171,7 +171,7 @@ export function Jobs() {
   const card = cardId ? all.find((l) => l.id === cardId) : undefined
 
   // The ladder, by hand: the screen first, the server second (25.5).
-  // Add to campaign (Mia, 15 November 2026): the poster enters an email campaign under Content, Campaigns, with the three steps. The hand-off to Spott or SourceWhale waits for their connection (docs/integrations.md).
+  // Add to campaign (Mia, 15 November 2026): the poster enters an email campaign under Content, Campaigns, with the three steps. A8 Campaign runner enrols them in Spott and reports each step back (0040).
   async function campaign(l: JobLead) {
     try {
       await data.addCampaign({
@@ -186,7 +186,7 @@ export function Jobs() {
         ],
       })
       invalidate('content.campaigns')
-      setNote(`${l.posterName ?? 'The poster'} is in a campaign. Find it under Content, Campaigns.`)
+      setNote(`${l.posterName ?? 'The poster'} is in a campaign. The campaign runner enrols them in Spott on its next run.`)
     } catch {
       setNote('That did not save. Try again.')
     }

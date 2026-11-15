@@ -134,6 +134,9 @@ function CampaignCard({ c, onPatch, onClose }: { c: Campaign; onPatch: (change: 
           label: 'Steps',
           body: (
             <div className="flex flex-col gap-3">
+              {/* Spott runs the sequence; the campaign runner reports each step back (0040). */}
+              {c.status === 'planned' && <p className="font-mono text-label text-ink-2">Waiting for the campaign runner to enrol them in Spott.</p>}
+              {c.status === 'running' && c.startedOn && <p className="font-mono text-label text-ink-2">In Spott since {c.startedOn}.</p>}
               {c.steps.length === 0 && <p className="text-ink-3">No steps yet. A spec campaign is a plan: the email, the call, the message.</p>}
               <ol className="flex flex-col" aria-label="Steps">
                 {c.steps.map((s, i) => (

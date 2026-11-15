@@ -212,7 +212,7 @@ test('T-RLS-6: owner can neither read nor change agents.key_hash', async () => {
     assert.match(await refused(`select key_hash from agents`), /permission denied/)
     assert.match(await refused(`update agents set key_hash = 'x'`), /permission denied/)
     assert.equal(await refused(`update agents set enabled = false where code = 'a7_events' returning code`), null)
-    assert.equal((await rows(`select code from agents`)).length, 8) // the seven agents and the sender (0039)
+    assert.equal((await rows(`select code from agents`)).length, 9) // the seven agents, the sender (0039) and the campaign runner (0040)
   })
 })
 
@@ -1631,6 +1631,46 @@ test('0039: the sender is an agent row, so the owner can make its key, and it ma
     const [{ k }] = await rows(`select agent_key_create('sender') as k`)
     assert.ok(typeof k === 'string' && k.length >= 20, 'a key comes back')
     assert.equal((await rows(`select aw_may_send('sender', 'message') as m`))[0].m, false)
+  })
+})
+
+test('0040: the campaign runner reads planned campaigns, enrols, ticks steps and keeps the counts; nobody else may send a campaign_step', async () => {
+  await service(async () => {
+    const [{ lid }] = await rows(`insert into job_leads (owner_id, company, role, company_key, role_key, poster_name) values ($1, 'Runner Sample Co', 'Head of PMM', 'runner_sample_co', 'head_of_pmm', 'Rae Fictional') returning id as lid`, [ownerId])
+    const [{ cid }] = await rows(`insert into campaigns (owner_id, name, tool, job_lead_id, steps) values ($1, 'Rae Fictional at Runner Sample Co', 'email', $2, '[{"channel":"email","note":"Spec email"},{"channel":"phone","note":"Call"},{"channel":"linkedin","note":"Message"}]') returning id as cid`, [ownerId, lid])
+    const ctx = (await rows(`select agent_context('a8_campaigns', array['campaigns']) as c`))[0].c
+    const mine = ctx.campaigns.find((x) => x.id === cid)
+    assert.ok(mine, 'the planned campaign is in the context')
+    assert.equal(mine.lead.poster_name, 'Rae Fictional')
+    await refused(`select agent_context('a3_jobs', array['campaigns'])`, /not_allowed/)
+    const [{ r8 }] = await rows(`select agent_run_start('a8_campaigns', 'schedule') as r8`)
+    const [{ w }] = await rows(`select agent_write($1, $2) as w`, [r8.run_id, JSON.stringify([
+      { kind: 'campaign_step', data: { campaign_id: cid, step: 'enrolled', on: '2026-11-16', crm_ref: 'seq-42', crm_url: 'https://example.com/spott/seq-42' } },
+      { kind: 'campaign_step', data: { campaign_id: cid, step: 'email_sent', on: '2026-11-16' } },
+      { kind: 'campaign_step', data: { campaign_id: cid, step: 'replied', on: '2026-11-18', outcome: 'interested' } },
+      { kind: 'campaign_step', data: { campaign_id: cid, step: 'call_booked', on: '2026-11-19' } },
+      { kind: 'campaign_step', data: { campaign_id: cid, step: 'dance' } },
+      { kind: 'campaign_step', data: { campaign_id: cid, step: 'done', spott: 'x' } },
+    ])])
+    assert.deepEqual(w.results.map((x) => x.outcome), ['merged', 'merged', 'merged', 'merged', 'rejected', 'rejected'], JSON.stringify(w.results))
+    const [c] = await rows(`select status, to_char(started_on, 'YYYY-MM-DD') as started_on, contacted, replies, calls_booked, crm_ref, steps, notes from campaigns where id = $1`, [cid])
+    assert.equal(c.status, 'running')
+    assert.equal(String(c.started_on).slice(0, 10), '2026-11-16')
+    assert.equal(c.contacted, 1)
+    assert.equal(c.replies, 1)
+    assert.equal(c.calls_booked, 1)
+    assert.equal(c.crm_ref, 'seq-42')
+    assert.equal(c.steps[0].doneOn, '2026-11-16', 'the email step is ticked')
+    assert.equal(c.steps[1].doneOn, '2026-11-19', 'the call step is ticked')
+    assert.equal(c.steps[2].doneOn ?? null, null)
+    assert.match(c.notes, /Replied 2026-11-18, interested/)
+    const [{ w2 }] = await rows(`select agent_write($1, $2) as w2`, [r8.run_id, JSON.stringify([{ kind: 'campaign_step', data: { campaign_id: cid, step: 'done', on: '2026-11-20' } }])])
+    assert.equal(w2.results[0].outcome, 'merged')
+    assert.equal((await rows(`select status, ended_on from campaigns where id = $1`, [cid]))[0].status, 'done')
+    const [{ r3 }] = await rows(`select agent_run_start('a3_jobs', 'schedule') as r3`)
+    const [{ w3 }] = await rows(`select agent_write($1, $2) as w3`, [r3.run_id, JSON.stringify([{ kind: 'campaign_step', data: { campaign_id: cid, step: 'done' } }])])
+    assert.equal(w3.results[0].outcome, 'rejected')
+    assert.match(w3.results[0].message ?? JSON.stringify(w3.results[0]), /may not send/)
   })
 })
 

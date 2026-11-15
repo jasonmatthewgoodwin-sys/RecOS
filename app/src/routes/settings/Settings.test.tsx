@@ -43,10 +43,10 @@ afterEach(() => {
 })
 
 describe('Settings, Agents', () => {
-  it('lists the seven agents with a solid dot for a failed last run and PAUSED where disabled; the card switches, shows runs and saves a prompt version', async () => {
+  it('lists the eight agents with a solid dot for a failed last run and PAUSED where disabled; the card switches, shows runs and saves a prompt version', async () => {
     mock()
     open('/settings/agents')
-    await waitFor(() => expect(rows()).toHaveLength(7))
+    await waitFor(() => expect(rows()).toHaveLength(8))
     const signals = Array.from(rows()).find((r) => r.textContent?.includes('Relationship signals'))!
     expect(signals.querySelector('[data-dot]')).toHaveAttribute('data-dot', 'solid')
     const events = Array.from(rows()).find((r) => r.textContent?.includes('Event ideas'))!

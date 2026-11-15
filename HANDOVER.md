@@ -191,6 +191,16 @@ RecOS never calls Claude itself and needs no Claude API key. Emails leave throug
 
 Later, if he wants to drop the routine, the same function can send through Microsoft Graph directly: that needs an app registration in Microsoft Entra with Mail.Send on his mailbox and the token in the function's secrets (section 15.6, check P6). Not needed for day one.
 
+## Email campaigns through Spott (15 November)
+
+Mia chose Spott to run the email campaigns. Add to campaign on an ad and post chaser card makes the campaign in RecOS; a new agent, A8 Campaign runner, enrols the person in Spott and reports each step back. Jason does three things:
+
+1. In Spott, make two sequences named exactly **RecOS spec** (for a hiring manager behind a job ad) and **RecOS candidate** (for a candidate being introduced). Their emails are written in Spott, where they belong.
+2. In RecOS, Settings, Agents: open Campaign runner and press Create key (migration 0040 adds the row).
+3. In claude.ai, a routine named RecOS campaign runner with the Spott connector attached, the same bootstrap as the other agents (it calls run-start as `a8_campaigns` and follows the stored prompt), `RECOS_URL` and `RECOS_KEY_A8_CAMPAIGNS` in its environment, weekdays at 09:10 and 15:10 London time.
+
+Then: Add to campaign on a chaser, and within a run the card under Content, Campaigns says In Spott since, the steps tick as Spott sends and the replies count moves.
+
 ## Hosting on Vercel, so Jason can sign in from a web address
 
 Mia chose Vercel on 14 November, in Jason's own Vercel account, so the address belongs to him like the repository and the database. Nothing is deployed yet. `app/vercel.json` is in place so every route serves the app. The app sends sign-in links back to whatever address it runs on, so no code changes with the host.

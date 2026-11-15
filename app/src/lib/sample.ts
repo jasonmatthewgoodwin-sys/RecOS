@@ -729,6 +729,7 @@ function freshSampleAgents(): Agent[] {
     a('a5_followups', 'Follow-up queue', 'Monday 07:30, Thursday 07:30, weekdays 08:45 for the calendar', { lastRun: { startedAt: hoursAgoIso(2), status: 'ok', itemsCreated: 2 }, spentThisMonth: 4.8 }),
     a('a6_calls', 'Call-to-CRM', 'Monday to Thursday 19:30, Friday 16:30', { lastRun: { startedAt: hoursAgoIso(18), status: 'partial', itemsCreated: 1 }, spentThisMonth: 9.9 }),
     a('a7_events', 'Event ideas', '1st of the month', { enabled: false, monthlyBudget: null, keyCreatedAt: null }),
+    a('a8_campaigns', 'Campaign runner', 'Weekdays 09:10 and 15:10', { modelTier: 'light', monthlyBudget: 10, keyCreatedAt: null, connections: ['crm', 'claude'] }),
   ]
 }
 
