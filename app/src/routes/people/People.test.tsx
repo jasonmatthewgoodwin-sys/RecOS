@@ -18,7 +18,7 @@ function mock() {
   vi.spyOn(data, 'weekTargets').mockResolvedValue({ hit: 2, total: 4 })
   vi.spyOn(data, 'lists').mockResolvedValue(sampleLists)
   vi.spyOn(data, 'members').mockResolvedValue(freshSampleMembers())
-  vi.spyOn(data, 'touches').mockResolvedValue([{ id: 't1', touchedOn: '2026-11-07', channel: 'phone', kind: 'call', note: 'Talked about the Boston role' }])
+  vi.spyOn(data, 'touches').mockResolvedValue([{ id: 't1', touchedOn: '2026-11-07', channel: 'phone', kind: 'call', note: 'Talked about the Boston role', sourceUrl: null }])
   return {
     reply: vi.spyOn(data, 'logReply').mockResolvedValue(),
     tier: vi.spyOn(data, 'moveTier').mockResolvedValue(),

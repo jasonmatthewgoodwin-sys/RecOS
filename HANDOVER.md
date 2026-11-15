@@ -124,7 +124,7 @@ What went wrong on 14 November, so it is not repeated: before the Site URL was c
 
 Migrations 0018 and 0019, the six new policy files, `db/seed/targets.sql` and `db/seed/sample_week.sql` were all run in the SQL editor. Home should show 07, 03, the calls left today, and 2/4.
 
-Migrations 0020 and 0021, with 0021's policies, view and seeds (`lists.sql`, `sample_league.sql`), were applied the same afternoon. Migrations 0022 to 0034, with their policies, views and seeds, are all applied as of 15 November. 0035 (content ideas) and 0036 (pictures on problem reports) are written and tested but not yet applied. `docs/build-log.md` has a row per migration with the date it reached the test project.
+Migrations 0020 and 0021, with 0021's policies, view and seeds (`lists.sql`, `sample_league.sql`), were applied the same afternoon. Migrations 0022 to 0034, with their policies, views and seeds, are all applied as of 15 November. 0035 (content ideas), 0036 (pictures on problem reports) and 0037 (the outreach note) were applied on 15 November and checked. `docs/build-log.md` has a row per migration with the date it reached the test project.
 
 ### 3. Jason reviews Home
 
@@ -175,19 +175,19 @@ Mia asked for the whole build overnight, one push, no phases. In the morning no 
 3. Deploy the `send` function from his laptop: `supabase functions deploy send --no-verify-jwt` (see `functions/README.md`).
 4. Settings, Agents: make an agent key named `sender`, then create the sender routine in Claude with his Outlook connector, as `functions/README.md` describes. Until it exists, queued emails wait and the log says so.
 5. Add one instruction to the signals agent's prompt: read `requests` from run-start and write `profile_summary` back for each `profile:<person id>`.
-6. Apply migrations 0035 and 0036 with `db/policies/problem_screenshots.sql` and `db/seed/content_ideas.sql` to the test project (SQL editor, or the CLI). Then open Content, Drafts and press Add ideas from your calls if the seed was not run. Ten drafts in his voice appear; approve the good ones, bin the rest.
+6. Content, Drafts already holds ten ideas in his voice (0035 applied on 15 November); approve the good ones, bin the rest. Ten drafts in his voice appear; approve the good ones, bin the rest.
 7. Decide the rows marked Pending in `docs/decisions.md` dated 15 November (Send leaves the follow-up open until sent; Open in Outlook as a compose link; the two-hour pause; no bounce hold yet; the sender routine), and the LinkedIn sending tool and caps from the business-development brief.
 
 ## Getting Jason's email sending, in plain steps
 
 RecOS never calls Claude itself and needs no Claude API key. Emails leave through Jason's own Outlook, carried by a Claude routine on his claude.ai account, the same way the seven agents run. The engine in RecOS decides what may go and when; the routine only carries it.
 
-1. **Deploy the send function** from Jason's laptop, in the repository folder: `supabase functions deploy send --no-verify-jwt`. One minute.
+1. **The send function is deployed** (Jason, 15 November, with `supabase/config.toml` listing it). Nothing to do here unless it changes; then `supabase functions deploy send --no-verify-jwt` from the repository folder.
 2. **Approve the templates** in RecOS, Settings, Templates. Nothing sends by itself until a template is approved.
-3. **Make the sender key** in Settings, Agents: a key named `sender`. Copy it once.
-4. **Create the routine** in claude.ai: name it RecOS sender, attach the Outlook connector, add `RECOS_URL` and `RECOS_KEY_SENDER` as environment variables, schedule it every 10 minutes on weekdays 08:00 to 18:00 New York time, and paste the prompt from `agents/prompts/sender.md`.
-5. **Send one test** to himself: Settings, Send rules, pick a type, Send a test. Watch the Send log fill in. Until a test has passed, the engine holds every email of that type.
-6. **Switch on automatic** per message type in Send rules, one type at a time, starting with the thank-you after a call.
+3. **Make the sender key.** Settings, Agents, open the row called Outlook sender (migration 0039), press Create key and copy the key once. RecOS does not show it again; if it is lost, Revoke and Create key again.
+4. **Give the routines the key.** Jason has already made three sender routines in claude.ai (a routine runs at most hourly, so three of them, at :05, :25 and :45, tick every 20 minutes between 13:00 and 23:00 London time, which is 08:00 to 18:00 New York). Each reads `RECOS_URL` (`https://vbnzdugfgoletjlumxba.supabase.co/functions/v1`, the same value the agent routines use) and `RECOS_KEY_SENDER`. Paste the key from step 3 into `RECOS_KEY_SENDER` on each of the three. The prompt is `agents/prompts/sender.md`.
+5. **Send one test to himself.** Settings, Send rules, open a message type, press Send a test, and watch the Send log (the link at the top right of Send rules) fill in over the next ten minutes: queued, then sent. Until a test has passed, the engine holds every email of that type.
+6. **Switch on automatic** one message type at a time in Send rules, starting with the thank-you after a call. The others stay at one click until he is happy.
 
 Later, if he wants to drop the routine, the same function can send through Microsoft Graph directly: that needs an app registration in Microsoft Entra with Mail.Send on his mailbox and the token in the function's secrets (section 15.6, check P6). Not needed for day one.
 

@@ -171,6 +171,27 @@ export function Jobs() {
   const card = cardId ? all.find((l) => l.id === cardId) : undefined
 
   // The ladder, by hand: the screen first, the server second (25.5).
+  // Add to campaign (Mia, 15 November 2026): the poster enters an email campaign under Content, Campaigns, with the three steps. The hand-off to Spott or SourceWhale waits for their connection (docs/integrations.md).
+  async function campaign(l: JobLead) {
+    try {
+      await data.addCampaign({
+        name: `${l.posterName ?? 'The poster'} at ${l.company}`,
+        tool: 'email',
+        jobLeadId: l.id,
+        candidatePersonId: null,
+        steps: [
+          { channel: 'email', note: `Spec email about the ${l.role} role` },
+          { channel: 'phone', note: 'Call if no reply in three working days' },
+          { channel: 'linkedin', note: 'Message if the call does not land' },
+        ],
+      })
+      invalidate('content.campaigns')
+      setNote(`${l.posterName ?? 'The poster'} is in a campaign. Find it under Content, Campaigns.`)
+    } catch {
+      setNote('That did not save. Try again.')
+    }
+  }
+
   async function outreach(l: JobLead, change: OutreachPatch) {
     const before = leads.data
     const today = ukClock(new Date()).date
@@ -250,6 +271,7 @@ export function Jobs() {
           onStage={(stage, reason) => move(card, stage, reason)}
           onPass={(colleague) => pass(card, colleague)}
           onOutreach={(change) => void outreach(card, change)}
+          onCampaign={() => void campaign(card)}
           onClose={closeCard}
         />
       )}

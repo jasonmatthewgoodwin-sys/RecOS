@@ -36,3 +36,17 @@ Every lead, signal, draft and inbox item carries the address it came from, and t
 ## How a message leaves (15 November 2026)
 
 Only the send engine can cause a message to leave (rule 5). An agent writes a `message` through `agent-write`; the engine decides at once (level, ceiling, approved template, do-not-contact, opt-out, caps, sending window, the stop switch) and logs the decision in `send_log`. An automatic message waits in the queue for its window. A one-click message waits on the Follow-ups deck until Jason presses Send, which queues it. A draft-only message opens in Outlook on the web from a compose link, Jason sends it there and presses Mark as sent. Queued messages are carried by the sender routine, which calls `/send/tick`, sends through Jason's Outlook connector and reports back. The stop switch under Settings, Send rules halts the queue at once.
+
+## Campaign tools and LinkedIn state (15 November 2026)
+
+Mia asked three things on the ad and post chaser card: a button that puts the poster into an email campaign that runs by itself, a pull of their details from SourceWhale, and a way for RecOS to know whether Jason has already reached out to someone on LinkedIn.
+
+**What exists now.** Add to campaign creates the campaign in RecOS (Content, Campaigns) with the three steps: spec email, call, message. The card keeps the outreach ladder and an editable note on where he is. Nothing leaves RecOS yet.
+
+**Spott.** Spott is the CRM and the record. If Spott runs email sequences for Jason, the hand-off is: RecOS writes the campaign; a Claude routine with the Spott connector reads new campaigns through the app's `context` endpoint and enrols the person in the named sequence in Spott; the routine reports the step back through `agent-write` as an `outreach_step`. No Spott key sits in the browser. This needs Spott's sequence API or connector to be confirmed (check P5).
+
+**SourceWhale.** SourceWhale runs outreach sequences across email and LinkedIn and tracks each step, including whether a connection request was sent, accepted and messaged. It offers an API and webhooks to paying accounts; what exactly is exposed depends on the plan, so the first step is to ask SourceWhale for API access on Jason's account. With it: RecOS pulls a person's sequence status into the outreach ladder (connection sent, connected, messaged, replied) instead of Jason marking it by hand, and Add to campaign enrols the poster in a SourceWhale sequence. That would make SourceWhale the one source of truth for outreach state, which is the cleanest answer to the LinkedIn question below. The pull runs in a routine or in the `run-agent` context, never from the browser.
+
+**LinkedIn.** LinkedIn has no API for a person's connection or message state, and the browser must not scrape it (CLAUDE.md, rule 1 and the calm rules). Three honest routes: (1) SourceWhale, if it sends the LinkedIn steps for Jason, already knows the state and can report it (above); (2) the LinkedIn scraper the business runs can be asked to include connection state for each poster it finds, and A3 Jobs writes it as an `outreach_step`; (3) a Claude routine with LinkedIn open in Chrome reads the state of a short list of profiles once a day and writes `outreach_step` records, which is slow and fragile and the last resort. Until one of these is in place, the ladder is marked by hand on the card.
+
+**Jason decides** which tool runs the email campaign (Spott or SourceWhale), and asks that tool for API access. Then the routine is a day's work.

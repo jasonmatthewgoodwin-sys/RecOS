@@ -1616,6 +1616,24 @@ test('0036: a picture attaches to a report as a data URL, three at most, never a
   })
 })
 
+test('0037: the owner keeps his own note on where he is with a poster, a thousand characters at most', async () => {
+  await owner(async () => {
+    const [l] = await rows(`insert into job_leads (company, role, company_key, role_key) values ('Chaser Sample Co', 'Director PMM', 'chaser_sample_co', 'director_pmm') returning id`)
+    await db.query(`update job_leads set outreach_note = 'Spoke on the phone, call back Thursday' where id = $1`, [l.id])
+    assert.equal((await rows(`select outreach_note from job_leads where id = $1`, [l.id]))[0].outreach_note, 'Spoke on the phone, call back Thursday')
+    await refused(`update job_leads set outreach_note = repeat('x', 1001) where id = '${l.id}'`, /check|violates/)
+  })
+})
+
+test('0039: the sender is an agent row, so the owner can make its key, and it may write nothing through agent-write', async () => {
+  await owner(async () => {
+    assert.equal((await rows(`select name from agents where code = 'sender'`))[0].name, 'Outlook sender')
+    const [{ k }] = await rows(`select agent_key_create('sender') as k`)
+    assert.ok(typeof k === 'string' && k.length >= 20, 'a key comes back')
+    assert.equal((await rows(`select aw_may_send('sender', 'message') as m`))[0].m, false)
+  })
+})
+
 // ---------------------------------------------------------------- run
 
 let failed = 0

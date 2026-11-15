@@ -26,7 +26,8 @@ export const sections: Section[] = [
     arrives: 'weeks 2 and 3',
     pages: [
       // Follow-ups and Campaigns left this tab on 14 November 2026 at Jason's ask (docs/decisions.md): follow-ups still run from Home and the Inbox; campaigns sit under Content.
-      { label: 'Jobs', slug: 'jobs' },
+      // Jobs became Ad and post chasers on 15 November 2026 (Mia): the people behind job ads and hiring posts, chased.
+      { label: 'Ad and post chasers', slug: 'jobs' },
       { label: 'Referrals and leads', slug: 'referrals' },
       { label: 'UK to US', slug: 'uk-us' },
       { label: 'Wider business', slug: 'wider' },

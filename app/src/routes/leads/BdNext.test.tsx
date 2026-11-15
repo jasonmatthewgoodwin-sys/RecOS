@@ -62,8 +62,8 @@ describe('Business development tabs', () => {
     mock()
     open('/leads/jobs')
     await screen.findByRole('heading', { name: 'Business development' })
-    const names = screen.getAllByRole('link').map((l) => l.textContent).filter((t) => ['Jobs', 'Referrals and leads', 'UK to US', 'Wider business', 'Follow-ups', 'Campaigns'].includes(t ?? ''))
-    expect(names).toEqual(['Jobs', 'Referrals and leads', 'UK to US', 'Wider business'])
+    const names = screen.getAllByRole('link').map((l) => l.textContent).filter((t) => ['Ad and post chasers', 'Referrals and leads', 'UK to US', 'Wider business', 'Follow-ups', 'Campaigns'].includes(t ?? ''))
+    expect(names).toEqual(['Ad and post chasers', 'Referrals and leads', 'UK to US', 'Wider business'])
   })
 })
 
@@ -75,7 +75,8 @@ describe('The outreach ladder', () => {
     const card = await screen.findByRole('dialog', { name: first.role })
     expect(within(card).getByRole('list', { name: 'Outreach' })).toBeInTheDocument()
     expect(card.querySelector('[data-outreach]')).toHaveAttribute('data-outreach', 'connection_sent')
-    expect(within(card).getByText(/^Connection sent 2026-11-10\. UK to US$/)).toBeInTheDocument()
+    // The card writes its own summary of where he is, and he can edit it (0037).
+    expect((within(card).getByLabelText('Where you are with this one') as HTMLTextAreaElement).value).toMatch(/^Connection sent to .* on 10 November\. Waiting for them to accept\. UK company hiring in the US\.$/)
     await userEvent.type(within(card).getByLabelText('First message, once connected'), 'Thanks for connecting. One question on your PMM hire.')
     await userEvent.click(within(card).getByRole('button', { name: 'Mark connected' }))
     await waitFor(() => expect(outreach).toHaveBeenCalledWith(first.id, { outreachStage: 'connected' }))
@@ -105,7 +106,7 @@ describe('Referrals and leads', () => {
     await waitFor(() => expect(convert).toHaveBeenCalledWith('rf-pat'))
     const lead = await screen.findByRole('dialog', { name: 'Product marketing hire' })
     expect(lead.textContent).toContain('Globex Fiction')
-    expect(within(lead).getByText('Not contacted yet')).toBeInTheDocument()
+    expect((within(lead).getByLabelText('Where you are with this one') as HTMLTextAreaElement).value).toMatch(/^Not contacted yet/)
   })
 })
 

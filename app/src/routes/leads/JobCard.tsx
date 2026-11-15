@@ -8,7 +8,7 @@ import { PillButton } from '../../components/PillButton'
 import { Steps } from '../../components/Steps'
 import { TextLink } from '../../components/TextLink'
 import type { JobLead, JobStage, OutreachPatch, ReplyOutcome } from '../../lib/data'
-import { defaultConnectionNote, nextOutreach, outcomeWord, outreachDate, outreachSteps, outreachWord } from '../../lib/outreach'
+import { defaultConnectionNote, nextOutreach, outreachSteps, outreachSummary, outreachWord } from '../../lib/outreach'
 import { cityName, deadReasonWord, deadReasons, nextStage, primaryLabel, sourceWord, stagePills, stageWord } from '../../lib/leads'
 
 export type CardMode = 'view' | 'bin' | 'pass'
@@ -21,6 +21,8 @@ type Props = {
   onPass: (colleague: string) => void
   /** The outreach ladder, by hand (14 November 2026). */
   onOutreach?: (patch: OutreachPatch) => void
+  /** Add the poster to an email campaign (Mia, 15 November 2026). */
+  onCampaign?: () => void
   onClose: () => void
 }
 
@@ -31,8 +33,9 @@ function longDate(date: string): string {
 // The job card (28.2): header, fit, sources, poster, suggested people, draft,
 // stage pills, one primary and the quiet links. Names only, never contact
 // details (CLAUDE.md, rule 1).
-export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onClose }: Props) {
+export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onCampaign, onClose }: Props) {
   const [connectionNote, setConnectionNote] = useState(lead.connectionNote ?? defaultConnectionNote)
+  const [outreachNote, setOutreachNote] = useState(lead.outreachNote ?? outreachSummary(lead))
   const [firstMessage, setFirstMessage] = useState(lead.firstMessage ?? '')
   const [outcome, setOutcome] = useState<ReplyOutcome>(lead.replyOutcome ?? 'interested')
   const nextStep = nextOutreach(lead.outreachStage)
@@ -107,11 +110,8 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onClo
             body: (
               <div className="flex flex-col gap-4" data-outreach={lead.outreachStage}>
                 <Steps steps={outreachSteps} at={lead.outreachStage} tone={lead.outreachStage === 'replied' ? 'clear' : lead.outreachStage === 'found' ? 'new' : 'pending'} label="Outreach" />
-                <p className="font-mono text-label text-ink-2">
-                  {lead.outreachStage === 'found' ? 'Not contacted yet' : `${outreachWord[lead.outreachStage]} ${outreachDate(lead) ?? ''}`}
-                  {lead.outreachStage === 'replied' && lead.replyOutcome ? `, ${outcomeWord[lead.replyOutcome].toLowerCase()}` : ''}
-                  {lead.ukToUs ? '. UK to US' : ''}
-                </p>
+                {/* The card's own summary of where he is with the poster, editable in place; his words stay until he clears them (0037). */}
+                <Field label="Where you are with this one" kind="lines" rows={2} value={outreachNote} onChange={setOutreachNote} onBlur={() => outreachNote !== (lead.outreachNote ?? outreachSummary(lead)) && onOutreach({ outreachNote: outreachNote.trim() === '' || outreachNote === outreachSummary(lead) ? null : outreachNote })} />
                 {lead.outreachStage === 'found' && (
                   <Field label="Connection note" kind="lines" rows={2} value={connectionNote} onChange={setConnectionNote} onBlur={() => connectionNote !== (lead.connectionNote ?? '') && onOutreach({ connectionNote })} />
                 )}
@@ -205,17 +205,15 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onClo
         ]
       : []),
     {
-      label: 'Stage',
+      label: 'Pipeline',
       body: (
         <div className="flex flex-col gap-4">
-          <Steps
-            steps={['new', 'chased', 'replied', 'meeting_booked', 'job_won'].map((k) => ({ key: k, label: stageWord[k as JobStage] }))}
-            at={open ? lead.stage : 'job_won'}
-            tone={!open ? 'clear' : lead.stage === 'new' ? 'new' : lead.stage === 'replied' ? 'action' : 'pending'}
-          />
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Stage">
+          {/* One band of pills, never stacked (Mia, 15 November 2026): the outreach ladder above says how far the chase has got; this says where the job is. */}
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Stage">
             {stagePills.map((s) => (
-              <PillButton key={s} label={stageWord[s]} current={s === lead.stage} disabled={!open} onClick={() => pick(s)} />
+              <span key={s} className="shrink-0">
+                <PillButton label={stageWord[s]} current={s === lead.stage} disabled={!open} onClick={() => pick(s)} />
+              </span>
             ))}
           </div>
           {mode === 'bin' && (
@@ -266,7 +264,7 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onClo
 
   return (
     <Card
-      label="Job"
+      label="Ad and post chaser"
       title={lead.role}
       sections={sections}
       primaryAction={open && primary && next ? { label: primary, onClick: () => onStage(next) } : undefined}
@@ -274,6 +272,7 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onClo
         open ? (
           <>
             {lead.draft !== null && <TextLink label={copied ? 'Copied' : 'Copy draft'} onClick={copyDraft} />}
+            {onCampaign && lead.posterName && <TextLink label="Add to campaign" icon="plus" onClick={onCampaign} />}
             {mode !== 'pass' && <TextLink label="Pass to a colleague" onClick={() => onMode('pass')} />}
             {mode !== 'bin' && <TextLink label="Bin" onClick={() => onMode('bin')} />}
           </>

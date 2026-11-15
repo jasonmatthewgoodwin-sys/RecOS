@@ -4,7 +4,7 @@ A Claude cloud routine on Jason's claude.ai account. It is not one of the seven 
 
 ## Set-up, once
 
-1. In RecOS, Settings, Agents: make an agent key named `sender`. Copy it once; RecOS does not show it again.
+1. In RecOS, Settings, Agents: open the row called Outlook sender and press Create key. Copy it once; RecOS does not show it again.
 2. In claude.ai, Routines: new routine, name "RecOS sender". Attach the Outlook connector (Jason's work mailbox). Add two environment variables: `RECOS_URL` (the Supabase project address, the same one the other routines use) and `RECOS_KEY_SENDER` (the key from step 1).
 3. Schedule: every 10 minutes, Monday to Friday, 08:00 to 18:00 New York time. The engine will not hand over anything outside the sending window anyway.
 4. Paste the prompt below.

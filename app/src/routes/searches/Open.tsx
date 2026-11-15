@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactElement } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card } from '../../components/Card'
 import { Field } from '../../components/Field'
@@ -82,7 +82,7 @@ export function Open({ role = 'owner' }: { role?: 'owner' | 'reviewer' }) {
   const cold = live.filter((s) => s.health === 'cold')
 
   const rows: ListItem[] = priorityOrder
-    .flatMap((pr) => {
+    .flatMap((pr): ListItem[] => {
       const group = shown.filter((s) => (pr === 'dormant' ? s.priority === pr || s.status === 'on_hold' : s.priority === pr && s.status !== 'on_hold')).sort((a, b) => a.openedOn.localeCompare(b.openedOn))
       if (pr === 'dormant' && !showDormant && group.length > 0) {
         return [{ id: 'dormant', section: priorityWord.dormant, dot: 'hollow' as const, title: `${group.length} dormant`, detail: 'Click to show', done: true, onOpen: () => setShowDormant(true) } as ListItem]
@@ -278,7 +278,7 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
     </div>
   )
 
-  let body: JSX.Element
+  let body: ReactElement
   let primary: { label: string; onClick: () => void } | undefined
   if (tab === 'brief') {
     body = <BriefTab search={s} note={brief} loading={notes.status === 'loading' && !notes.data} onSaved={() => invalidate(notesKey(s.id))} onNote={onNote} />

@@ -58,7 +58,7 @@ describe('Jobs', () => {
     mock()
     open()
     expect(screen.getByRole('heading', { name: 'Business development' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Ad and post chasers' })).toHaveAttribute('aria-current', 'page')
     await waitFor(() => expect(values()).toEqual(['12/20', '09']))
     const main = screen.getByRole('main')
     expect(main.querySelectorAll('[data-hero-stat]')).toHaveLength(2)

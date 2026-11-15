@@ -26,7 +26,7 @@ supabase functions deploy send --no-verify-jwt
 
 ## The sender routine
 
-The engine only decides and queues. A Claude cloud routine, created by Jason with his Outlook connector attached and an agent key named `sender` from Settings, Agents, carries the messages:
+The engine only decides and queues. A Claude cloud routine, created by Jason with his Outlook connector attached and the key of the Outlook sender row in Settings, Agents (Create key on its card), carries the messages:
 
 1. Every ten minutes between 08:00 and 18:00 New York time, `POST /functions/v1/send/tick` with `X-Agent-Name: sender` and `X-Agent-Key`. The reply lists up to 20 messages whose window has opened, each with the address, subject and body already filled.
 2. For each one, send it from Jason's mailbox through the Outlook connector.

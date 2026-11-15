@@ -46,3 +46,29 @@ export function outreachDate(l: JobLead): string | null {
       return null
   }
 }
+
+/** A plain summary of where the owner is with the poster, from the dates on the lead; shown when he has not written his own (Mia, 15 November 2026). */
+export function outreachSummary(l: JobLead): string {
+  const who = l.posterName ?? 'the poster'
+  const when = (d: string | null) => (d ? ` on ${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))}` : '')
+  const parts: string[] = []
+  switch (l.outreachStage) {
+    case 'found':
+      parts.push(`Not contacted yet. ${who} posted the role.`)
+      break
+    case 'connection_sent':
+      parts.push(`Connection sent to ${who}${when(l.outreachConnectionOn)}. Waiting for them to accept.`)
+      break
+    case 'connected':
+      parts.push(`Connected with ${who}${when(l.outreachConnectedOn)}. First message ${l.firstMessage ? 'staged' : 'not written yet'}.`)
+      break
+    case 'messaged':
+      parts.push(`Messaged ${who}${when(l.outreachMessagedOn)}. No reply yet.`)
+      break
+    case 'replied':
+      parts.push(`${who} replied${when(l.outreachRepliedOn)}${l.replyOutcome ? `, ${outcomeWord[l.replyOutcome].toLowerCase()}` : ''}.`)
+      break
+  }
+  if (l.ukToUs) parts.push('UK company hiring in the US.')
+  return parts.join(' ')
+}

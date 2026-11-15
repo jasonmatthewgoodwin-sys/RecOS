@@ -77,10 +77,12 @@ export type JobLead = {
   /** The two staged messages: the connection note and the first message once connected. */
   connectionNote: string | null
   firstMessage: string | null
+  /** The owner's own words on where he is with the poster (0037). Null means the app writes the summary. */
+  outreachNote: string | null
   /** A UK-headquartered company hiring, or likely to hire, in the US. */
   ukToUs: boolean
 }
-export type OutreachPatch = Partial<Pick<JobLead, 'outreachStage' | 'replyOutcome' | 'connectionNote' | 'firstMessage'>>
+export type OutreachPatch = Partial<Pick<JobLead, 'outreachStage' | 'replyOutcome' | 'connectionNote' | 'firstMessage' | 'outreachNote'>>
 
 /** Hero 1 on the Jobs page: posts chased this week against the weekly target. */
 export type ChasedThisWeek = { total: number; target: number | null }
@@ -904,7 +906,7 @@ export interface DataSource {
   warmSpecs(): Promise<WarmSpec[]>
   setWarmSpec(personId: string, on: boolean): Promise<void>
   campaigns(): Promise<Campaign[]>
-  addCampaign(input: { name: string; tool: string; jobLeadId: string | null; candidatePersonId: string | null }): Promise<void>
+  addCampaign(input: { name: string; tool: string; jobLeadId: string | null; candidatePersonId: string | null; steps?: CampaignStep[] }): Promise<void>
   updateCampaign(id: string, patch: CampaignPatch): Promise<void>
 
   /** Templates (12.5, 32.4) and the send engine's log and actions (8.4, 15.6). */
@@ -1010,7 +1012,7 @@ const live: DataSource = {
     const { data, error } = await supabase!
       .from('job_leads')
       .select(
-        'id, company, role, city, country, level, sources, source_urls, poster_name, poster_title, poster_profile_url, outreach_stage, outreach_connection_on, outreach_connected_on, outreach_messaged_on, outreach_replied_on, reply_outcome, connection_note, first_message, uk_to_us, ' +
+        'id, company, role, city, country, level, sources, source_urls, poster_name, poster_title, poster_profile_url, outreach_stage, outreach_connection_on, outreach_connected_on, outreach_messaged_on, outreach_replied_on, reply_outcome, connection_note, first_message, outreach_note, uk_to_us, ' +
           'fit_score, fit_reason, existing_client, stage, dead_reason, matched, first_seen_on, chased_on, replied_on, ' +
           'meeting_on, won_on, spec_message:messages!spec_message_id (body)',
       )
@@ -1048,6 +1050,7 @@ const live: DataSource = {
       reply_outcome: ReplyOutcome | null
       connection_note: string | null
       first_message: string | null
+      outreach_note?: string | null
       uk_to_us: boolean
     }
     return ((data ?? []) as unknown as Row[]).map((r) => ({
@@ -1075,6 +1078,7 @@ const live: DataSource = {
       replyOutcome: r.reply_outcome,
       connectionNote: r.connection_note,
       firstMessage: r.first_message,
+      outreachNote: r.outreach_note ?? null,
       ukToUs: r.uk_to_us ?? false,
       matched: (Array.isArray(r.matched) ? r.matched : [])
         .filter((m) => typeof m.name === 'string')
@@ -1446,6 +1450,7 @@ const live: DataSource = {
     if (patch.replyOutcome !== undefined) row.reply_outcome = patch.replyOutcome
     if (patch.connectionNote !== undefined) row.connection_note = patch.connectionNote
     if (patch.firstMessage !== undefined) row.first_message = patch.firstMessage
+    if (patch.outreachNote !== undefined) row.outreach_note = patch.outreachNote
     const { error } = await supabase!.from('job_leads').update(row).eq('id', id)
     fail(error)
   },
@@ -2397,7 +2402,7 @@ const live: DataSource = {
   },
 
   async addCampaign(input) {
-    const { error } = await supabase!.from('campaigns').insert({ name: input.name, tool: input.tool, job_lead_id: input.jobLeadId, candidate_person_id: input.candidatePersonId })
+    const { error } = await supabase!.from('campaigns').insert({ name: input.name, tool: input.tool, job_lead_id: input.jobLeadId, candidate_person_id: input.candidatePersonId, steps: input.steps ?? [] })
     fail(error)
   },
 

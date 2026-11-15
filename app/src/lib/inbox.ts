@@ -21,7 +21,7 @@ export const typeWord: Record<InboxType, string> = {
 
 /** The list's type filter, in the order of 27.2. */
 export const typeFilters: { value: InboxType; label: string }[] = [
-  { value: 'job_lead', label: 'Jobs' },
+  { value: 'job_lead', label: 'Ad and post chasers' },
   { value: 'signal', label: 'Signals' },
   { value: 'content_draft', label: 'Drafts' },
   { value: 'call_writeup', label: 'Calls' },

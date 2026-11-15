@@ -3,6 +3,7 @@
 
 import { composeLink } from './send'
 import type {
+  SendLogRow, Template,
   Account,
   AStarSuggestion,
   Call,
@@ -55,6 +56,7 @@ function lead(over: Partial<JobLead> & Pick<JobLead, 'id' | 'company' | 'role' |
     outreachRepliedOn: null,
     replyOutcome: null,
     connectionNote: null,
+    outreachNote: null,
     firstMessage: null,
     ukToUs: false,
     matched: [],
@@ -313,7 +315,9 @@ export function resetSampleInbox() {
   sampleInbox = freshSampleInbox()
 }
 
-function fu(over: Partial<FollowUp> & Pick<FollowUp, 'id' | 'personName' | 'kind' | 'reason' | 'dueOn'>): FollowUp {
+type SampleMessage = Omit<NonNullable<FollowUp['message']>, 'state'> & { state?: string }
+function fu(over: Partial<Omit<FollowUp, 'message'>> & { message?: SampleMessage | null } & Pick<FollowUp, 'id' | 'personName' | 'kind' | 'reason' | 'dueOn'>): FollowUp {
+  const { message, ...rest } = over
   return {
     personId: null,
     company: null,
@@ -321,10 +325,9 @@ function fu(over: Partial<FollowUp> & Pick<FollowUp, 'id' | 'personName' | 'kind
     direction: 'owed',
     status: 'open',
     snoozedUntil: null,
-    message: null,
     createdAt: hoursAgo(30),
-    ...over,
-    ...(over.message ? { message: { state: 'draft', ...over.message } } : {}),
+    ...rest,
+    message: message ? { ...message, state: message.state ?? 'draft' } : null,
   }
 }
 
@@ -1158,7 +1161,7 @@ export const sampleSource: DataSource = {
     const today = ukClock(new Date()).date
     const list = (sampleTouches[personId] ??= [])
     if (!list.some((t) => t.touchedOn === today && t.kind === 'message_replied')) {
-      list.unshift({ id: `t-${personId}-${today}`, touchedOn: today, channel: 'linkedin', kind: 'message_replied', note: null })
+      list.unshift({ id: `t-${personId}-${today}`, touchedOn: today, channel: 'linkedin', kind: 'message_replied', note: null, sourceUrl: null })
     }
     // What LEA-2 does on the server.
     const m = sampleMembers.find((x) => x.personId === personId)
@@ -1561,7 +1564,7 @@ export const sampleSource: DataSource = {
     return sampleCampaigns.map((x) => ({ ...x, steps: x.steps.map((st) => ({ ...st })) }))
   },
   async addCampaign(input) {
-    sampleCampaigns.unshift({ id: `cp-${Date.now()}`, name: input.name, tool: input.tool, jobLeadId: input.jobLeadId, candidatePersonId: input.candidatePersonId, steps: [], contacted: 0, replies: 0, callsBooked: 0, status: 'planned', startedOn: null, endedOn: null, createdAt: new Date().toISOString() })
+    sampleCampaigns.unshift({ id: `cp-${Date.now()}`, name: input.name, tool: input.tool, jobLeadId: input.jobLeadId, candidatePersonId: input.candidatePersonId, steps: input.steps ?? [], contacted: 0, replies: 0, callsBooked: 0, status: 'planned', startedOn: null, endedOn: null, createdAt: new Date().toISOString() })
   },
   async updateCampaign(id, patch) {
     const found = sampleCampaigns.find((x) => x.id === id)
