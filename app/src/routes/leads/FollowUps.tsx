@@ -10,7 +10,7 @@ import { Dots, EmptyLine } from '../../components/Quiet'
 import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
 import { data, type FollowUp, type FollowUpStatus } from '../../lib/data'
-import { FOCUS_LIMIT_MINUTES, clockText, deckOf, dueWord, isLate, kindWord, mondayFocusOf, nextThursday, primaryWord } from '../../lib/followups'
+import { FOCUS_LIMIT_MINUTES, clockText, deckOf, dueWord, inEngine, isLate, kindWord, mondayFocusOf, nextThursday, primaryWord } from '../../lib/followups'
 import { twoDigits } from '../../lib/format'
 import { snoozeChoices } from '../../lib/inbox'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
@@ -166,6 +166,63 @@ export function FollowUps() {
     }
   }
 
+  // The paired message goes through the send engine (15.6, 21.4): Send
+  // queues a one-click message, Open in Outlook makes a draft there, Copy
+  // and Mark as sent cover LinkedIn and anything sent by hand.
+  async function send(f: FollowUp) {
+    const m = f.message
+    if (!m) return move(f, 'done')
+    const edited = drafts[f.id]
+    if (edited !== undefined && edited !== m.body) {
+      try {
+        await data.setFollowUpStatus(f.id, 'open', { draft: edited })
+      } catch {
+        setNote('That did not save. Try again.')
+        return
+      }
+    }
+    if (m.channel === 'linkedin') {
+      void navigator.clipboard?.writeText(draftOf(f))
+      setNote('Copied. Paste it into LinkedIn, then Mark as sent.')
+      return
+    }
+    if (m.level === 'one_click') {
+      const before = items.data
+      setQueryData<FollowUp[]>(KEY, (rows) => (rows ?? []).filter((r) => r.id !== f.id))
+      try {
+        const r = await data.sendAction(m.id, 'approve')
+        setNote(r.note ?? 'Queued.')
+        // Keep the row, marked as the engine's, until the next load.
+        setQueryData<FollowUp[]>(KEY, (rows) => [...(rows ?? []).filter((r) => r.id !== f.id), { ...f, message: { ...m, state: r.state ?? 'queued' } }])
+        invalidate('home')
+      } catch (e) {
+        setQueryData<FollowUp[]>(KEY, () => before ?? [])
+        setNote(e instanceof Error ? e.message : 'That did not send. Try again.')
+      }
+      return
+    }
+    try {
+      const r = await data.sendAction(m.id, 'open_draft')
+      if (r.outlook_draft_url) window.open(r.outlook_draft_url, '_blank', 'noopener')
+      setNote('A draft is open in Outlook. Press Send there, then Mark as sent here.')
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Could not open Outlook. Copy the draft instead.')
+    }
+  }
+
+  async function markSent(f: FollowUp) {
+    if (!f.message) return move(f, 'done')
+    const before = items.data
+    setQueryData<FollowUp[]>(KEY, (rows) => (rows ?? []).filter((r) => r.id !== f.id))
+    try {
+      await data.sendAction(f.message.id, 'mark_sent')
+      invalidate('home')
+    } catch (e) {
+      setQueryData<FollowUp[]>(KEY, () => before ?? [])
+      setNote(e instanceof Error ? e.message : 'That did not save. Try again.')
+    }
+  }
+
   async function undo(f: FollowUp) {
     setQueryData<FollowUp[]>(KEY, (rows) => [f, ...(rows ?? []).filter((r) => r.id !== f.id)])
     try {
@@ -181,7 +238,8 @@ export function FollowUps() {
     if (!focus || timeUp || minutes < FOCUS_LIMIT_MINUTES || !deck) return
     setTimeUp(true)
     const thursday = nextThursday(clock)
-    const left = deck.filter((d) => all.some((a) => a.id === d.id && a.status === 'open'))
+    // A message the engine already holds is not moved: it sends on its own.
+    const left = deck.filter((d) => all.some((a) => a.id === d.id && a.status === 'open' && !inEngine(a)))
     const ids = left.map((d) => d.id)
     setQueryData<FollowUp[]>(KEY, (rows) => (rows ?? []).map((r) => (ids.includes(r.id) ? { ...r, dueOn: thursday } : r)))
     setDeck([])
@@ -206,17 +264,15 @@ export function FollowUps() {
         items={deck}
         renderItem={(f) => <Item item={f} draft={draftOf(f)} onDraft={(t) => setDrafts((d) => ({ ...d, [f.id]: t }))} />}
         primaryAction={{
-          label: (f) => primaryWord(f),
-          onClick: (f) => void move(f, 'done'),
+          label: (f) => primaryWord(f, true),
+          onClick: (f) => void send(f),
         }}
-        extraActions={(f) =>
-          f.direction === 'owed'
-            ? [
-                { label: 'Handled offline', onClick: () => void move(f, 'handled_offline') },
-                { label: 'No action needed', onClick: () => void move(f, 'closed') },
-              ]
-            : [{ label: 'No action needed', onClick: () => void move(f, 'closed') }]
-        }
+        extraActions={(f) => [
+          ...(f.message && f.message.level !== 'one_click' ? [{ label: 'Mark as sent', onClick: () => void markSent(f) }] : []),
+          ...(f.message && f.message.level === 'one_click' ? [{ label: 'Done without sending', onClick: () => void move(f, 'done') }] : []),
+          ...(f.direction === 'owed' ? [{ label: 'Handled offline', onClick: () => void move(f, 'handled_offline') }] : []),
+          { label: 'No action needed', onClick: () => void move(f, 'closed') },
+        ]}
         onSnooze={(f, until) => void move(f, 'snoozed', { snoozedUntil: until })}
         snoozeChoices={snoozeChoices(clock)}
         onUndo={(f) => void undo(f)}
@@ -237,7 +293,8 @@ export function FollowUps() {
       title: f.company ? `${f.personName}, ${f.company}` : f.personName,
       detail: f.reason,
       meta: dueWord(f, today),
-      word: isLate(f, today) ? ('Late' as const) : undefined,
+      word: inEngine(f) ? 'Queued' : isLate(f, today) ? 'Late' : undefined,
+      done: inEngine(f),
       onOpen: () => openCard(f.id),
     }))
 
@@ -278,7 +335,7 @@ export function FollowUps() {
           label={kindWord[chosen.kind] ?? 'Follow-up'}
           title={chosen.company ? `${chosen.personName}, ${chosen.company}` : chosen.personName}
           sections={[{ body: <Item item={chosen} heading={false} draft={draftOf(chosen)} onDraft={(t) => setDrafts((d) => ({ ...d, [chosen.id]: t }))} /> }]}
-          primaryAction={{ label: primaryWord(chosen), onClick: () => void move(chosen, 'done').then(closeCard) }}
+          primaryAction={{ label: primaryWord(chosen, true), onClick: () => void send(chosen).then(closeCard) }}
           links={
             <>
               <TextLink label="Handled offline" onClick={() => void move(chosen, 'handled_offline').then(closeCard)} />

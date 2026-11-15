@@ -1,6 +1,7 @@
 // Invented sample data for building screens with no database (section 4.3,
 // Local). Every name here is made up. Nothing in this file is real.
 
+import { composeLink } from './send'
 import type {
   Account,
   AStarSuggestion,
@@ -322,6 +323,7 @@ function fu(over: Partial<FollowUp> & Pick<FollowUp, 'id' | 'personName' | 'kind
     message: null,
     createdAt: hoursAgo(30),
     ...over,
+    ...(over.message ? { message: { state: 'draft', ...over.message } } : {}),
   }
 }
 
@@ -585,6 +587,39 @@ export function freshSampleCampaigns(): Campaign[] {
   ]
 }
 let sampleCampaigns = freshSampleCampaigns()
+// Templates: the five starters, with the thanks one approved so a sample week can send.
+export function freshSampleTemplates(): Template[] {
+  const t = (over: Partial<Template> & Pick<Template, 'id' | 'type' | 'name' | 'channel' | 'body'>): Template => ({
+    subject: null, variables: [], version: 1, approved: false, approvedAt: null, active: true, updatedAt: `${daysAgo(10)}T09:00:00Z`, ...over,
+  })
+  return [
+    t({ id: 't-thanks', type: 'thanks_after_call', name: 'Starter', channel: 'email', subject: 'Good to speak today', body: 'Hi {{first_name}},\n\nThanks for your time on {{call_day}}. Good to hear about what you have been doing at {{company}}.\n\n{{next_step}}\n\nSpeak soon,\n{{my_first_name}}', approved: true, approvedAt: `${daysAgo(9)}T09:00:00Z` }),
+    t({ id: 't-cv', type: 'cv_request', name: 'Starter', channel: 'email', subject: 'Your resume', body: 'Hi {{first_name}},\n\nWhen you get a minute, could you send over your latest resume? It means I can get you in front of the right people quickly.\n\nThanks,\n{{my_first_name}}' }),
+    t({ id: 't-submitted', type: 'submitted_confirmation', name: 'Starter', channel: 'email', subject: 'You are with the client', body: 'Hi {{first_name}},\n\nQuick one to say I have put you forward for the {{role}} role today. I will chase for feedback and come back to you as soon as I hear, and by the end of the week either way.\n\n{{my_first_name}}' }),
+    t({ id: 't-coaching', type: 'coaching_followup', name: 'Starter', channel: 'email', subject: 'Following up on our chat', body: 'Hi {{first_name}},\n\nGood to talk on {{call_day}}. {{next_step}}\n\nYou mentioned a couple of people who might get something from the same conversation. If you are happy to connect us, I would be glad to help them.\n\n{{my_first_name}}' }),
+    t({ id: 't-connect', type: 'linkedin_connect', name: 'Starter', channel: 'linkedin', body: 'Hi {{first_name}}, I recruit product marketers and nothing else, mostly for B2B software teams in the US. Saw you are hiring. Would be good to connect.' }),
+  ].map((x) => ({ ...x, variables: [...new Set([...(x.subject ?? '').matchAll(/\{\{\s*([a-z_]+)\s*\}\}/g), ...x.body.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/g)].map((m) => m[1]))] }))
+}
+let sampleTemplates = freshSampleTemplates()
+
+export function freshSampleSendLog(): SendLogRow[] {
+  const row = (over: Partial<SendLogRow> & Pick<SendLogRow, 'id' | 'type' | 'toName' | 'outcome' | 'loggedAt'>): SendLogRow => ({
+    messageId: `m-${over.id}`, channel: 'email', level: 'automatic', detail: null, ...over,
+  })
+  return [
+    row({ id: 'l1', type: 'thanks_after_call', toName: 'Finn Fictional', outcome: 'sent', detail: 'Auto', loggedAt: `${daysAgo(0)}T15:12:00Z` }),
+    row({ id: 'l2', type: 'thanks_after_call', toName: 'Finn Fictional', outcome: 'queued', detail: 'Sends at 10:12 on Wed 11 Nov America/New_York', loggedAt: `${daysAgo(0)}T10:40:00Z` }),
+    row({ id: 'l3', type: 'cv_request', toName: 'Someone New', outcome: 'skipped', detail: 'Template needs approval', loggedAt: `${daysAgo(1)}T16:05:00Z` }),
+    row({ id: 'l4', type: 'linkedin_connect', toName: 'Uma Pretend', channel: 'linkedin', outcome: 'held', detail: 'Cap reached', loggedAt: `${daysAgo(1)}T09:30:00Z` }),
+    row({ id: 'l5', type: 'coaching_followup', toName: 'Ben Sample', level: 'one_click', outcome: 'sent', detail: 'Sent', loggedAt: `${daysAgo(2)}T14:20:00Z` }),
+  ]
+}
+let sampleSendLog = freshSampleSendLog()
+export function resetSampleTemplates() {
+  sampleTemplates = freshSampleTemplates()
+  sampleSendLog = freshSampleSendLog()
+}
+
 export function resetSampleSearches() {
   sampleSearches = freshSampleSearches()
   sampleCandidates = freshSampleCandidates()
@@ -1520,6 +1555,73 @@ export const sampleSource: DataSource = {
     const found = sampleCampaigns.find((x) => x.id === id)
     if (!found) throw new Error('No such campaign')
     Object.assign(found, patch)
+  },
+  async templates() {
+    return sampleTemplates.map((x) => ({ ...x }))
+  },
+  async addTemplate(input) {
+    const version = sampleTemplates.filter((x) => x.type === input.type && x.name === input.name).length + 1
+    sampleTemplates.push({ id: `t-${Date.now()}`, ...input, variables: [], version, approved: false, approvedAt: null, active: true, updatedAt: new Date().toISOString() })
+  },
+  async saveTemplate(id, patch) {
+    const found = sampleTemplates.find((x) => x.id === id)
+    if (!found) throw new Error('No such template')
+    if (found.approved) {
+      // TPL-1: the approved version stands aside; the edit becomes the next version, unapproved.
+      found.active = false
+      sampleTemplates.push({ ...found, id: `${id}-v${found.version + 1}`, subject: patch.subject, body: patch.body, version: found.version + 1, approved: false, approvedAt: null, active: true, updatedAt: new Date().toISOString() })
+    } else {
+      found.subject = patch.subject
+      found.body = patch.body
+      found.updatedAt = new Date().toISOString()
+    }
+  },
+  async approveTemplate(id) {
+    const found = sampleTemplates.find((x) => x.id === id)
+    if (!found) throw new Error('No such template')
+    found.approved = true
+    found.approvedAt = new Date().toISOString()
+    found.active = true
+    for (const x of sampleTemplates) if (x.type === found.type && x.name === found.name && x.id !== id) x.active = false
+    return 0
+  },
+  async seedTemplates() {
+    const before = sampleTemplates.length
+    for (const t of freshSampleTemplates()) if (!sampleTemplates.some((x) => x.type === t.type && x.name === t.name)) sampleTemplates.push({ ...t, approved: false, approvedAt: null })
+    return sampleTemplates.length - before
+  },
+  async sendLog(limit = 30) {
+    return sampleSendLog.slice(0, limit).map((x) => ({ ...x }))
+  },
+  async sendAction(messageId, action) {
+    const f = sampleFollowUps.find((x) => x.message?.id === messageId)
+    const m = f?.message
+    if (!m) throw new Error('No such message')
+    const log = (outcome: SendLogRow['outcome'], detail: string) =>
+      sampleSendLog.unshift({ id: `l-${Date.now()}`, messageId, type: 'email_reply', channel: m.channel, toName: f!.personName, level: m.level, outcome, detail, loggedAt: new Date().toISOString() })
+    switch (action) {
+      case 'approve': {
+        if (m.state !== 'draft') throw new Error('Only a draft can be approved')
+        if (m.level === 'draft_only') throw new Error('This one is draft only. Open it in Outlook or copy it')
+        m.state = 'queued'
+        log('queued', 'Sends at 09:12 on the next working day America/New_York')
+        return { state: 'queued', note: 'Sends at 09:12, New York time' }
+      }
+      case 'open_draft':
+        return { state: 'draft', outlook_draft_url: composeLink(null, null, m.body), note: `Opens a draft to ${f!.personName} in Outlook. Nothing is sent until you press Send there.` }
+      case 'mark_sent': {
+        if (m.state !== 'draft') throw new Error('Only a draft is marked as sent')
+        m.state = 'sent'
+        f!.status = 'sent'
+        log('sent', 'manual')
+        return { state: 'sent', note: 'Marked as sent by hand' }
+      }
+      case 'cancel': {
+        m.state = 'cancelled'
+        log('cancelled', 'Cancelled by the owner')
+        return { state: 'cancelled' }
+      }
+    }
   },
   async contentItems() {
     return sampleContent.filter((c) => c.status !== 'binned').map((c) => ({ ...c })).sort((a, b) => b.rank - a.rank || b.createdAt.localeCompare(a.createdAt))

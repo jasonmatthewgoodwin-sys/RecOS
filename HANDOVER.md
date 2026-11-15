@@ -124,7 +124,7 @@ What went wrong on 14 November, so it is not repeated: before the Site URL was c
 
 Migrations 0018 and 0019, the six new policy files, `db/seed/targets.sql` and `db/seed/sample_week.sql` were all run in the SQL editor. Home should show 07, 03, the calls left today, and 2/4.
 
-Migrations 0020 and 0021, with 0021's policies, view and seeds (`lists.sql`, `sample_league.sql`), were applied the same afternoon. Any later migration this file does not list is in `docs/build-log.md` with a note on whether it has been applied.
+Migrations 0020 and 0021, with 0021's policies, view and seeds (`lists.sql`, `sample_league.sql`), were applied the same afternoon. Migrations 0022 to 0034, with their policies, views and seeds, are all applied as of 15 November. `docs/build-log.md` has a row per migration with the date it reached the test project.
 
 ### 3. Jason reviews Home
 
@@ -156,6 +156,26 @@ New database changes are new numbered files in `db/migrations` (next is 0020), w
 - **Profile summary.** Every person card links to LinkedIn and can ask the signals agent to pull in a short summary. Migration 0030 is applied. The agent's prompt needs one more instruction: read `requests` from run-start, and for each `profile:<person id>` write a `person` record with `profile_summary` (600 characters at most, no contact details).
 - **Look.** Sunset sky on Home, the status key at the sheet's top right, a tighter density everywhere, windows that fit without scrolling.
 - **Business development.** Jason's spoken notes are written up in `docs/business-development-brief.md` with a suggested order and the decisions needed first. Nothing from it is built yet.
+
+## The night of 14 to 15 November (every phase built)
+
+Mia asked for the whole build overnight, one push, no phases. In the morning no page says Not built yet; a test proves it. What landed:
+
+- **Content** (0031): one calendar for posts and events, Events under Content, Drafts as a gallery.
+- **Day view and source links**: Home shows the day under Calls today from the Outlook feed; every source has a labelled link and Outlook emails open in Outlook on the web.
+- **Business development** (0032): the outreach ladder on job leads, Referrals with the three call questions, UK to US flags, accounts, the agent behind every tab. From Jason's notes; the brief is `docs/business-development-brief.md`.
+- **Searches, candidates, calls** (0033): the search workspace (Brief, Pipeline, Calls, Offer, Close), This week write-ups with five ticks, In process, Warm specs, Placed, the A-star deck, Testimonials, Campaigns.
+- **The send engine** (0034, P1-26 to P1-29): templates with versions and approval, the engine as database functions with every decision logged, the `send` function, Send on the Follow-ups deck, Settings, Templates and the Send log.
+- **The test project**: migrations 0028 to 0034 were found never applied (an earlier run had been swallowed by the SQL editor's confirmation dialog). All of them, their policies and the templates seed are now applied and checked.
+
+**What Jason does next, in order**
+
+1. Sign in at https://rec-os-gules.vercel.app and click through every tab. Report anything wrong with the flag at the top right.
+2. Settings, Templates: read the five starters and press Approve on the ones he is happy with. Nothing sends by itself until then.
+3. Deploy the `send` function from his laptop: `supabase functions deploy send --no-verify-jwt` (see `functions/README.md`).
+4. Settings, Agents: make an agent key named `sender`, then create the sender routine in Claude with his Outlook connector, as `functions/README.md` describes. Until it exists, queued emails wait and the log says so.
+5. Add one instruction to the signals agent's prompt: read `requests` from run-start and write `profile_summary` back for each `profile:<person id>`.
+6. Decide the rows marked Pending in `docs/decisions.md` dated 15 November (Send leaves the follow-up open until sent; Open in Outlook as a compose link; the two-hour pause; no bounce hold yet; the sender routine), and the LinkedIn sending tool and caps from the business-development brief.
 
 ## Hosting on Vercel, so Jason can sign in from a web address
 
@@ -203,6 +223,8 @@ Mia asked for these while directing the build; each is a row in `docs/decisions.
 - The night theme, and the new components on a phone.
 - Home on the real data, as Jason sees it. The counts behind it were checked by query on the test project.
 - Anything else from week 2 on.
+- A real send. The engine is tested in the database (49 tests), but no email has left through the sender routine, because it does not exist yet and the `send` function is not deployed.
+- The pages built on the night of 14 to 15 November on the test project's real data; all were seen on sample data and in tests.
 
 ## First message to paste into a new Claude Code session
 

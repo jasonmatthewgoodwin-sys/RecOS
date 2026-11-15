@@ -336,6 +336,41 @@ export type SendPolicy = {
 
 export type SendPolicyPatch = Partial<Pick<SendPolicy, 'level' | 'dailyCap' | 'weeklyCap' | 'perRunCap' | 'windowStart' | 'windowEnd' | 'paused'>>
 
+/** A message template (12.5). Editing an approved one makes a new, unapproved version (TPL-1). */
+export type Template = {
+  id: string
+  type: string
+  name: string
+  channel: 'email' | 'linkedin'
+  subject: string | null
+  body: string
+  variables: string[]
+  version: number
+  approved: boolean
+  approvedAt: string | null
+  /** The version in use. An edited, approved version stands aside until the new one is approved. */
+  active: boolean
+  updatedAt: string
+}
+export type NewTemplate = { type: string; name: string; channel: 'email' | 'linkedin'; subject: string | null; body: string }
+
+/** One row of the send log (8.4): the fact of a decision, not the words. */
+export type SendLogRow = {
+  id: string
+  messageId: string
+  type: string
+  channel: 'email' | 'linkedin'
+  toName: string
+  level: SendLevel
+  outcome: 'queued' | 'sent' | 'failed' | 'held' | 'skipped' | 'cancelled'
+  detail: string | null
+  loggedAt: string
+}
+
+/** The owner's four actions on a message (15.6). */
+export type SendAction = 'approve' | 'open_draft' | 'mark_sent' | 'cancel'
+export type SendActionResult = { state: string; note?: string; send_after?: string; outlook_draft_url?: string }
+
 /** One target row (13.2). A change adds a row from the next Monday. */
 export type Target = { id: string; kpi: string; period: 'week' | 'quarter' | 'year'; target: number; validFrom: string; validTo: string | null }
 
@@ -652,7 +687,7 @@ export type FollowUp = {
   status: FollowUpStatus
   snoozedUntil: string | null
   /** The paired message, where one exists (21.3): its channel, level and draft. */
-  message: { id: string; channel: 'email' | 'linkedin'; level: 'automatic' | 'one_click' | 'draft_only'; body: string | null } | null
+  message: { id: string; channel: 'email' | 'linkedin'; level: 'automatic' | 'one_click' | 'draft_only'; body: string | null; state: string } | null
   /** ISO timestamp */
   createdAt: string
 }
@@ -867,6 +902,18 @@ export interface DataSource {
   campaigns(): Promise<Campaign[]>
   addCampaign(input: { name: string; tool: string; jobLeadId: string | null; candidatePersonId: string | null }): Promise<void>
   updateCampaign(id: string, patch: CampaignPatch): Promise<void>
+
+  /** Templates (12.5, 32.4) and the send engine's log and actions (8.4, 15.6). */
+  templates(): Promise<Template[]>
+  addTemplate(input: NewTemplate): Promise<void>
+  /** Editing subject or body of an approved template makes version n+1, unapproved (TPL-1). */
+  saveTemplate(id: string, patch: { subject: string | null; body: string }): Promise<void>
+  /** Returns how many waiting messages were queued by the approval. */
+  approveTemplate(id: string): Promise<number>
+  seedTemplates(): Promise<number>
+  sendLog(limit?: number): Promise<SendLogRow[]>
+  /** Through the send server function. Only the engine can queue, mark or cancel a message (MSG-4). */
+  sendAction(messageId: string, action: SendAction): Promise<SendActionResult>
 
   signals(): Promise<Signal[]>
   setSignalStatus(id: string, status: SignalStatus): Promise<void>
@@ -1157,7 +1204,7 @@ const live: DataSource = {
       .from('follow_ups')
       .select(
         'id, person_id, person_name, company, kind, reason, source, direction, due_on, status, snoozed_until, created_at, ' +
-          'message:messages!message_id (id, channel, level_at_creation, body)',
+          'message:messages!message_id (id, channel, level_at_creation, body, state)',
       )
       .in('status', ['open', 'snoozed'])
       .order('due_on', { ascending: true })
@@ -1175,7 +1222,7 @@ const live: DataSource = {
       status: FollowUpStatus
       snoozed_until: string | null
       created_at: string
-      message: { id: string; channel: 'email' | 'linkedin'; level_at_creation: 'automatic' | 'one_click' | 'draft_only'; body: string | null } | null
+      message: { id: string; channel: 'email' | 'linkedin'; level_at_creation: 'automatic' | 'one_click' | 'draft_only'; body: string | null; state: string } | null
     }
     return ((data ?? []) as unknown as Row[]).map((r) => ({
       id: r.id,
@@ -1189,7 +1236,7 @@ const live: DataSource = {
       dueOn: r.due_on,
       status: r.status,
       snoozedUntil: r.snoozed_until,
-      message: r.message ? { id: r.message.id, channel: r.message.channel, level: r.message.level_at_creation, body: r.message.body } : null,
+      message: r.message ? { id: r.message.id, channel: r.message.channel, level: r.message.level_at_creation, body: r.message.body, state: r.message.state } : null,
       createdAt: r.created_at,
     }))
   },
@@ -2341,6 +2388,73 @@ const live: DataSource = {
     for (const [k, v] of Object.entries(patch)) if (v !== undefined && map[k]) row[map[k]] = v
     const { error } = await supabase!.from('campaigns').update(row).eq('id', id)
     fail(error)
+  },
+
+  async templates() {
+    const { data, error } = await supabase!
+      .from('templates')
+      .select('id, type, name, channel, subject, body, variables, version, approved, approved_at, active, updated_at')
+      .order('type')
+      .order('name')
+      .order('version', { ascending: false })
+    fail(error)
+    type Row = { id: string; type: string; name: string; channel: 'email' | 'linkedin'; subject: string | null; body: string; variables: string[]; version: number; approved: boolean; approved_at: string | null; active: boolean; updated_at: string }
+    return ((data ?? []) as Row[]).map((r) => ({
+      id: r.id, type: r.type, name: r.name, channel: r.channel, subject: r.subject, body: r.body, variables: r.variables ?? [],
+      version: r.version, approved: r.approved, approvedAt: r.approved_at, active: r.active, updatedAt: r.updated_at,
+    }))
+  },
+
+  async addTemplate(input) {
+    const { error } = await supabase!.from('templates').insert({ type: input.type, name: input.name, channel: input.channel, subject: input.subject, body: input.body })
+    fail(error)
+  },
+
+  async saveTemplate(id, patch) {
+    const { error } = await supabase!.from('templates').update({ subject: patch.subject, body: patch.body }).eq('id', id)
+    fail(error)
+  },
+
+  async approveTemplate(id) {
+    const { data, error } = await supabase!.rpc('template_approve', { p_id: id })
+    fail(error)
+    return Number(data ?? 0)
+  },
+
+  async seedTemplates() {
+    const { data, error } = await supabase!.rpc('templates_seed')
+    fail(error)
+    return Number(data ?? 0)
+  },
+
+  async sendLog(limit = 30) {
+    const { data, error } = await supabase!
+      .from('send_log')
+      .select('id, message_id, type, channel, to_name, level, outcome, detail, logged_at')
+      .order('logged_at', { ascending: false })
+      .limit(limit)
+    fail(error)
+    type Row = { id: string; message_id: string; type: string; channel: 'email' | 'linkedin'; to_name: string; level: SendLevel; outcome: SendLogRow['outcome']; detail: string | null; logged_at: string }
+    return ((data ?? []) as Row[]).map((r) => ({ id: r.id, messageId: r.message_id, type: r.type, channel: r.channel, toName: r.to_name, level: r.level, outcome: r.outcome, detail: r.detail, loggedAt: r.logged_at }))
+  },
+
+  async sendAction(messageId, action) {
+    const { data, error } = await supabase!.functions.invoke('send', { body: { message_id: messageId, action } })
+    if (error) {
+      // The function answers in the owner's words (API-6); read them when it can.
+      let message = error.message
+      try {
+        const ctx = (error as { context?: Response }).context
+        if (ctx) {
+          const body = (await ctx.json()) as { error?: { message?: string } }
+          if (body?.error?.message) message = body.error.message
+        }
+      } catch {
+        // keep the client's message
+      }
+      throw new Error(message)
+    }
+    return data as SendActionResult
   },
 
   async contentItems() {

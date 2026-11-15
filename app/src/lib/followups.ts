@@ -41,9 +41,14 @@ export function byDeckOrder(today: string) {
 }
 
 /** The deck: owed follow-ups due today or earlier, then the chases the owner is waiting on. */
+/** A follow-up whose message the engine has in hand (queued or sending) is out of the owner's hands too. */
+export function inEngine(f: FollowUp): boolean {
+  return f.message?.state === 'queued' || f.message?.state === 'sending'
+}
+
 export function deckOf(items: FollowUp[], today: string): FollowUp[] {
   return items
-    .filter((f) => f.status === 'open' && (f.direction === 'waiting' || f.dueOn <= today))
+    .filter((f) => f.status === 'open' && !inEngine(f) && (f.direction === 'waiting' || f.dueOn <= today))
     .sort(byDeckOrder(today))
 }
 

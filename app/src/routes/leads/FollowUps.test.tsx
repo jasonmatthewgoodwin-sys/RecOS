@@ -23,7 +23,18 @@ function mock(over: { items?: FollowUp[]; fail?: boolean } = {}) {
   else status.mockResolvedValue()
   const redate = vi.spyOn(data, 'redateFollowUps').mockResolvedValue()
   const block = vi.spyOn(data, 'recordFollowUpBlock').mockResolvedValue()
-  return { status, redate, block }
+  // The send engine (0034): one click queues, a draft opens in Outlook, LinkedIn is copied then marked sent.
+  const send = vi.spyOn(data, 'sendAction')
+  if (over.fail) send.mockRejectedValue(new Error('That did not save. Try again.'))
+  else
+    send.mockImplementation(async (_id, action) =>
+      action === 'approve'
+        ? { state: 'queued', note: 'Sends at 09:12, New York time' }
+        : action === 'open_draft'
+          ? { state: 'draft', outlook_draft_url: 'https://outlook.office.com/mail/deeplink/compose?body=x' }
+          : { state: 'sent' },
+    )
+  return { status, redate, block, send }
 }
 
 function open(path = '/leads/follow-ups') {
@@ -60,7 +71,7 @@ describe('Follow-ups deck', () => {
     expect(title()).toMatch(/^Ada Example/)
     expect(within(deck()).getByText('After a candidate call')).toBeInTheDocument()
     expect(screen.getByRole('main').querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
-    expect(primary()).toHaveTextContent('Done')
+    expect(primary()).toHaveTextContent('Send')
     const seen: string[] = []
     for (let i = 0; i < 9; i++) {
       seen.push(title()!)
@@ -84,7 +95,7 @@ describe('Follow-ups deck', () => {
     open()
     await waitFor(() => expect(counter()).toBe('01 of 09'))
     const names = within(deck()).getAllByRole('button').map((b) => b.textContent)
-    expect(names).toEqual(expect.arrayContaining(['Done', 'Handled offline', 'No action needed', 'Skip', 'Snooze', 'Copy']))
+    expect(names).toEqual(expect.arrayContaining(['Send', 'Done without sending', 'Handled offline', 'No action needed', 'Skip', 'Snooze', 'Copy']))
     expect(names).not.toContain('Bin')
     await userEvent.click(screen.getByRole('button', { name: 'Handled offline' }))
     expect(status).toHaveBeenCalledWith('fu-ada', 'handled_offline', {})
@@ -97,15 +108,18 @@ describe('Follow-ups deck', () => {
     expect(title()).toMatch(/^Dev Madeup/)
   })
 
-  it('an edited draft is saved with Done, and Copy is there when a draft exists', async () => {
-    const { status } = mock()
+  it('an edited draft is saved before Send queues the one-click message, and Copy is there when a draft exists', async () => {
+    const { status, send } = mock()
     open()
     await waitFor(() => expect(counter()).toBe('01 of 09'))
     await userEvent.keyboard('e')
     await userEvent.keyboard(' See you Friday.')
     await userEvent.keyboard('{Escape}')
     await userEvent.click(primary())
-    expect(status).toHaveBeenCalledWith('fu-ada', 'done', { draft: expect.stringMatching(/See you Friday\.$/) })
+    expect(status).toHaveBeenCalledWith('fu-ada', 'open', { draft: expect.stringMatching(/See you Friday\.$/) })
+    await waitFor(() => expect(send).toHaveBeenCalledWith('m-ada', 'approve'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Sends at 09:12, New York time')
+    expect(title()).toMatch(/^Dev Madeup/)
   })
 
   it('T-FUPS-3 working the whole deck ends on one line and a full meter', async () => {

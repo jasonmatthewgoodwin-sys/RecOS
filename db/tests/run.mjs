@@ -48,7 +48,7 @@ await db.exec(`insert into auth.users (email, raw_user_meta_data) values ('  Own
 await db.exec(`insert into auth.users (email) values ('stranger@example.test')`)
 const ownerId = (await db.query(`select id from app_users where role = 'owner'`)).rows[0]?.id
 
-for (const file of ['targets.sql', 'lists.sql', 'sample_week.sql', 'sample_league.sql']) {
+for (const file of ['targets.sql', 'lists.sql', 'sample_week.sql', 'sample_league.sql', 'templates.sql']) {
   await db.exec(read('seed', file))
   // Seeds must be safe to run twice.
   await db.exec(read('seed', file))
@@ -268,10 +268,11 @@ test('MSG-3 and MSG-4: the browser cannot queue or send a message, or edit one t
 
 test('the send engine (service role) can move a message through its states and append to the send log', async () => {
   await service(async () => {
+    const [{ tid }] = await rows(`insert into templates (owner_id, type, name, channel, body) values ($1, 'thanks_after_call', 'Test', 'email', 'Hi {{first_name}}') returning id as tid`, [ownerId])
     const [{ id }] = await rows(
       `insert into messages (owner_id, type, channel, to_name, created_by, level_at_creation, template_id, state)
-       values ($1, 'thanks_after_call', 'email', 'Ada Example', 'a6_calls', 'automatic', gen_random_uuid(), 'queued') returning id`,
-      [ownerId],
+       values ($1, 'thanks_after_call', 'email', 'Ada Example', 'a6_calls', 'automatic', $2, 'queued') returning id`,
+      [ownerId, tid],
     )
     await db.query(`update messages set state = 'sent', sent_at = now() where id = $1`, [id])
     await db.query(
@@ -938,10 +939,11 @@ test('P1-14, P1-15, P1-16: keys, run-start, the write contract with its merges a
     { kind: 'message', data: { type: 'signal_congrats', channel: 'email', person_name: 'Gia Imaginary', body: 'Congratulations.', level: 'automatic' } },
     { kind: 'message', data: { type: 'signal_congrats', channel: 'email', person_name: 'Gia Imaginary', body: 'Congratulations.', level: 'one_click' } },
   ])])
-  assert.deepEqual(sig.results.map((x) => x.outcome), ['created', 'merged', 'rejected', 'rejected', 'created'], JSON.stringify(sig))
+  assert.deepEqual(sig.results.map((x) => x.outcome), ['created', 'merged', 'rejected', 'created', 'created'], JSON.stringify(sig))
   assert.equal(sig.results[2].code, 'policy_refused')
-  assert.equal(sig.results[3].code, 'policy_refused')
-  assert.match(sig.results[4].note, /draft only/)
+  // Asking for automatic on a draft-only type lands at the policy's level (0034).
+  assert.equal(sig.results[3].state, 'draft')
+  assert.match(sig.results[4].note, /draft/i)
   assert.ok(sig.results[0].inbox_item_id)
   assert.deepEqual(await rows(`select state, level_at_creation, created_by from messages where id = $1`, [sig.results[4].id]), [{ state: 'draft', level_at_creation: 'draft_only', created_by: 'a4_signals' }])
 
@@ -1360,6 +1362,224 @@ test('0033: a search from a won lead counts, candidates move under CAN-1 to CAN-
   await db.query(`delete from calls`)
   await db.query(`delete from a_star_suggestions`)
   await db.query(`delete from searches where id = $1`, [sid])
+})
+
+test('0034: templates carry versions and approval; the engine decides, fills, queues in the window, holds at the cap, hands to the sender and takes its report; the owner approves, opens, marks and cancels; pauses and opt-outs (T-SEND-1, T-SEND-2, TPL-1 to TPL-3, 15.6, 20.8)', async () => {
+  // T-SEND-1: Monday 23:30 UK (18:30 New York, after the window) lands the next New York morning, 5 to 40 minutes after it opens.
+  const [{ w }] = await rows(`select send_window_next('2026-11-16T23:30:00Z', '09:00', '17:30', 'America/New_York') as w`)
+  assert.ok(new Date(w) >= new Date('2026-11-17T14:05:00Z') && new Date(w) <= new Date('2026-11-17T14:40:00Z'), String(w))
+  const [{ f }] = await rows(`select send_window_next('2026-11-20T23:00:00Z', '09:00', '17:30', 'America/New_York') as f`)
+  assert.equal(new Date(f).getUTCDay(), 1, 'Friday night waits for Monday')
+  const [{ inside }] = await rows(`select send_window_next('2026-11-17T15:00:00Z', '09:00', '17:30', 'America/New_York') as inside`)
+  assert.equal(new Date(inside).toISOString(), '2026-11-17T15:00:00.000Z', 'inside the window goes now')
+  assert.deepEqual((await rows(`select send_tz('san_francisco', 'America/New_York') as a, send_tz(null, 'America/New_York') as b, send_tz('london', null) as c`))[0], { a: 'America/Los_Angeles', b: 'America/New_York', c: 'Europe/London' })
+
+  // Templates: the five starters are seeded unapproved; TPL-2 and TPL-3 hold; the channel must match; the reviewer sees none.
+  await owner(async () => {
+    assert.equal(await count('templates'), 5)
+    assert.equal(await count(`templates where approved`), 0)
+    assert.match(await refused(`insert into templates (type, name, channel, body) values ('thanks_after_call', 'T', 'email', 'Hi {{nickname}}')`), /TPL-2/)
+    assert.match(await refused(`insert into templates (type, name, channel, body) values ('linkedin_connect', 'T', 'linkedin', repeat('x', 301))`), /TPL-3/)
+    assert.match(await refused(`insert into templates (type, name, channel, body) values ('thanks_after_call', 'T', 'linkedin', 'Hi')`), /goes by email/)
+    assert.match(await refused(`update templates set approved = true where type = 'thanks_after_call'`), /template_approve/)
+    assert.match(await refused(`select send_tick()`), /not_allowed|permission denied/)
+    assert.match(await refused(`select send_report(gen_random_uuid(), true)`), /not_allowed|permission denied/)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('templates'), 0)
+    assert.match(await refused(`select template_approve(gen_random_uuid())`), /Only the owner/)
+    assert.match(await refused(`select send_action(gen_random_uuid(), 'cancel')`), /Only the owner/)
+  })
+
+  await service(async () => {
+    const asOwner = async (fn) => {
+      await db.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: ownerId, email: OWNER_EMAIL, role: 'authenticated', app_role: 'owner' })])
+      await db.exec('set local role authenticated')
+      try {
+        return await fn()
+      } finally {
+        await db.exec('set local role service_role')
+      }
+    }
+    const person = async (name, city, linkedin) =>
+      (await rows(`insert into people (owner_id, display_name, name_key, display_company, company_key, city, kind, linkedin_url) values ($1, $2, lower($2), 'Northwind Sample Co', 'northwind sample co', $3, 'candidate', $4) returning id`, [ownerId, name, city, linkedin]))[0].id
+    const tess = await person('Tess Example', 'new_york', null)
+    const [{ tpl }] = await rows(`select id as tpl from templates where type = 'thanks_after_call' and name = 'Starter'`)
+
+    // An automatic thanks message with an unapproved template stays a draft and says why.
+    const [{ m1 }] = await rows(
+      `insert into messages (owner_id, type, channel, person_id, to_name, template_id, variables, created_by, level_at_creation)
+       values ($1, 'thanks_after_call', 'email', $2, 'Tess Example', $3, '{"next_step": "I will send the Northwind brief on Monday.", "call_day": "Tuesday"}', 'a6_calls', 'automatic') returning id as m1`,
+      [ownerId, tess, tpl],
+    )
+    const [{ d1 }] = await rows(`select send_decide($1) as d1`, [m1])
+    assert.equal(d1.state, 'draft')
+    assert.equal(d1.note, 'Template needs approval')
+    assert.equal(await count(`send_log where message_id = '${m1}' and outcome = 'skipped'`), 1)
+
+    // The owner approves the template: the waiting message is filled and queued, with the caps in the log.
+    const n = await asOwner(async () => (await rows(`select template_approve($1) as n`, [tpl]))[0].n)
+    assert.equal(n, 1)
+    const [row1] = await rows(`select state, subject, body, variables, send_after, template_version from messages where id = $1`, [m1])
+    assert.equal(row1.state, 'queued', JSON.stringify(await rows(`select detail from send_log where message_id = $1 order by logged_at`, [m1])))
+    assert.equal(row1.subject, 'Good to speak today')
+    assert.match(row1.body, /^Hi Tess,/)
+    assert.match(row1.body, /on Tuesday. Good to hear about what you have been doing at Northwind Sample Co./)
+    assert.match(row1.body, /I will send the Northwind brief on Monday\./)
+    assert.match(row1.body, /\nJason$/)
+    assert.ok(!/\{\{/.test(row1.body), 'every variable filled')
+    assert.ok(row1.send_after)
+    const [q] = await rows(`select outcome, detail, caps_snapshot from send_log where message_id = $1 and outcome = 'queued'`, [m1])
+    assert.equal(q.outcome, 'queued')
+    assert.match(q.detail, /^Sends at/)
+    assert.equal(q.caps_snapshot.daily_cap, 15)
+    assert.equal(await count(`audit_log where action = 'template approved'`), 1)
+
+    // A next_step with a link is refused: the message is downgraded to a draft.
+    const [{ m2 }] = await rows(
+      `insert into messages (owner_id, type, channel, person_id, to_name, template_id, variables, created_by, level_at_creation)
+       values ($1, 'thanks_after_call', 'email', $2, 'Tess Example', $3, '{"next_step": "See https://example.com"}', 'a6_calls', 'automatic') returning id as m2`,
+      [ownerId, tess, tpl],
+    )
+    const [{ d2 }] = await rows(`select send_decide($1) as d2`, [m2])
+    assert.equal(d2.state, 'draft')
+    assert.match(d2.note, /link/)
+
+    // T-SEND-2: the per-run cap on connection notes. Two queue, the third is held.
+    await db.query(`update send_policies set per_run_cap = 2 where type = 'linkedin_connect'`)
+    const [{ ltpl }] = await rows(`select id as ltpl from templates where type = 'linkedin_connect' and name = 'Starter'`)
+    await db.query(`select template_approve($1)`, [ltpl])
+    const [{ run }] = await rows(`insert into agent_runs (agent, trigger) values ('a3_jobs', 'schedule') returning id as run`)
+    const states = []
+    for (const nm of ['Uma Pretend', 'Vic Pretend', 'Wes Pretend']) {
+      const pid = await person(nm, 'boston', `https://example.com/in/${nm.split(' ')[0].toLowerCase()}`)
+      const [{ mid }] = await rows(
+        `insert into messages (owner_id, type, channel, person_id, to_name, template_id, created_by, level_at_creation)
+         values ($1, 'linkedin_connect', 'linkedin', $2, $3, $4, 'a3_jobs', 'automatic') returning id as mid`,
+        [ownerId, pid, nm, ltpl],
+      )
+      states.push((await rows(`select send_decide($1, $2) as d`, [mid, run]))[0].d)
+    }
+    assert.deepEqual(states.map((x) => x.state), ['queued', 'queued', 'held'])
+    assert.equal(states[2].note, 'Cap reached')
+    assert.equal((await rows(`select caps_snapshot ->> 'run' as r from send_log where outcome = 'held' and type = 'linkedin_connect' order by logged_at desc limit 1`))[0].r, '2')
+    assert.match((await rows(`select body from messages where type = 'linkedin_connect' and state = 'queued' limit 1`))[0].body, /^Hi Uma,|^Hi Vic,/)
+
+    // The tick hands a due email to the sender and marks it sending. The report marks it sent and tells the rest of RecOS.
+    await db.query(`insert into follow_ups (owner_id, person_id, person_name, kind, reason, source, due_on, dedup_key, message_id) values ($1, $2, 'Tess Example', 'after_candidate_call', 'Thank her for the call', 'call', current_date, 'fu-tess-0034', $3)`, [ownerId, tess, m1])
+    await db.query(`update messages set send_after = now() - interval '1 minute' where id = $1`, [m1])
+    const [{ t1 }] = await rows(`select send_tick('email') as t1`)
+    assert.equal(t1.count, 1, JSON.stringify(t1))
+    assert.equal(t1.messages[0].message_id, m1)
+    assert.equal(t1.messages[0].subject, 'Good to speak today')
+    assert.equal(t1.messages[0].level, 'automatic')
+    assert.equal((await rows(`select state from messages where id = $1`, [m1]))[0].state, 'sending')
+    const [{ r1 }] = await rows(`select send_report($1, true, 'AAMkAG-sample', null, null) as r1`, [m1])
+    assert.equal(r1.state, 'sent')
+    const [sent] = await rows(`select state, sent_at, external_ref, purge_after from messages where id = $1`, [m1])
+    assert.ok(sent.sent_at && sent.purge_after)
+    assert.equal(sent.external_ref, 'AAMkAG-sample')
+    assert.equal((await rows(`select detail from send_log where message_id = $1 and outcome = 'sent'`, [m1]))[0].detail, 'Auto')
+    assert.equal((await rows(`select status from follow_ups where dedup_key = 'fu-tess-0034'`))[0].status, 'sent')
+    assert.equal(await count(`inbox_items where type = 'auto_sent' and ref_id = '${m1}' and status = 'done'`), 1)
+    assert.equal(await count(`inbox_items where type = 'system_notice' and title like '%now sends by itself'`), 1, 'the first automatic send of a type says so once')
+    assert.match(await refused(`select send_report($1, true)`, [m1]), /wrong_state/)
+
+    // The owner's actions on a one-click message with no template: approve queues it; a failing send retries, then goes back to drafts.
+    const yan = await person('Yan Pretend', 'chicago', null)
+    const [{ m3 }] = await rows(
+      `insert into messages (owner_id, type, channel, person_id, to_name, subject, body, created_by, level_at_creation)
+       values ($1, 'intro_to_colleague', 'email', $2, 'Yan Pretend', 'Meet Sam', 'Yan, meet Sam.', 'a6_calls', 'one_click') returning id as m3`,
+      [ownerId, yan],
+    )
+    assert.equal((await rows(`select send_decide($1) as d`, [m3]))[0].d.note, 'Waiting for Send')
+    const a3 = await asOwner(async () => (await rows(`select send_action($1, 'approve') as a`, [m3]))[0].a)
+    assert.equal(a3.state, 'queued', JSON.stringify(a3))
+    assert.ok((await rows(`select approved_at from messages where id = $1`, [m3]))[0].approved_at)
+    // Tess already has a message today, so a second one to her waits for tomorrow's window (step 10).
+    const [{ m3b }] = await rows(`insert into messages (owner_id, type, channel, person_id, to_name, subject, body, created_by, level_at_creation, approved_at) values ($1, 'intro_to_colleague', 'email', $2, 'Tess Example', 'Meet Sam', 'Tess, meet Sam.', 'a6_calls', 'one_click', now()) returning id as m3b`, [ownerId, tess])
+    const [{ d3b }] = await rows(`select send_decide($1) as d3b`, [m3b])
+    assert.equal(d3b.note, 'Another message today')
+    assert.ok(new Date((await rows(`select send_after from messages where id = $1`, [m3b]))[0].send_after) > new Date())
+    await db.query(`update messages set send_after = now() - interval '1 minute' where id = $1`, [m3])
+    assert.equal((await rows(`select send_tick('email') as t`))[0].t.count, 1)
+    for (const i of [1, 2]) {
+      const [{ r }] = await rows(`select send_report($1, false, null, 'Outlook timed out') as r`, [m3])
+      assert.equal(r.state, 'queued')
+      assert.equal(r.attempts, i)
+      await db.query(`update messages set state = 'sending' where id = $1`, [m3])
+    }
+    const [{ r3 }] = await rows(`select send_report($1, false, null, 'Outlook timed out') as r3`, [m3])
+    assert.equal(r3.state, 'draft')
+    assert.equal(r3.attempts, 3)
+    assert.equal(await count(`inbox_items where type = 'system_notice' and title like '%could not be sent'`), 1)
+    // 20.8: three email failures in a row pause automatic email for two hours; the pause lifts itself at the next tick.
+    assert.ok((await count(`send_policies where paused and paused_until is not null and channel = 'email' and level = 'automatic'`)) > 0)
+    assert.equal(await count(`inbox_items where type = 'system_notice' and title like 'Automatic email paused%'`), 1)
+    await db.query(`update send_policies set paused_until = now() - interval '1 minute' where paused_until is not null`)
+    await db.query(`select send_tick('email')`)
+    assert.equal(await count(`send_policies where paused and paused_until is not null`), 0)
+
+    // open_draft, mark_sent and cancel; approve is refused on a draft-only type.
+    const o3 = await asOwner(async () => (await rows(`select send_action($1, 'open_draft', 'https://outlook.office.com/mail/deeplink/compose?subject=Meet') as a`, [m3]))[0].a)
+    assert.equal(o3.subject, 'Meet Sam')
+    assert.match(o3.outlook_draft_url, /^https:\/\/outlook/)
+    const s3 = await asOwner(async () => (await rows(`select send_action($1, 'mark_sent') as a`, [m3]))[0].a)
+    assert.equal(s3.state, 'sent')
+    assert.equal((await rows(`select detail from send_log where message_id = $1 and outcome = 'sent'`, [m3]))[0].detail, 'manual')
+    const [{ m4 }] = await rows(`insert into messages (owner_id, type, channel, to_name, body, created_by, level_at_creation) values ($1, 'spec', 'email', 'Someone', 'A spec.', 'a3_jobs', 'draft_only') returning id as m4`, [ownerId])
+    await asOwner(async () => {
+      assert.match(await refused(`select send_action($1, 'approve')`, [m4]), /draft only/)
+      assert.equal((await rows(`select send_action($1, 'cancel') as a`, [m4]))[0].a.state, 'cancelled')
+      assert.match(await refused(`select send_action($1, 'cancel')`, [m4]), /wrong_state/)
+    })
+
+    // TPL-1: editing the approved thanks template makes version 2, unapproved and active; the approved one stands aside, and automatic waits again.
+    await asOwner(async () => {
+      await db.query(`update templates set body = body || E'\\n\\nPS Say hello to the team.' where id = $1`, [tpl])
+    })
+    const versions = await rows(`select version, approved, active, body like '%PS Say hello%' as edited from templates where type = 'thanks_after_call' and name = 'Starter' order by version`)
+    assert.deepEqual(versions, [{ version: 1, approved: true, active: false, edited: false }, { version: 2, approved: false, active: true, edited: true }])
+    assert.equal((await rows(`select (approved_template('thanks_after_call', 'email')).id as id`))[0].id, null)
+    const [{ m5 }] = await rows(
+      `insert into messages (owner_id, type, channel, person_id, to_name, template_id, created_by, level_at_creation) values ($1, 'thanks_after_call', 'email', $2, 'Tess Example', $3, 'a6_calls', 'automatic') returning id as m5`,
+      [ownerId, tess, tpl],
+    )
+    assert.equal((await rows(`select send_decide($1) as d`, [m5]))[0].d.note, 'Template needs approval')
+
+    // An opt-out phrase puts the person on the do-not-contact list and cancels what was waiting.
+    const [{ oo }] = await rows(`select aw_opt_out(null, 'a5_followups', '{"person_name": "Tess Example", "phrase": "please remove me"}') as oo`)
+    assert.equal(oo.outcome, 'created')
+    assert.equal((await rows(`select do_not_contact from people where id = $1`, [tess]))[0].do_not_contact, true)
+    assert.equal((await rows(`select state from messages where id = $1`, [m5]))[0].state, 'cancelled')
+    assert.equal(await count(`do_not_contact where person_id = '${tess}'`), 1)
+    assert.equal(await count(`inbox_items where type = 'system_notice' and title like '%asked not to be contacted'`), 1)
+    assert.equal((await rows(`select aw_opt_out(null, 'a5_followups', '{"person_name": "Nobody At All"}') as x`))[0].x.code, 'not_found')
+
+    // A LinkedIn warning pauses every LinkedIn type and holds what was queued.
+    const [{ lw }] = await rows(`select send_linkedin_warning('verification asked for') as lw`)
+    assert.equal(lw, 2)
+    assert.equal(await count(`send_policies where channel in ('linkedin', 'either') and not paused`), 0)
+    assert.equal(await count(`messages where type = 'linkedin_connect' and state = 'held' and hold_reason = 'LinkedIn warning'`), 2)
+    assert.equal(await count(`inbox_items where type = 'system_notice' and title = 'LinkedIn sending paused'`), 1)
+
+    // The write kind message at automatic level goes through the engine; opt_out is a kind A5 may send.
+    assert.equal((await rows(`select aw_may_send('a5_followups', 'opt_out') as x`))[0].x, true)
+    assert.equal((await rows(`select aw_may_send('a3_jobs', 'opt_out') as x`))[0].x, false)
+    assert.ok((await rows(`select aw_allowed_fields('message') as f`))[0].f.includes('variables'))
+    const [{ r6 }] = await rows(`select agent_run_start('a6_calls', 'schedule') as r6`)
+    const [{ w6 }] = await rows(`select agent_write($1, $2) as w6`, [r6.run_id, JSON.stringify([
+      { kind: 'message', data: { type: 'thanks_after_call', channel: 'email', person_name: 'Uma Pretend', level: 'automatic', variables: { next_step: 'Speak next week.' } } },
+      { kind: 'message', data: { type: 'intro_to_colleague', channel: 'email', person_name: 'Uma Pretend', level: 'automatic', subject: 'Meet Sam', body: 'Uma, meet Sam.' } },
+      { kind: 'message', data: { type: 'thanks_after_call', channel: 'email', person_name: 'Uma Pretend', level: 'teleport' } },
+    ])])
+    assert.deepEqual(w6.results.map((x) => x.outcome), ['created', 'created', 'rejected'], JSON.stringify(w6))
+    assert.equal(w6.results[0].state, 'draft', 'no approved thanks template now, so it waits')
+    assert.match(w6.results[0].note, /No approved template|Template needs approval/)
+    assert.equal(w6.results[1].state, 'draft', 'one click waits for Send')
+    assert.equal((await rows(`select level_at_creation, run_id from messages where id = $1`, [w6.results[1].id]))[0].level_at_creation, 'one_click')
+    assert.equal((await rows(`select run_id from messages where id = $1`, [w6.results[1].id]))[0].run_id, r6.run_id)
+  })
 })
 
 // ---------------------------------------------------------------- run

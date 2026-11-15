@@ -6,7 +6,7 @@ Supabase Edge Functions, in TypeScript for Deno. Each folder is one function. Th
 | --- | --- | --- | --- |
 | `agent-write` | `POST /functions/v1/agent-write` | Agents, with `X-Agent-Name` and `X-Agent-Key` headers and an optional `Idempotency-Key` | Yes (P1-15, P1-16) |
 | `run-agent` | `POST .../run-agent/run-start`, `POST .../run-agent/run-finish`, `GET .../run-agent/context?want=`, `POST .../run-agent/request-run` | Agents; request-run is the owner's session | Yes (P1-14) |
-| `send` | `POST /send`, `POST /send/tick` | Browser, scheduler | Not yet (P1-26, P1-27) |
+| `send` | `POST /send` (owner: approve, open_draft, mark_sent, cancel), `POST /send/tick`, `POST /send/report`, `POST /send/linkedin-warning` | Browser for `/send`; the sender routine, with its agent key, for the rest | Yes (0034, P1-26 to P1-29). Not deployed yet |
 | `person` | `/person/find`, `/person/export`, `/person/delete` | Browser | The database functions exist (P1-46); the wrapper with rate limits is not yet written |
 | `export` | `POST /export` | Browser | Same as person |
 
@@ -17,6 +17,23 @@ From the repository root, signed in to the Supabase CLI as Jason, with the test 
 ```bash
 supabase functions deploy agent-write --no-verify-jwt
 ```
+
+The send engine function deploys the same way:
+
+```bash
+supabase functions deploy send --no-verify-jwt
+```
+
+## The sender routine
+
+The engine only decides and queues. A Claude cloud routine, created by Jason with his Outlook connector attached and an agent key named `sender` from Settings, Agents, carries the messages:
+
+1. Every ten minutes between 08:00 and 18:00 New York time, `POST /functions/v1/send/tick` with `X-Agent-Name: sender` and `X-Agent-Key`. The reply lists up to 20 messages whose window has opened, each with the address, subject and body already filled.
+2. For each one, send it from Jason's mailbox through the Outlook connector.
+3. `POST /functions/v1/send/report` with `{ message_id, ok, provider_ref }`, or `{ message_id, ok: false, error }` for a failure. The engine logs it, completes the follow-up and writes the KPI event.
+4. LinkedIn connection notes are never sent by the routine; they are copied by hand from the deck and marked sent there.
+
+The routine never reads the database and never decides what to send. If `/send/tick` returns nothing, it stops.
 
 ```bash
 supabase functions deploy run-agent --no-verify-jwt

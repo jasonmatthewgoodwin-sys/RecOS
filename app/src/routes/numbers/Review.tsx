@@ -10,6 +10,7 @@ import { Switch } from '../../components/Switch'
 import { TextLink } from '../../components/TextLink'
 import type { Role } from '../../lib/auth'
 import { data, type ReviewFields } from '../../lib/data'
+import { composeLink } from '../../lib/send'
 import { lastMonday, movedWords, summaryDraft, systemLine, weekLines, weekWords } from '../../lib/numbers'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { sections } from '../../lib/sections'
@@ -173,9 +174,10 @@ export function Review({ role }: { role: Role }) {
             kind="primary"
             onClick={() => {
               void navigator.clipboard?.writeText(summary ?? draft)
-              setNote('Copied. Send and Open in Outlook arrive with the send engine.')
+              setNote('Copied.')
             }}
           />
+          <TextLink label="Open in Outlook" icon="mail" href={composeLink(null, `Weekly review, week of ${week}`, summary ?? draft)} />
           {week !== latest && <TextLink label="This week's review" onClick={() => step(Math.round((new Date(latest).getTime() - new Date(week).getTime()) / (7 * 86_400_000)))} />}
         </div>
       </section>

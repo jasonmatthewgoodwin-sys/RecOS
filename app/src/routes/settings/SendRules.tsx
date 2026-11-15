@@ -10,6 +10,7 @@ import { RowList } from '../../components/RowList'
 import { Switch } from '../../components/Switch'
 import { TextLink } from '../../components/TextLink'
 import { data, type SendPolicy, type SendPolicyPatch } from '../../lib/data'
+import { logLine, templateWord } from '../../lib/send'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { settings } from '../../lib/sections'
 import { aboveCeiling, channelWord, levelWord, levels } from '../../lib/settings'
@@ -36,6 +37,10 @@ function capNumber(s: string): number | null {
 }
 
 function PolicyCard({ policy, onClose, onNote }: { policy: SendPolicy; onClose: () => void; onNote: (t: string) => void }) {
+  const navigate = useNavigate()
+  const templates = useQuery('settings.templates', data.templates)
+  const mine = (templates.data ?? []).filter((t) => t.type === policy.type && t.active)
+  const approved = mine.find((t) => t.approved)
   const [caps, setCaps] = useState({ daily: capValue(policy.dailyCap), weekly: capValue(policy.weeklyCap), perRun: capValue(policy.perRunCap), start: policy.windowStart, end: policy.windowEnd })
 
   async function patch(change: SendPolicyPatch) {
@@ -102,7 +107,20 @@ function PolicyCard({ policy, onClose, onNote }: { policy: SendPolicy; onClose: 
         },
         {
           label: 'Template',
-          body: <p className="text-body text-ink-2">{policy.requiresTemplate ? 'Needs an approved template. Templates arrive with the send engine.' : 'No template. Each one is written by hand.'}</p>,
+          body: policy.requiresTemplate ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-body text-ink">
+                {approved
+                  ? `${approved.name}, version ${approved.version}, approved.`
+                  : mine.length > 0
+                    ? `${mine[0].name}, version ${mine[0].version}: ${templateWord(mine[0]).toLowerCase()}. Nothing sends by itself until it is approved.`
+                    : 'No template yet. Nothing sends by itself until one is approved.'}
+              </p>
+              <TextLink label={mine.length > 0 ? 'Open the template' : 'Templates'} onClick={() => navigate(mine.length > 0 ? `/settings/templates?card=template:${mine[0].id}` : '/settings/templates')} />
+            </div>
+          ) : (
+            <p className="text-body text-ink-2">No template. Each one is written by hand.</p>
+          ),
         },
       ]}
       foot={`At least ${policy.minDaysBetweenSamePerson} days between messages to the same person. Recipient time by default US Eastern.`}
@@ -120,6 +138,8 @@ export function SendRules() {
   const policies = useQuery(POLICIES_KEY, data.sendPolicies)
   const [asking, setAsking] = useState(false)
   const [note, setNote] = useState<string | null>(null)
+  const [showLog, setShowLog] = useState(false)
+  const log = useQuery('settings.sendLog', () => data.sendLog(30))
   const tabs = settings.pages.map((p) => ({ label: p.label, route: `${settings.path}/${p.slug}` }))
   const cardType = params.get('card')?.startsWith('type:') ? params.get('card')!.slice(5) : null
   const chosen = cardType ? policies.data?.find((p) => p.type === cardType) : undefined
@@ -189,7 +209,7 @@ export function SendRules() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title={settings.label} tabs={tabs} />
+      <PageHeader title={settings.label} tabs={tabs} aside={<TextLink label="Send log" icon="list" onClick={() => setShowLog(true)} />} />
 
       <section className="flex flex-col gap-4" aria-label="Stop switch">
         {paused.data === undefined ? (
@@ -218,6 +238,33 @@ export function SendRules() {
       <RowList icon="mail" view="rows" rows={rows} state={policies.status} emptyText="No message types" limit={rows.length || 7} />
 
       {chosen && <PolicyCard policy={chosen} onClose={closeCard} onNote={setNote} />}
+      {showLog && (
+        <Card
+          label="Send log"
+          title="The last 30 decisions"
+          sections={[
+            {
+              body:
+                log.status === 'error' ? (
+                  <EmptyLine text="Could not load. Try again." />
+                ) : (log.data ?? []).length === 0 ? (
+                  <p className="text-ink-3">Nothing has gone through the engine yet.</p>
+                ) : (
+                  <ul className="flex flex-col font-mono text-label text-ink" aria-label="Send log">
+                    {(log.data ?? []).map((r) => (
+                      <li key={r.id} className="flex min-h-9 items-center justify-between gap-4 border-b border-rule">
+                        <span className="min-w-0 flex-1 truncate">{logLine(r, policies.data?.find((p) => p.type === r.type)?.label ?? r.type)}</span>
+                        {r.detail && r.detail !== 'Auto' && r.detail !== 'manual' && r.detail !== 'Sent' && <span className="truncate text-ink-3">{r.detail}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                ),
+            },
+          ]}
+          foot="Every hold, downgrade, queue and send is a row. Kept for 24 months."
+          onClose={() => setShowLog(false)}
+        />
+      )}
       {note && <Note text={note} onClose={() => setNote(null)} />}
     </div>
   )
