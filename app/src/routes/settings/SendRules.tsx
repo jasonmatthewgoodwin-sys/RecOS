@@ -105,6 +105,32 @@ function PolicyCard({ policy, onClose, onNote }: { policy: SendPolicy; onClose: 
             </div>
           ),
         },
+        // Send a test to yourself (0043): one email to the owner's own mailbox, through the sender, so the whole path is proved.
+        ...(policy.channel !== 'linkedin'
+          ? [
+              {
+                label: 'Test',
+                body: (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-body text-ink-2">One email to your own inbox, sent the way a real one would be.</p>
+                    <TextLink
+                      label="Send a test to yourself"
+                      icon="mail"
+                      onClick={() =>
+                        void data
+                          .sendTest(policy.type)
+                          .then((r) => {
+                            invalidate('settings.sendLog')
+                            onNote(r.note ?? 'Queued.')
+                          })
+                          .catch((e: unknown) => onNote(e instanceof Error ? e.message.replace(/^[a-z_]+: /, '') : 'That did not save. Try again.'))
+                      }
+                    />
+                  </div>
+                ),
+              },
+            ]
+          : []),
         {
           label: 'Template',
           body: policy.requiresTemplate ? (

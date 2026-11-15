@@ -17,7 +17,7 @@ function mock() {
   vi.spyOn(data, 'followUpsDue').mockResolvedValue({ due: 3, late: 3, lateFromDay: 'Monday' })
   vi.spyOn(data, 'callsToday').mockResolvedValue([])
   vi.spyOn(data, 'weekTargets').mockResolvedValue({ hit: 2, total: 4 })
-  for (const m of ['sendPolicies', 'updateSendPolicy', 'sendingPaused', 'setSendingPaused', 'heldMessages', 'releaseHeld', 'templates', 'addTemplate', 'saveTemplate', 'approveTemplate', 'seedTemplates', 'sendLog'] as const) {
+  for (const m of ['sendPolicies', 'updateSendPolicy', 'sendingPaused', 'setSendingPaused', 'heldMessages', 'releaseHeld', 'templates', 'addTemplate', 'saveTemplate', 'approveTemplate', 'seedTemplates', 'sendLog', 'sendTest'] as const) {
     vi.spyOn(data, m).mockImplementation(sampleSource[m] as never)
   }
 }
@@ -89,6 +89,16 @@ describe('Settings, Templates', () => {
     await userEvent.type(within(card).getByLabelText('Body'), ' {{{{surname}}')
     expect(within(card).getByText('Unknown variable surname')).toBeInTheDocument()
     expect(within(card).getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('Send a test to yourself queues one email to the owner and says so', async () => {
+    mock()
+    const test = vi.spyOn(data, 'sendTest')
+    open('/settings/send-rules?card=type:thanks_after_call')
+    const card = await screen.findByRole('dialog')
+    await userEvent.click(within(card).getByRole('button', { name: 'Send a test to yourself' }))
+    await waitFor(() => expect(test).toHaveBeenCalledWith('thanks_after_call'))
+    expect(await screen.findByRole('status')).toHaveTextContent('Queued to you. The sender picks it up on its next run.')
   })
 
   it('Send rules opens the send log, one line per decision', async () => {

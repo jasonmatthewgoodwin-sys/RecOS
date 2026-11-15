@@ -1751,6 +1751,35 @@ test('0040: the campaign runner reads planned campaigns, enrols, ticks steps and
   })
 })
 
+test('0043: a test send goes to the owner\'s own address, queued now, and the tick hands it to the sender filled; the reviewer may not', async () => {
+  await owner(async () => {
+    const [{ r }] = await rows(`select send_test('thanks_after_call') as r`)
+    assert.equal(r.state, 'queued')
+    assert.equal(r.to_address, 'owner@example.test')
+    const [m] = await rows(`select to_name, to_address, state, subject, body, level_at_creation, hold_reason from messages where id = $1`, [r.message_id])
+    assert.equal(m.to_address, 'owner@example.test')
+    assert.equal(m.to_name, 'Jason Sample')
+    assert.equal(m.state, 'queued')
+    assert.match(m.body, /Jason/)
+    assert.equal(m.hold_reason, 'Test send to yourself')
+    await refused(`select send_test('linkedin_connect')`, /email only/)
+    await refused(`select send_test('no_such_type')`, /no such message type/)
+    assert.equal((await rows(`select count(*)::int as n from send_log where message_id = $1 and outcome = 'queued'`, [r.message_id]))[0].n, 1)
+  })
+  await service(async () => {
+    const [{ r }] = await rows(`select send_test('cv_request') as r`)
+    const [{ t }] = await rows(`select send_tick('email', 20) as t`)
+    const mine = t.messages.find((x) => x.message_id === r.message_id)
+    assert.ok(mine, 'the tick hands the test over')
+    assert.equal(mine.to_address, 'owner@example.test')
+    assert.ok(mine.subject && mine.body, 'filled')
+    assert.equal((await rows(`select state from messages where id = $1`, [r.message_id]))[0].state, 'sending')
+  })
+  await reviewer(async () => {
+    await refused(`select send_test('thanks_after_call')`, /not_allowed/)
+  })
+})
+
 // ---------------------------------------------------------------- run
 
 let failed = 0

@@ -1648,6 +1648,10 @@ export const sampleSource: DataSource = {
   async sendLog(limit = 30) {
     return sampleSendLog.slice(0, limit).map((x) => ({ ...x }))
   },
+  async sendTest(type) {
+    sampleSendLog.unshift({ id: `l-test-${Date.now()}`, messageId: `m-test-${Date.now()}`, type, channel: 'email', level: 'one_click', toName: 'Jason', outcome: 'queued', detail: 'Test send to yourself. Goes on the next tick', loggedAt: new Date().toISOString() })
+    return { state: 'queued', note: 'Queued to you. The sender picks it up on its next run.' }
+  },
   async sendAction(messageId, action) {
     const f = sampleFollowUps.find((x) => x.message?.id === messageId)
     const m = f?.message

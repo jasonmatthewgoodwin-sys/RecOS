@@ -941,6 +941,8 @@ export interface DataSource {
   sendLog(limit?: number): Promise<SendLogRow[]>
   /** Through the send server function. Only the engine can queue, mark or cancel a message (MSG-4). */
   sendAction(messageId: string, action: SendAction): Promise<SendActionResult>
+  /** A test email to the owner's own mailbox, queued for the next tick (0043). */
+  sendTest(type: string): Promise<SendActionResult>
 
   signals(): Promise<Signal[]>
   setSignalStatus(id: string, status: SignalStatus): Promise<void>
@@ -2527,6 +2529,12 @@ const live: DataSource = {
     fail(error)
     type Row = { id: string; message_id: string; type: string; channel: 'email' | 'linkedin'; to_name: string; level: SendLevel; outcome: SendLogRow['outcome']; detail: string | null; logged_at: string }
     return ((data ?? []) as Row[]).map((r) => ({ id: r.id, messageId: r.message_id, type: r.type, channel: r.channel, toName: r.to_name, level: r.level, outcome: r.outcome, detail: r.detail, loggedAt: r.logged_at }))
+  },
+
+  async sendTest(type) {
+    const { data, error } = await supabase!.rpc('send_test', { p_type: type })
+    fail(error)
+    return data as SendActionResult
   },
 
   async sendAction(messageId, action) {
