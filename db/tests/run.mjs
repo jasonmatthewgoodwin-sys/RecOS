@@ -1002,6 +1002,81 @@ test('P1-14, P1-15, P1-16: keys, run-start, the write contract with its merges a
   })
 })
 
+test('connections (0037, 0038): the owner reads status only; secrets sit in the vault, out of every browser role’s reach', async () => {
+  // The server's path, as service_role: connect, read back, mark failing, disconnect.
+  await service(async () => {
+    const [c] = await rows(`select status, account_label from connection_connect($1, 'granola', 'grn_invented_key_0001', 'Granola')`, [ownerId])
+    assert.deepEqual(c, { status: 'connected', account_label: 'Granola' })
+    assert.deepEqual(await rows(`select connection_secret_get($1, 'granola') as s`, [ownerId]), [{ s: 'grn_invented_key_0001' }])
+    await rows(`select connection_connect($1, 'granola', 'grn_invented_key_0002')`, [ownerId])
+    assert.deepEqual(await rows(`select connection_secret_get($1, 'granola') as s`, [ownerId]), [{ s: 'grn_invented_key_0002' }])
+    await rows(`select connection_record($1, 'granola', 'failing', null, 'The key was refused')`, [ownerId])
+    const [g] = await rows(`select status, account_label, last_error, connected_at is not null as was_connected from connections where provider = 'granola'`)
+    assert.deepEqual(g, { status: 'failing', account_label: 'Granola', last_error: 'The key was refused', was_connected: true })
+    await rows(`select connection_disconnect($1, 'granola')`, [ownerId])
+    assert.equal(await count(`connections where provider = 'granola'`), 0)
+    assert.deepEqual(await rows(`select connection_secret_get($1, 'granola') as s`, [ownerId]), [{ s: null }])
+  })
+
+  // Planted as the database for the browser checks below.
+  await rows(`select connection_connect($1, 'outlook', 'invented-refresh-token-0001', 'Sam Sample (sam@example.test)')`, [ownerId])
+  await rows(`select connection_connect($1, 'spott', 'spott_invented_key_0001', 'Spott')`, [ownerId])
+  try {
+    // The table holds no secret material at all.
+    const cols = (await rows(`select column_name from information_schema.columns where table_schema = 'public' and table_name = 'connections'`)).map((r) => r.column_name)
+    assert.ok(!cols.some((c) => /secret|token|key/.test(c)), cols.join(', '))
+
+    await owner(async () => {
+      const mine = await rows(`select provider, status, account_label from connections order by provider`)
+      assert.deepEqual(mine, [
+        { provider: 'outlook', status: 'connected', account_label: 'Sam Sample (sam@example.test)' },
+        { provider: 'spott', status: 'connected', account_label: 'Spott' },
+      ])
+      assert.match(await refused(`select connection_secret_get('${ownerId}', 'outlook')`), /permission denied/)
+      assert.match(await refused(`select connection_connect('${ownerId}', 'granola', 'grn_invented_key_0003')`), /permission denied/)
+      assert.match(await refused(`select connection_disconnect('${ownerId}', 'outlook')`), /permission denied/)
+      assert.match(await refused(`select connection_oauth_take('x')`), /permission denied/)
+      assert.match(await refused(`select * from vault.decrypted_secrets`), /permission denied/)
+      assert.match(await refused(`select * from vault.secrets`), /permission denied/)
+      assert.match(await refused(`select * from connection_states`), /permission denied/)
+      assert.match(await refused(`insert into connections (owner_id, provider, status) values ('${ownerId}', 'granola', 'connected')`), /permission denied/)
+      assert.match(await refused(`update connections set status = 'failing'`), /permission denied/)
+      assert.match(await refused(`delete from connections`), /permission denied/)
+    })
+    await reviewer(async () => {
+      assert.equal(await count('connections'), 0)
+      assert.match(await refused(`select connection_oauth_begin('outlook')`), /only the owner/)
+      assert.match(await refused(`select * from vault.decrypted_secrets`), /permission denied/)
+    })
+    await noRole(async () => {
+      assert.equal(await count('connections'), 0)
+    })
+    await anon(async () => {
+      assert.match(await refused(`select * from connections`), /permission denied/)
+      assert.match(await refused(`select connection_oauth_begin('outlook')`), /permission denied/)
+      assert.match(await refused(`select * from vault.decrypted_secrets`), /permission denied/)
+    })
+
+    // The Outlook sign-in state: the owner asks for one; the server checks it, then takes it once.
+    await db.exec('begin')
+    await db.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: ownerId, email: OWNER_EMAIL, role: 'authenticated', app_role: 'owner' })])
+    await db.exec('set local role authenticated')
+    const [{ state }] = await rows(`select connection_oauth_begin('outlook') as state`)
+    await db.exec('commit')
+    assert.match(state, /^[0-9a-f]{64}$/)
+    assert.equal(await count(`connection_states where state_hash = '${state}'`), 0, 'only the hash is kept')
+    assert.deepEqual(await rows(`select connection_oauth_check($1) as o`, [state]), [{ o: ownerId }])
+    assert.deepEqual(await rows(`select connection_oauth_take($1) as o`, [state]), [{ o: ownerId }])
+    assert.deepEqual(await rows(`select connection_oauth_take($1) as o`, [state]), [{ o: null }])
+    assert.deepEqual(await rows(`select connection_oauth_check('not-a-state') as o`), [{ o: null }])
+  } finally {
+    await rows(`select connection_disconnect($1, 'outlook')`, [ownerId])
+    await rows(`select connection_disconnect($1, 'spott')`, [ownerId])
+    await db.exec(`delete from connection_states`)
+  }
+  assert.equal(await count('vault.secrets'), 0)
+})
+
 // Runs last: it moves rows on by date, which the tests above read as seeded.
 test('P1-47: the nightly job sweeps, retains and raises system notices; no browser role can run it (33.8, 34.5)', async () => {
   // Rows the night should act on, planted as the database.
