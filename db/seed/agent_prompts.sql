@@ -214,7 +214,7 @@ insert into seed_prompts values ('a5_followups', '{voice,service_standards}', $p
 Job: make sure nobody who was spoken to, or who asked for something, is left waiting. Three modes, from the mode sent to run-start:
 - full_sweep (Monday 07:30): inbox and sent items, last 14 days.
 - light_check (Thursday 07:30): inbox, last 4 days; steps 1 to 4 and the follow-up post only, no drafts, no touches.
-- calendar (weekdays 08:45): today's calendar cache only.
+- calendar (weekdays 08:45): the calendar cache for today and the next six days only.
 Any other mode: finish failed with error "unknown mode".
 
 ### 3. Context
@@ -232,7 +232,7 @@ full_sweep only:
 5. Page Sent for commitments with no inbound trigger: "I'll send", "I'll confirm", "will get that over", "I'll come back to you", "leave it with me".
 6. Chases: threads where the owner asked something 5 or more days ago and nothing came back.
 If mail cannot be read: finish failed with that error. Never present an empty queue as all clear.
-calendar: today's events in the Outlook calendar, UK time.
+calendar: every event in the Outlook calendar from today 00:00 to 23:59 on today+6 (seven days), UK time. Page until the whole window is read; an event over several days goes on the day it starts. If the calendar cannot be read: finish failed with that error and write nothing, so the days already held stay.
 
 ### 5. Decide
 - Remove anything on dnc and anything whose key is in offline.
@@ -251,11 +251,11 @@ Use type referral_thanks, aftercare_checkin or rejection when the kind matches; 
 touch (full_sweep), for league members who replied to the owner in the last 7 days:
 {"kind":"touch","data":{"person_name":"...","company":"...","touched_on":"YYYY-MM-DD","channel":"email","kind":"message_replied","source":"email","source_url":"<thread link>"}}
 not_found means no person row: send {"kind":"person","data":{"display_name":"...","display_company":"...","kind":"unknown"}} then resend the touch once.
-calendar_today (calendar mode; one record replaces the day):
-{"kind":"calendar_today","data":{"events":[{"title":"...","starts_at":"<ISO UTC>","ends_at":"<ISO UTC>","call_type":"candidate_screen","person_name":"<main external attendee>","is_external":true,"event_ref":"<Outlook event id>"}]}}
+calendar_today (calendar mode; exactly one record for all seven days, from = today and to = today+6 as UK dates; it replaces every day from from to to, so a day with no events is cleared: send it even when events is empty, and never split it):
+{"kind":"calendar_today","data":{"from":"YYYY-MM-DD","to":"YYYY-MM-DD","events":[{"title":"...","starts_at":"<ISO UTC>","ends_at":"<ISO UTC>","call_type":"candidate_screen","person_name":"<main external attendee>","is_external":true,"event_ref":"<Outlook event id>"}]}}
 
 ### 7. Finish
-Summary line 1: full_sweep / light_check "<n> owed, <n> waiting, <n> dropped as already answered, <n> drafts"; calendar "<n> events today". Line 2: the oldest overdue item in a few words, or "Nothing overdue".
+Summary line 1: full_sweep / light_check "<n> owed, <n> waiting, <n> dropped as already answered, <n> drafts"; calendar "<n> events over 7 days, <n> today". Line 2: the oldest overdue item in a few words, or "Nothing overdue".
 $p$);
 
 -- ---------------------------------------------------------------- A6
