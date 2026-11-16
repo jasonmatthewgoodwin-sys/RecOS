@@ -25,6 +25,9 @@ function mock(over: Partial<{ needsYou: number; due: number; late: number; calls
   const v = { needsYou: 0, due: 0, late: 0, calls: [] as CalendarCall[], hit: 0, ...over }
   vi.spyOn(data, 'needsYou').mockResolvedValue(v.needsYou)
   vi.spyOn(data, 'followUpsDue').mockResolvedValue({ due: v.due, late: v.late, lateFromDay: v.late ? 'Monday' : null })
+  // The second number is live searches (15 November); `due` stands in for how many are live.
+  const live = Array.from({ length: v.due }, (_, i) => ({ id: `s${i}`, status: 'open', health: 'warm' }))
+  vi.spyOn(data, 'searches').mockResolvedValue(live as unknown as Awaited<ReturnType<typeof data.searches>>)
   vi.spyOn(data, 'callsToday').mockResolvedValue(v.calls)
   vi.spyOn(data, 'dayToday').mockResolvedValue(v.calls)
   vi.spyOn(data, 'weekTargets').mockResolvedValue({ hit: v.hit, total: 4 })

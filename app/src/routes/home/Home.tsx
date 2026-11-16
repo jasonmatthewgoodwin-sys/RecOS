@@ -77,7 +77,12 @@ export function Home({ firstName }: { firstName: string }) {
     : null
 
   const n1 = needsYou.data === undefined ? undefined : twoDigits(needsYou.data)
-  const n2 = followUps.data === undefined ? undefined : twoDigits(followUps.data.due)
+  // Second number: live searches (Jason, 15 November: Follow-ups no longer has a page).
+  // Live is intake, open or offer. The tile turns to action when any live search has gone cold.
+  const searches = useQuery('home.searches', data.searches)
+  const live = searches.data?.filter((s) => s.status === 'intake' || s.status === 'open' || s.status === 'offer')
+  const n2 = live === undefined ? undefined : twoDigits(live.length)
+  const anyCold = (live ?? []).some((s) => s.health === 'cold')
   const n3 = calls.data === undefined || isWeekend(now) ? undefined : twoDigits(calls.data.length)
 
   const dayTone = toneForCount(needsYou.data, (followUps.data?.late ?? 0) > 0 || (needsYou.data ?? 0) > 0)
@@ -94,7 +99,7 @@ export function Home({ firstName }: { firstName: string }) {
 
       <div className="mt-10 grid grid-cols-2 gap-x-8 gap-y-8 sm:mt-14 md:grid-cols-4">
         <HeroStat label="Needs you" value={n1?.text} plus={n1?.plus} tone={toneForCount(needsYou.data, true)} icon="inbox" onClick={() => navigate('/inbox')} />
-        <HeroStat label="Follow-ups" value={n2?.text} plus={n2?.plus} tone={toneForCount(followUps.data?.due, (followUps.data?.late ?? 0) > 0)} icon="clock" onClick={() => navigate('/leads/follow-ups')} />
+        <HeroStat label="Live searches" value={n2?.text} plus={n2?.plus} tone={toneForCount(live?.length, anyCold)} icon="search" onClick={() => navigate('/searches')} />
         <HeroStat label="Calls today" value={n3?.text} plus={n3?.plus} tone={toneForCount(isWeekend(now) ? 0 : calls.data?.length)} icon="phone" onClick={() => openCard('calls')} />
         <HeroStat
           label="This week"
