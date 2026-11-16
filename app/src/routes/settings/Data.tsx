@@ -29,7 +29,7 @@ const tableWord: [string, string, string][] = [
   ['follow_ups', 'follow-up', 'follow-ups'],
   ['inbox_items', 'inbox item', 'inbox items'],
   ['messages', 'message', 'messages'],
-  ['calendar_today', 'call today', 'calls today'],
+  ['calendar_today', 'diary entry', 'diary entries'],
   ['coaching_sessions', 'coaching session', 'coaching sessions'],
   ['referrals', 'referral', 'referrals'],
   ['job_leads', 'job lead', 'job leads'],

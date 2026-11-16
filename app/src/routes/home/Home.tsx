@@ -4,12 +4,12 @@ import { HeroStat } from '../../components/HeroStat'
 import { PillButton } from '../../components/PillButton'
 import { TextLink } from '../../components/TextLink'
 import { skyClass, toneForCount } from '../../lib/tone'
-import { data } from '../../lib/data'
+import { data, type CalendarCall } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { nextLine } from '../../lib/nextLine'
 import { useQuery } from '../../lib/query'
-import { dateLine, greeting, isWeekend } from '../../lib/time'
-import { CallsCard, PrepCard } from './CallsCard'
+import { dateLine, greeting, isWeekend, shiftDate, ukClock } from '../../lib/time'
+import { CallsCard, PrepCard, type DayTab } from './CallsCard'
 
 // Home: the date, a greeting, four numbers, one sentence and one button.
 // Nothing else (sections 3.5 and 26). It is a doorway, not a dashboard.
@@ -57,6 +57,7 @@ export function Home({ firstName }: { firstName: string }) {
     setParams(
       (p) => {
         p.delete('card')
+        p.delete('day')
         return p
       },
       { replace: true },
@@ -128,18 +129,73 @@ export function Home({ firstName }: { firstName: string }) {
       {/* The lower third of the sheet is empty, on purpose. */}
       <div aria-hidden className="h-10 sm:h-16" />
 
-      {callsOpen && <CallsCard calls={calls.data ?? []} day={day.data} onPrep={(id) => openCard(`prep:${id}`)} onClose={closeCard} />}
+      {callsOpen && <DayView now={now} calls={calls.data ?? []} day={day.data} onPrep={(id) => openCard(`prep:${id}`)} onClose={closeCard} />}
       {prepId && <PrepFor id={prepId} onClose={closeCard} />}
     </div>
+  )
+}
+
+const isExternal = (c: CalendarCall) => c.isExternal !== false
+
+/**
+ * The day view with its seven-day strip (Jason, 15 November 2026): today and
+ * the next six days, each with its count of calls with someone outside. The
+ * chosen day sits in ?day=YYYY-MM-DD; none, or one outside the seven, is today.
+ * Moving between days replaces the address, so Back still closes the card.
+ */
+function DayView({ now, calls, day, onPrep, onClose }: { now: Date; calls: CalendarCall[]; day?: CalendarCall[]; onPrep: (id: string) => void; onClose: () => void }) {
+  const location = useLocation()
+  const [params, setParams] = useSearchParams()
+  const week = useQuery('home.calendarWeek', data.calendarWeek)
+  const today = ukClock(now).date
+  const dates = [0, 1, 2, 3, 4, 5, 6].map((n) => shiftDate(today, n))
+  const asked = params.get('day')
+  const selected = asked && dates.includes(asked) ? asked : today
+
+  const todays = day ?? calls
+  const eventsOn = (date: string): CalendarCall[] | undefined =>
+    date === today ? todays : week.data?.filter((c) => ukClock(new Date(c.startsAt)).date === date)
+  const nameOf = (date: string, short: boolean) => {
+    if (date === today) return 'Today'
+    if (date === dates[1]) return 'Tomorrow'
+    const c = ukClock(new Date(`${date}T12:00:00Z`))
+    return short ? `${c.weekday.slice(0, 3)} ${c.day}` : `${c.weekday} ${c.day} ${c.month}`
+  }
+  const days: DayTab[] = dates.map((date) => ({ date, label: nameOf(date, true), count: eventsOn(date)?.filter(isExternal).length }))
+
+  function onDay(date: string) {
+    setParams(
+      (p) => {
+        p.set('day', date)
+        return p
+      },
+      { replace: true, state: location.state },
+    )
+  }
+
+  return (
+    <CallsCard
+      calls={calls}
+      day={eventsOn(selected) ?? []}
+      days={days}
+      selected={selected}
+      onDay={onDay}
+      dayName={nameOf(selected, false)}
+      onPrep={onPrep}
+      onClose={onClose}
+    />
   )
 }
 
 /** The prep card for one call. Reads the calls and, for a client update, what the owner is waiting on. */
 function PrepFor({ id, onClose }: { id: string; onClose: () => void }) {
   const calls = useQuery('home.calls', data.callsToday)
+  const day = useQuery('home.day', data.dayToday)
+  const ahead = useQuery('home.calendarWeek', data.calendarWeek)
   const week = useQuery('home.week', data.weekTargets)
   const followUps = useQuery('leads.followUps', data.followUps)
-  const call = calls.data?.find((c) => c.id === id)
+  // A call later today, earlier today or on one of the next six days (0045).
+  const call = [...(calls.data ?? []), ...(day.data ?? []), ...(ahead.data ?? [])].find((c) => c.id === id)
   if (!call) return null
   const waitingOn = (followUps.data ?? []).filter((f) => f.status === 'open' && f.direction === 'waiting')
   return <PrepCard call={call} waitingOn={waitingOn} week={week.data} onClose={onClose} />

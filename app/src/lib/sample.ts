@@ -18,10 +18,16 @@ import type {
 import { inboxStatusAfter } from './data'
 import { splitCopy, topicFrom } from './calendar'
 import type { SearchHit } from './capture'
-import { ukClock } from './time'
+import { shiftDate, ukClock } from './time'
 
 function todayAt(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 3_600_000).toISOString()
+}
+
+/** A UK clock time on a plain date, as an ISO timestamp (9.5 is 09:30). */
+function ukAt(date: string, hour: number): string {
+  const offset = ukClock(new Date(`${date}T12:00:00Z`)).hour - 12
+  return new Date(Date.parse(`${date}T00:00:00Z`) + (hour - offset) * 3_600_000).toISOString()
 }
 
 function daysAgo(n: number): string {
@@ -972,6 +978,38 @@ export const sampleSource: DataSource = {
       { id: 'sample-i2', startsAt: todayAt(2.5), endsAt: todayAt(3), title: 'Lunch with Sam', callType: 'internal', personName: null, isExternal: false },
     ]
     return [...calls, ...internal].sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+  },
+  async calendarWeek() {
+    // Today as on the day view, then six more days with a different load each,
+    // one of them empty, so the strip and the arrow keys have something to show.
+    const today = ukClock(new Date()).date
+    const ahead: [number, number, string, string, string][] = [
+      [1, 9.5, 'Candidate screen', 'candidate_screen', 'Gus Placeholder'],
+      [1, 11, 'Client update', 'client_update', 'Hana Madeup'],
+      [1, 15, 'Coaching', 'coaching', 'Ivo Invented'],
+      [2, 10, 'Reference', 'reference', 'Jo Example'],
+      [2, 14.5, 'Candidate screen', 'candidate_screen', 'Kit Sample'],
+      [4, 9, 'Desk stand-up', 'internal', ''],
+      [4, 10, 'Brief: Senior PMM', 'client_update', 'Lena Pretend'],
+      [4, 13, 'Candidate screen', 'candidate_screen', 'Milo Fictional'],
+      [4, 16, 'Candidate screen', 'candidate_screen', 'Nell Imaginary'],
+      [5, 11.5, 'Coaching', 'coaching', 'Otto Example'],
+      [6, 10, 'Candidate screen', 'candidate_screen', 'Pia Sample'],
+      [6, 12, 'Lunch with Sam', 'internal', ''],
+    ]
+    const later = ahead.map(([n, hour, title, callType, who], i) => {
+      const startsAt = ukAt(shiftDate(today, n), hour)
+      return {
+        id: `sample-w${i + 1}`,
+        startsAt,
+        endsAt: new Date(Date.parse(startsAt) + 30 * 60_000).toISOString(),
+        title,
+        callType,
+        personName: who || null,
+        isExternal: callType !== 'internal',
+      }
+    })
+    return [...(await this.dayToday()), ...later]
   },
   async callsToday() {
     return [

@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { Card } from '../../components/Card'
+import { isTyping } from '../../lib/keyboard'
 import { TextLink } from '../../components/TextLink'
 import { coachingQuestions } from '../../lib/bd'
 import type { CalendarCall, FollowUp, WeekTargets } from '../../lib/data'
@@ -21,24 +23,64 @@ export function easternTime(at: Date): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at)
 }
 
-type CallsProps = { calls: CalendarCall[]; day?: CalendarCall[]; onPrep: (id: string) => void; onClose: () => void }
+/** One day in the seven-day strip. count is undefined while the week loads. */
+export type DayTab = { date: string; label: string; count: number | undefined }
+
+type CallsProps = {
+  calls: CalendarCall[]
+  day?: CalendarCall[]
+  onPrep: (id: string) => void
+  onClose: () => void
+  /** The seven-day strip (Jason, 15 November 2026): today and the six days after it. */
+  days?: DayTab[]
+  selected?: string
+  onDay?: (date: string) => void
+  /** The day's name above the title: Today, Tomorrow or Wednesday 18 November. */
+  dayName?: string
+}
 
 // The day view (Mia, 14 November 2026): the whole day from the Outlook feed
 // in time order, internal meetings dimmed, calls with someone outside get
-// Prep. Nothing is written back to Outlook.
-export function CallsCard({ calls, day, onPrep, onClose }: CallsProps) {
+// Prep. Nothing is written back to Outlook. Since 15 November a line of seven
+// day links sits above the rows; a click or the left and right arrow keys
+// show another day's calls in the same rows.
+export function CallsCard({ calls, day, onPrep, onClose, days, selected, onDay, dayName = 'Today' }: CallsProps) {
   const events = day ?? calls
   const external = (c: CalendarCall) => c.isExternal !== false
+  const at = days?.findIndex((d) => d.date === selected) ?? -1
+
+  useEffect(() => {
+    if (!days || !onDay || at < 0) return
+    function onKey(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return
+      const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+      const next = days![at + step]
+      if (step === 0 || !next) return
+      e.preventDefault()
+      onDay!(next.date)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [days, onDay, at])
+
   return (
     <Card
-      label="Today"
+      label={dayName}
       title="Your day"
       sections={[
         {
-          body:
-            events.length === 0 ? (
-              <p className="text-ink-2">Nothing in the diary today</p>
-            ) : (
+          body: (
+            <>
+              {days && onDay && (
+                <nav aria-label="Days" className="mb-2 flex flex-wrap gap-x-5" data-day-strip>
+                  {days.map((d) => (
+                    <TextLink key={d.date} label={`${d.label} · ${d.count ?? '–'}`} active={d.date === selected} onClick={() => onDay(d.date)} />
+                  ))}
+                </nav>
+              )}
+              {events.length === 0 ? (
+                <p className="text-ink-2">{dayName === 'Today' ? 'Nothing in the diary today' : `Nothing in the diary ${dayName === 'Tomorrow' ? 'tomorrow' : `on ${dayName}`}`}</p>
+              ) : (
               <ul className="flex flex-col" aria-label="Your day">
                 {events.map((c) => {
                   const at = new Date(c.startsAt)
@@ -63,7 +105,9 @@ export function CallsCard({ calls, day, onPrep, onClose }: CallsProps) {
                   )
                 })}
               </ul>
-            ),
+              )}
+            </>
+          ),
         },
       ]}
       onClose={onClose}

@@ -30,12 +30,18 @@ function mock(over: Partial<{ needsYou: number; due: number; late: number; calls
   vi.spyOn(data, 'searches').mockResolvedValue(live as unknown as Awaited<ReturnType<typeof data.searches>>)
   vi.spyOn(data, 'callsToday').mockResolvedValue(v.calls)
   vi.spyOn(data, 'dayToday').mockResolvedValue(v.calls)
+  vi.spyOn(data, 'calendarWeek').mockResolvedValue(v.calls)
   vi.spyOn(data, 'weekTargets').mockResolvedValue({ hit: v.hit, total: 4 })
 }
 
-function open() {
+/** A diary entry at a UK time on a given day (November is GMT, so UK time is UTC). */
+function at(id: string, iso: string, personName: string | null, over: Partial<CalendarCall> = {}): CalendarCall {
+  return { id, startsAt: iso, endsAt: null, title: 'Candidate screen', callType: 'candidate_screen', personName, isExternal: true, ...over }
+}
+
+function open(path = '/home') {
   return render(
-    <MemoryRouter initialEntries={['/home']}>
+    <MemoryRouter initialEntries={[path]}>
       <SignedIn session={session} />
     </MemoryRouter>,
   )
@@ -136,6 +142,86 @@ describe('Home', () => {
     expect(within(prep).getByText('Waiting on feedback')).toBeInTheDocument()
     expect(within(prep).getByText('Waiting for feedback on two CVs')).toBeInTheDocument()
     expect(within(prep).getByText('12:00, 07:00 ET')).toBeInTheDocument()
+  })
+
+  describe('the seven-day strip (Jason, 15 November 2026)', () => {
+    // Wednesday 11 November is today. Two calls today, three tomorrow, none
+    // on Friday to Sunday, one call and a stand-up on Monday 16.
+    const today = [at('t1', '2026-11-11T11:00:00Z', 'Ada Example'), at('t2', '2026-11-11T15:00:00Z', 'Ben Sample', { callType: 'coaching', title: 'Coaching' })]
+    const week = [
+      ...today,
+      at('w1', '2026-11-12T09:00:00Z', 'Cara Placeholder', { callType: 'client_update', title: 'Client update' }),
+      at('w2', '2026-11-12T11:00:00Z', 'Dev Madeup'),
+      at('w3', '2026-11-12T14:00:00Z', 'Eve Invented', { callType: 'reference', title: 'Reference' }),
+      at('w4', '2026-11-16T09:00:00Z', null, { title: 'Desk stand-up', callType: 'internal', isExternal: false }),
+      at('w5', '2026-11-16T10:30:00Z', 'Finn Fictional'),
+    ]
+
+    function setUp() {
+      mock({ calls: today })
+      vi.spyOn(data, 'dayToday').mockResolvedValue(today)
+      vi.spyOn(data, 'calendarWeek').mockResolvedValue(week)
+      vi.spyOn(data, 'followUps').mockResolvedValue([])
+    }
+
+    const strip = (card: HTMLElement) => within(within(card).getByRole('navigation', { name: 'Days' })).getAllByRole('button')
+    const people = (card: HTMLElement) => Array.from(card.querySelectorAll('[data-call]')).map((r) => r.textContent)
+
+    it('shows seven days, Today and Tomorrow first, each with its count of calls', async () => {
+      setUp()
+      open('/home?card=calls')
+      const card = await screen.findByRole('dialog', { name: 'Your day' })
+      await waitFor(() =>
+        expect(strip(card).map((b) => b.textContent)).toEqual(['Today · 2', 'Tomorrow · 3', 'Fri 13 · 0', 'Sat 14 · 0', 'Sun 15 · 0', 'Mon 16 · 1', 'Tue 17 · 0']),
+      )
+      expect(strip(card)[0]).toHaveAttribute('aria-current', 'true')
+      expect(card.querySelectorAll('[data-call]')).toHaveLength(2)
+      // One primary button at most, and no new kinds of element: the strip is text links.
+      expect(card.querySelectorAll('[data-kind="primary"]')).toHaveLength(0)
+    })
+
+    it('a click on a day shows that day’s calls in the same rows, and Prep opens its prep card', async () => {
+      setUp()
+      open('/home?card=calls')
+      const card = await screen.findByRole('dialog', { name: 'Your day' })
+      await waitFor(() => expect(strip(card)[5]).toHaveTextContent('Mon 16 · 1'))
+      await userEvent.click(strip(card)[5])
+      await waitFor(() => expect(within(card).getByText('Monday 16 November')).toBeInTheDocument())
+      expect(people(card)).toHaveLength(1)
+      expect(people(card)[0]).toContain('10:30')
+      expect(people(card)[0]).toContain('Finn Fictional')
+      expect(card.querySelectorAll('[data-internal]')).toHaveLength(1)
+      expect(strip(card)[5]).toHaveAttribute('aria-current', 'true')
+      await userEvent.click(within(card).getByRole('button', { name: 'Prep' }))
+      const prep = await screen.findByRole('dialog', { name: 'Finn Fictional' })
+      expect(within(prep).getByText('10:30, 05:30 ET')).toBeInTheDocument()
+    })
+
+    it('the arrow keys move a day at a time and stop at either end; ?day= opens on that day', async () => {
+      setUp()
+      open('/home?card=calls&day=2026-11-12')
+      const card = await screen.findByRole('dialog', { name: 'Your day' })
+      await waitFor(() => expect(people(card)).toHaveLength(3))
+      expect(within(card).getByText('Tomorrow')).toBeInTheDocument()
+      await userEvent.keyboard('{ArrowRight}')
+      await waitFor(() => expect(within(card).getByText('Nothing in the diary on Friday 13 November')).toBeInTheDocument())
+      await userEvent.keyboard('{ArrowLeft}{ArrowLeft}')
+      await waitFor(() => expect(people(card)).toHaveLength(2))
+      expect(people(card)[0]).toContain('Ada Example')
+      await userEvent.keyboard('{ArrowLeft}')
+      expect(strip(card)[0]).toHaveAttribute('aria-current', 'true')
+      for (let i = 0; i < 8; i++) await userEvent.keyboard('{ArrowRight}')
+      await waitFor(() => expect(strip(card)[6]).toHaveAttribute('aria-current', 'true'))
+      expect(within(card).getByText('Nothing in the diary on Tuesday 17 November')).toBeInTheDocument()
+    })
+
+    it('a day outside the seven opens on today', async () => {
+      setUp()
+      open('/home?card=calls&day=2026-12-25')
+      const card = await screen.findByRole('dialog', { name: 'Your day' })
+      await waitFor(() => expect(people(card)).toHaveLength(2))
+      expect(strip(card)[0]).toHaveAttribute('aria-current', 'true')
+    })
   })
 
   it('T-HOME-6 changes nothing while open, and refreshes when focus returns', async () => {

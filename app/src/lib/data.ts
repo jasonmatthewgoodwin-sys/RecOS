@@ -6,7 +6,7 @@ import { sampleSource } from './sample'
 import { supabase } from './supabase'
 import { splitCopy, topicFrom, topicKey } from './calendar'
 import type { CaptureKind, SearchHit } from './capture'
-import { mondayOf, ukClock, weekdayOf } from './time'
+import { mondayOf, shiftDate, ukClock, weekdayOf } from './time'
 import type { Tone } from '../theme/tokens'
 
 export type CalendarCall = {
@@ -727,6 +727,8 @@ export interface DataSource {
   callsToday(): Promise<CalendarCall[]>
   /** The whole of today from the Outlook feed, internal meetings included, in time order (14 November 2026). */
   dayToday(): Promise<CalendarCall[]>
+  /** Today and the next six days from the Outlook feed, internal meetings included, in time order (0045, 15 November 2026). */
+  calendarWeek(): Promise<CalendarCall[]>
   weekTargets(): Promise<WeekTargets>
 
   /** Every job lead the owner holds. The page sorts and filters. */
@@ -1022,16 +1024,40 @@ const live: DataSource = {
       .map((r) => ({ id: r.id, startsAt: r.starts_at, endsAt: r.ends_at, title: r.title, callType: r.call_type, personName: r.person_name, crmUrl: r.person?.crm_url ?? null, isExternal: r.is_external }))
   },
 
+  async calendarWeek() {
+    // calendar_today holds seven days since 0045. Today 00:00 UK is at most a
+    // day back, so read from a day ago and keep today to today+6 by UK date.
+    const today = ukClock(new Date()).date
+    const last = shiftDate(today, 6)
+    const { data, error } = await supabase!
+      .from('calendar_today')
+      .select('id, starts_at, ends_at, title, call_type, person_name, is_external, person:people!person_id (crm_url)')
+      .gte('starts_at', new Date(Date.now() - 24 * 3_600_000).toISOString())
+      .lt('starts_at', new Date(Date.now() + 8 * 24 * 3_600_000).toISOString())
+      .order('starts_at', { ascending: true })
+    fail(error)
+    type Row = { id: string; starts_at: string; ends_at: string | null; title: string; call_type: string; person_name: string | null; is_external: boolean; person: { crm_url: string | null } | null }
+    return ((data ?? []) as unknown as Row[])
+      .filter((r) => {
+        const d = ukClock(new Date(r.starts_at)).date
+        return d >= today && d <= last
+      })
+      .map((r) => ({ id: r.id, startsAt: r.starts_at, endsAt: r.ends_at, title: r.title, callType: r.call_type, personName: r.person_name, crmUrl: r.person?.crm_url ?? null, isExternal: r.is_external }))
+  },
+
   async callsToday() {
+    // Still to come today only: since 0045 the table also holds the next six days.
+    const today = ukClock(new Date()).date
     const { data, error } = await supabase!
       .from('calendar_today')
       .select('id, starts_at, title, call_type, person_name, person:people!person_id (crm_url)')
       .eq('is_external', true)
       .gte('starts_at', new Date().toISOString())
+      .lt('starts_at', new Date(Date.now() + 25 * 3_600_000).toISOString())
       .order('starts_at', { ascending: true })
     fail(error)
     type Row = { id: string; starts_at: string; title: string; call_type: string; person_name: string | null; person: { crm_url: string | null } | null }
-    return ((data ?? []) as unknown as Row[]).map((r) => ({
+    return ((data ?? []) as unknown as Row[]).filter((r) => ukClock(new Date(r.starts_at)).date === today).map((r) => ({
       id: r.id,
       startsAt: r.starts_at,
       title: r.title,
