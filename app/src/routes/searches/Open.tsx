@@ -15,7 +15,7 @@ import { daysSince } from '../../lib/bd'
 import { data, type CandidatePatch, type CandidateStage, type Member, type NewSearch, type OfferStatus, type Search, type SearchCandidate, type SearchNote, type SearchPatch, type SearchPriority } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
-import { candidateNeedsDesk, closeChecks, feedbackWord, healthOf, healthWord, inPlay, isLive, numberLine, offerWord, priorityOrder, priorityWord, searchTone, stageOrder, stageWord, statusWord } from '../../lib/searches'
+import { bulletLines, candidateNeedsDesk, closeChecks, feedbackWord, healthOf, healthWord, inPlay, isLive, numberLine, offerWord, priorityOrder, priorityWord, searchTone, stageOrder, stageWord, statusWord } from '../../lib/searches'
 import { sections } from '../../lib/sections'
 import { BriefTab, CallsTab, PipelineHeader, PreBriefTab } from './WorkspaceTabs'
 import { ukClock } from '../../lib/time'
@@ -259,8 +259,26 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
         {s.confidential ? 'Confidential' : s.client}
         {s.city ? `, ${s.city.replace(/_/g, ' ')}` : ''}, day {days}. {statusWord[s.status]}
         {s.health !== 'warm' ? `, ${healthWord[s.health].toLowerCase()}` : ''}
-        {s.healthReason ? ` (${s.healthReason.toLowerCase()})` : ''}
       </p>
+      {(s.healthReason || s.nextStep) && (
+        <ul className="flex flex-col gap-1 text-body text-ink" aria-label="Where it stands">
+          {bulletLines(s.healthReason).map((l) => (
+            <li key={l} className="flex gap-3">
+              <span className="text-ink-3">·</span>
+              <span>{l}</span>
+            </li>
+          ))}
+          {bulletLines(s.nextStep).map((l) => (
+            <li key={`next:${l}`} className="flex gap-3">
+              <span className="text-ink-3">›</span>
+              <span>
+                {l}
+                {s.nextStepOn ? <span className="ml-3 font-mono text-label text-ink-2">{s.nextStepOn}</span> : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Priority">
         {priorityOrder.map((p) => (
           <button key={p} type="button" aria-current={s.priority === p || undefined} onClick={() => onPatch({ priority: p })} className={`inline-flex h-9 items-center rounded-pill border px-3 text-label ${s.priority === p ? 'border-ink bg-ink text-sheet' : 'border-rule text-ink-2 hover:border-ink hover:text-ink'}`}>
@@ -295,7 +313,14 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
       </div>
     )
   } else if (tab === 'calls') {
-    body = <CallsTab calls={myCalls} loading={calls.status === 'loading' && !calls.data} />
+    body = (
+      <CallsTab
+        calls={myCalls}
+        others={(calls.data ?? []).filter((c) => c.searchId !== s.id && !c.skipReason)}
+        loading={calls.status === 'loading' && !calls.data}
+        onConfirm={(c) => void data.updateCall(c.id, { searchId: s.id, matchConfidence: 'confirmed' }).then(() => invalidate(CALLS_KEY)).catch(() => onNote('Could not move the call. Try again.'))}
+      />
+    )
   } else if (tab === 'offer') {
     const atOffer = candidates.filter((c) => c.stage === 'offer' || c.stage === 'placed')
     body = atOffer.length === 0 ? <p className="text-ink-3">Nobody at offer yet.</p> : (

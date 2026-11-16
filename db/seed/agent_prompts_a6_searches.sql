@@ -4,7 +4,7 @@
 -- earlier copy. Safe to run twice. Needs migrations 0046 and 0053 (status).
 
 update public.agent_prompts
-set body = regexp_replace(body, '## Mode: searches \(read this first\).*?(?=## Mode: |$)', '', 'n')
+set body = regexp_replace(body, '## Mode: searches \(read this first\).*?(?=## Mode: )', '')
 where agent = 'a6_calls' and active and position('## Mode: searches' in body) > 0;
 
 update public.agent_prompts

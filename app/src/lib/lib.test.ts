@@ -4,6 +4,7 @@ import { night, nightTone, theme, tone } from '../theme/tokens'
 import { firstNameOf, problemInUrl, readClaims } from './auth'
 import { twoDigits } from './format'
 import { nextLine } from './nextLine'
+import { bulletLines } from './searches'
 import { landing, sections, visibleSections } from './sections'
 import { dateLine, greeting, isWeekend, ukClock, ukTime, weekdayOf } from './time'
 
@@ -139,5 +140,15 @@ describe('theme tokens', () => {
     const allowed = new Set([...Object.values(theme.colour), ...Object.values(night), ...Object.values(tone), ...Object.values(nightTone)].map((v) => v.toLowerCase()))
     for (const found of css.match(/#[0-9a-f]{3,8}\b/g) ?? []) expect(allowed).toContain(found)
     expect(css).not.toMatch(/rgb|hsl|oklch/)
+  })
+})
+
+describe('bulletLines', () => {
+  it('splits long prose into points on lines, semicolons and sentence ends, and leaves short text whole', () => {
+    expect(bulletLines(null)).toEqual([])
+    expect(bulletLines('Client paused hiring until January.')).toEqual(['Client paused hiring until January.'])
+    expect(bulletLines('- one\n- two')).toEqual(['one', 'two'])
+    const long = 'Candidates are moving through Dust interviews and several candidate emails from 13 to 14 Nov are unanswered. A Dust call is booked today; Jason owes a reply.'
+    expect(bulletLines(long)).toEqual(['Candidates are moving through Dust interviews and several candidate emails from 13 to 14 Nov are unanswered.', 'A Dust call is booked today', 'Jason owes a reply.'])
   })
 })

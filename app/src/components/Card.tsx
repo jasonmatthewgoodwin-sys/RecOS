@@ -29,7 +29,9 @@ function motionMs(ms: number): number {
 }
 
 // A window that opens over the sheet (restyled on 14 November 2026: a
-// centred window with a soft backdrop, in place of the right-half pane).
+// centred window with a soft backdrop, in place of the right-half pane;
+// widened to almost the whole screen on 16 November, so long text is read
+// across rather than scrolled through).
 // It holds the detail, the draft and the actions for one thing. The page
 // behind stays put. Opens over 200 ms, closes the same way; Esc, the close
 // button, a click on the backdrop, the back button or a swipe down closes it.
@@ -66,7 +68,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
   return createPortal(
     <div
       data-card-backdrop
-      className={`fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-paper/70 p-0 backdrop-blur-sm sm:px-8 sm:pb-8 sm:pt-[12vh] ${closing ? 'animate-fade-out' : 'animate-fade'}`}
+      className={`fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-paper/70 p-0 backdrop-blur-sm sm:px-8 sm:pb-8 sm:pt-8 ${closing ? 'animate-fade-out' : 'animate-fade'}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close()
       }}
@@ -94,7 +96,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
         }}
         style={{ borderTopColor: tone ? `var(--tone-${tone}-a)` : 'var(--rule)' }}
         data-tone-bar={tone ?? 'rule'}
-        className={`relative flex w-full flex-col rounded-sheet border border-t-[6px] border-rule bg-sheet p-5 shadow-window outline-none sm:w-[46rem] sm:p-7 ${
+        className={`relative flex w-full flex-col rounded-sheet border border-t-[6px] border-rule bg-sheet p-5 shadow-window outline-none sm:w-[calc(100vw-4rem)] sm:max-w-[88rem] sm:p-8 lg:px-12 ${
           closing ? 'animate-rise-out' : 'animate-rise'
         }`}
       >

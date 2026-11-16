@@ -100,4 +100,6 @@ Departures from the design, and choices the design left open. Newest last. Anyth
 | 2026-11-16 | Open in Outlook replies within the last thread with that person when Outlook is connected, instead of a new blank email | Mia, 16 November | Pending Jason |
 | 2026-11-16 | A job lead or ad chase with no date from the agent falls due three days after it was found and sits in This week, never Later | Mia, 16 November: all the ad chases and job leads were in Later | Pending Jason |
 | 2026-11-16 | SEA-4 softened: a search's status may be moved by the morning searches run between intake, open, offer and on hold from the evidence, and at offer the agent still updates the one-line description and next step. Placed, lost and closed stay Jason's | Mia, 16 November: the status was not updating from the description | Pending Jason |
+| 2026-11-16 | Cards are almost full width (up to 88rem) and open near the top, in place of the 46rem window | Mia, 16 November: all cards wider, almost full screen, to prevent scrolling when there is a lot of text | Pending Jason |
+| 2026-11-16 | The Calls tab shows every Granola call: this search's first, the rest under Other calls with a This search link to move one here | Mia, 16 November | Pending Jason |
 

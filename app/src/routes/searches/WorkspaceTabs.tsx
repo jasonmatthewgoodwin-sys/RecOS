@@ -5,7 +5,7 @@ import { Dots } from '../../components/Quiet'
 import { TextLink } from '../../components/TextLink'
 import { data, requestSearchJob, searchIntake, searchJobs, type Call, type Search, type SearchJob, type SearchJobKind, type SearchNote } from '../../lib/data'
 import { invalidate, useQuery } from '../../lib/query'
-import { briefFields, writeUpTicks } from '../../lib/searches'
+import { briefFields, bulletLines, writeUpTicks } from '../../lib/searches'
 import { questionBank, ROLE_TYPES, type RoleType } from '../../lib/questionBank'
 import { latestJobs } from '../../lib/searchResearch'
 import { ukTime } from '../../lib/time'
@@ -267,7 +267,16 @@ export function BriefTab({ search: s, note, loading, onNote }: { search: Search;
           {filled.map((f) => (
             <div key={f.key} className="flex flex-col">
               <dt className="label-caps text-ink-2">{f.label}</dt>
-              <dd className="text-body text-ink">{String(fields[f.key])}</dd>
+              <dd>
+                <ul className="flex flex-col gap-1 text-body text-ink">
+                  {bulletLines(String(fields[f.key])).map((l) => (
+                    <li key={l} className="flex gap-3">
+                      <span className="text-ink-3">·</span>
+                      <span>{l}</span>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
             </div>
           ))}
         </dl>
@@ -288,36 +297,77 @@ export function BriefTab({ search: s, note, loading, onNote }: { search: Search;
   )
 }
 
-/** Calls: every call on this search, newest first, with the notes link and the agent's summary. */
-export function CallsTab({ calls, loading, onConfirm }: { calls: Call[]; loading: boolean; onConfirm?: (c: Call) => void }) {
+/**
+ * Calls: every Granola call, this search's first, then the rest of the
+ * desk's recent calls so one that landed elsewhere can be moved here
+ * (Jason, 16 November 2026: all the call records sit under Calls).
+ */
+export function CallsTab({ calls, others = [], loading, onConfirm }: { calls: Call[]; others?: Call[]; loading: boolean; onConfirm?: (c: Call) => void }) {
+  const [showOthers, setShowOthers] = useState(false)
   if (loading) return <Dots />
-  if (calls.length === 0) return <p className="text-ink-3">No calls on this search yet. The call agent adds them as they are written up.</p>
+  const rest = [...others].sort((a, b) => b.heldAt.localeCompare(a.heldAt)).slice(0, 30)
   return (
-    <div className="flex flex-col gap-2">
-      <p className="font-mono text-label text-ink-3">{writeUpTicks.map((t) => t.label).join(' . ')}</p>
-      <ul className="flex flex-col" aria-label="Calls on this search">
-        {calls.map((c) => (
-          <li key={c.id} className="flex flex-col gap-1 border-b border-rule py-3">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span className="font-mono text-label text-ink-2">
-                {c.heldAt.slice(0, 10)} {ukTime(new Date(c.heldAt))}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-body text-ink">{c.personName ?? c.title ?? c.callType.replace(/_/g, ' ')}</span>
-              <span className="label-caps text-ink-3">{c.callType.replace(/_/g, ' ')}</span>
-              <span className="font-mono text-label text-ink" aria-label="Write-up">
-                {writeUpTicks.map((t) => (c[t.key] ? '✓' : '–')).join(' ')}
-              </span>
-              {(c.matchConfidence === 'low' || c.matchConfidence === 'none') && onConfirm && <TextLink label="Confirm" onClick={() => onConfirm(c)} />}
-            </div>
-            {c.summary && <p className="text-body text-ink-2">{c.summary}</p>}
-            <p className="flex flex-wrap gap-x-6">
-              {c.granolaUrl && <TextLink label="Open the call notes" href={c.granolaUrl} icon="open" />}
-              {c.crmUrl && <TextLink label="Open in CRM" href={c.crmUrl} icon="open" />}
-            </p>
-          </li>
-        ))}
-      </ul>
+    <div className="flex flex-col gap-6">
+      {calls.length === 0 ? (
+        <p className="text-ink-3">No calls on this search yet. The call agent adds them as they are written up.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <p className="font-mono text-label text-ink-3">{writeUpTicks.map((t) => t.label).join(' . ')}</p>
+          <ul className="flex flex-col" aria-label="Calls on this search">
+            {calls.map((c) => (
+              <CallRow key={c.id} c={c} />
+            ))}
+          </ul>
+        </div>
+      )}
+      {rest.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-4">
+            <h4 className="label-caps text-ink-2">Other calls, {rest.length}</h4>
+            <TextLink label={showOthers ? 'Hide' : 'Show'} onClick={() => setShowOthers((v) => !v)} />
+          </div>
+          {showOthers && (
+            <ul className="flex flex-col" aria-label="Other calls">
+              {rest.map((c) => (
+                <CallRow key={c.id} c={c} action={onConfirm ? <TextLink label="This search" onClick={() => onConfirm(c)} /> : undefined} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+function CallRow({ c, action }: { c: Call; action?: ReactNode }) {
+  return (
+    <li className="flex flex-col gap-1 border-b border-rule py-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="font-mono text-label text-ink-2">
+          {c.heldAt.slice(0, 10)} {ukTime(new Date(c.heldAt))}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-body text-ink">{c.personName ?? c.title ?? c.callType.replace(/_/g, ' ')}</span>
+        <span className="label-caps text-ink-3">{c.callType.replace(/_/g, ' ')}</span>
+        <span className="font-mono text-label text-ink" aria-label="Write-up">
+          {writeUpTicks.map((t) => (c[t.key] ? '✓' : '–')).join(' ')}
+        </span>
+        {action}
+      </div>
+      {c.summary && (
+        <ul className="flex flex-col gap-0.5 text-body text-ink-2">
+          {bulletLines(c.summary).map((l) => (
+            <li key={l} className="flex gap-3">
+              <span className="text-ink-3">·</span>
+              <span>{l}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="flex flex-wrap gap-x-6">
+        {c.granolaUrl && <TextLink label="Open the call notes" href={c.granolaUrl} icon="open" />}
+        {c.crmUrl && <TextLink label="Open in CRM" href={c.crmUrl} icon="open" />}
+      </p>
+    </li>
   )
 }
 

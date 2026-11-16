@@ -91,7 +91,7 @@ describe('Searches, Open', () => {
   })
 
   it('opens the workspace with Pre-brief, Brief, Pipeline and Calls; the brief is read, not typed, and says what is still to find out', async () => {
-    mock()
+    const m = mock()
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     open('/searches/open')
     await user.click(await screen.findByText('Head of Product Marketing'))
@@ -108,6 +108,25 @@ describe('Searches, Open', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Calls' }))
     expect(within(dialog).getAllByRole('link', { name: 'Open the call notes' }).length).toBeGreaterThan(0)
     expect(within(dialog).getByText(/ran pricing for the platform line/)).toBeInTheDocument()
+    // Every other Granola call sits under the search's own, and one can be moved here.
+    expect(within(dialog).getByText(/Other calls, \d/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Show' }))
+    const others = within(dialog).getByRole('list', { name: 'Other calls' })
+    expect(within(others).getByText('Someone New')).toBeInTheDocument()
+    await user.click(within(others).getAllByRole('button', { name: 'This search' })[0])
+    await waitFor(() => expect(m.call).toHaveBeenCalledWith(expect.any(String), { searchId: 's-northwind', matchConfidence: 'confirmed' }))
+  })
+
+  it('long text in the workspace reads as dot points', async () => {
+    mock()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    open('/searches/open')
+    await user.click(await screen.findByText('Head of Product Marketing'))
+    const dialog = await screen.findByRole('dialog')
+    const stands = within(dialog).getByRole('list', { name: 'Where it stands' })
+    expect(stands.children.length).toBeGreaterThan(0)
+    // The card is nearly the width of the screen, so there is less to scroll.
+    expect(dialog.className).toMatch(/calc\(100vw/)
   })
 
   it('moves a candidate a stage and refuses a submission without consent', async () => {

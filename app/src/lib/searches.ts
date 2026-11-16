@@ -112,3 +112,26 @@ export const writeUpTicks: { key: 'wRecord' | 'wCv' | 'wNote' | 'wOnSearch' | 'w
 ]
 
 export const toolWord: Record<string, string> = { linkedin: 'LinkedIn', spott: 'Spott', email: 'Email', phone: 'Phone', other: 'Other' }
+
+/**
+ * Long prose as dot points (Jason, 16 November 2026: dot points, not chunks
+ * of text). Lines split on newlines, then semicolons, then sentence ends
+ * once the text runs past one line. Short text stays as one point.
+ */
+export function bulletLines(text: string | null | undefined): string[] {
+  if (!text) return []
+  const lines = text
+    .split(/\n+/)
+    .map((l) => l.replace(/^\s*[-*•]\s*/, '').trim())
+    .filter(Boolean)
+  const out: string[] = []
+  for (const line of lines) {
+    if (line.length <= 120) {
+      out.push(line)
+      continue
+    }
+    const parts = line.split(/;\s+|(?<=[.!?])\s+(?=[A-Z0-9"'])/).map((x) => x.trim()).filter(Boolean)
+    out.push(...parts)
+  }
+  return out
+}
