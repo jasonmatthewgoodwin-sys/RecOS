@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { toneBg } from '../lib/tone'
 import type { Tone } from '../theme/tokens'
 import { theme } from '../theme/tokens'
 import { Icon } from './Icon'
@@ -93,11 +92,12 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
         onTouchEnd={() => {
           touchStart.current = null
         }}
-        className={`relative flex w-full flex-col overflow-hidden rounded-sheet border border-rule bg-sheet p-5 shadow-window outline-none sm:w-[46rem] sm:p-7 ${
+        style={{ borderTopColor: tone ? `var(--tone-${tone}-a)` : 'var(--rule)' }}
+        data-tone-bar={tone ?? 'rule'}
+        className={`relative flex w-full flex-col rounded-sheet border border-t-[6px] border-rule bg-sheet p-5 shadow-window outline-none sm:w-[46rem] sm:p-7 ${
           closing ? 'animate-rise-out' : 'animate-rise'
         }`}
       >
-        <span aria-hidden data-tone-bar className={`absolute inset-x-0 top-0 h-1.5 rounded-t-sheet ${tone ? toneBg[tone] : 'bg-rule'}`} />
         <div className="flex items-start justify-between gap-4">
           <span className="label-caps min-h-10 text-ink-2">{label}</span>
           <button

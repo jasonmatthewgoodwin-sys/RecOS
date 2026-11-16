@@ -24,6 +24,7 @@ import {
   type TaskEdits,
   type TaskFilter,
 } from '../../lib/tasks'
+import { sourceLabel } from '../../lib/links'
 import { ukClock } from '../../lib/time'
 import { TaskBody, TaskCard, type CardMode } from './TaskCard'
 
@@ -254,9 +255,12 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
               onBin={(task) => bin(task, binReasons(task.kind)[0])}
               onSnooze={(task) => snooze(task, snoozeChoices(today)[0].until)}
               onUndo={(task) => reopen(task)}
-              links={(task) =>
-                task.channel === 'email' && task.messageId ? <TextLink label="Open in Outlook" onClick={() => outlook(task)} /> : null
-              }
+              links={(task) => (
+                <>
+                  {task.sourceUrl && <TextLink label={sourceLabel(task.sourceUrl)} href={task.sourceUrl} />}
+                  {task.channel === 'email' && task.messageId ? <TextLink label="Open in Outlook" onClick={() => outlook(task)} /> : null}
+                </>
+              )}
               onList={() => setParam('view', null)}
             />
           )}

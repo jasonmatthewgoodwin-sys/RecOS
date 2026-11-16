@@ -7,9 +7,11 @@
 -- Columns: task_key (source:id), source, source_id, kind, title, why,
 -- person_name, company, due_on, rank, waiting_on, draft, draft_original,
 -- subject, channel, message_id, message_state, links, ref_table, ref_id,
--- agent, search_id, created_at, stale, plus the owner's override columns (o_*).
+-- agent, search_id, created_at, stale, source_url (where it came from), plus the
+-- owner's override columns (o_*).
 
-create or replace view public.tasks_view as
+drop view if exists public.tasks_view;
+create view public.tasks_view as
 with base as (
   -- 1. What the agents and rules raised (8.1), while it is open.
   select
@@ -19,7 +21,7 @@ with base as (
     null::text as waiting_on,
     i.draft, i.draft_original, null::text as subject, null::text as channel, null::uuid as message_id, null::text as message_state,
     i.links, i.ref_table, i.ref_id, i.agent, null::uuid as search_id, i.created_at,
-    i.status = 'stale' as stale
+    i.status = 'stale' as stale, i.source_url
   from inbox_items i
   left join people p on p.id = i.person_id
   where i.status in ('new', 'stale') and i.type <> 'auto_sent'
@@ -48,7 +50,7 @@ with base as (
       case when p.linkedin_url is not null then jsonb_build_object('label', 'Profile', 'url', p.linkedin_url) end
     ),
     'follow_ups', f.id, case f.source when 'call' then 'a6_calls' when 'email' then 'a5_followups' when 'manual' then 'manual' else 'system' end,
-    f.search_id, f.created_at, false
+    f.search_id, f.created_at, false, coalesce(f.source_url, c.granola_url)
   from follow_ups f
   left join messages m on m.id = f.message_id
   left join calls c on c.id = f.call_id
@@ -76,7 +78,7 @@ with base as (
       case when p.linkedin_url is not null then jsonb_build_object('label', 'Profile', 'url', p.linkedin_url) end,
       case when s.crm_url is not null then jsonb_build_object('label', 'Search in CRM', 'url', s.crm_url) end
     ),
-    'calendar_today', t.id, 'a5_followups', t.search_id, t.created_at, false
+    'calendar_today', t.id, 'a5_followups', t.search_id, t.created_at, false, null::text
   from calendar_today t
   left join people p on p.id = t.person_id
   left join searches s on s.id = t.search_id
@@ -97,7 +99,7 @@ with base as (
       case when s.crm_url is not null then jsonb_build_object('label', 'Search in CRM', 'url', s.crm_url) end,
       case when cp.crm_url is not null then jsonb_build_object('label', 'Client contact in CRM', 'url', cp.crm_url) end
     ),
-    'searches', s.id, 'system', s.id, s.updated_at, false
+    'searches', s.id, 'system', s.id, s.updated_at, false, s.crm_url
   from searches s
   left join people cp on cp.id = s.client_contact_id
   where s.status in ('open', 'intake', 'offer') and s.health in ('cooling', 'cold')
@@ -116,7 +118,7 @@ with base as (
       case when s.crm_url is not null then jsonb_build_object('label', 'Search in CRM', 'url', s.crm_url) end,
       case when p.crm_url is not null then jsonb_build_object('label', 'Candidate in CRM', 'url', p.crm_url) end
     ),
-    'search_candidates', c.id, 'system', s.id, c.updated_at, false
+    'search_candidates', c.id, 'system', s.id, c.updated_at, false, s.crm_url
   from search_candidates c
   join searches s on s.id = c.search_id
   join people p on p.id = c.person_id
@@ -139,7 +141,7 @@ with base as (
       case when c.granola_url is not null then jsonb_build_object('label', 'Call notes', 'url', c.granola_url) end,
       case when p.crm_url is not null then jsonb_build_object('label', 'Open in CRM', 'url', p.crm_url) end
     ),
-    'calls', c.id, 'a6_calls', null, c.created_at, false
+    'calls', c.id, 'a6_calls', null, c.created_at, false, c.granola_url
   from calls c
   left join people p on p.id = c.person_id
   where c.search_id is null and c.match_confidence in ('low', 'none') and c.skip_reason is null
@@ -161,7 +163,7 @@ with base as (
       case when c.granola_url is not null then jsonb_build_object('label', 'Call notes', 'url', c.granola_url) end,
       case when p.linkedin_url is not null then jsonb_build_object('label', 'Profile', 'url', p.linkedin_url) end
     ),
-    'calls', c.id, 'a6_calls', c.search_id, c.created_at, false
+    'calls', c.id, 'a6_calls', c.search_id, c.created_at, false, c.granola_url
   from calls c
   left join people p on p.id = c.person_id
   where c.cv_requested and not c.w_cv
@@ -175,7 +177,7 @@ with base as (
     public.week_of(now()) + 4, ci.rank / 5, null,
     concat_ws(E'\n\n', ci.hook, ci.body, ci.close_line), ci.draft_original, null, 'linkedin', null, null,
     case when ci.data_point_url is not null then jsonb_build_array(jsonb_build_object('label', 'Data point', 'url', ci.data_point_url)) else '[]'::jsonb end,
-    'content_items', ci.id, 'a2_content', ci.search_id, ci.created_at, false
+    'content_items', ci.id, 'a2_content', ci.search_id, ci.created_at, false, ci.data_point_url
   from content_items ci
   where ci.status = 'draft' and ci.format_ok and ci.kind in ('linkedin_post', 'job_post', 'blog')
     and not exists (select 1 from inbox_items i where i.ref_table = 'content_items' and i.ref_id = ci.id and i.status in ('new', 'stale'))
@@ -188,7 +190,7 @@ with base as (
     ci.planned_for, 30, null,
     concat_ws(E'\n\n', ci.hook, ci.body, ci.close_line), ci.draft_original, null, 'linkedin', null, null,
     '[]'::jsonb,
-    'content_items', ci.id, 'a2_content', ci.search_id, ci.created_at, false
+    'content_items', ci.id, 'a2_content', ci.search_id, ci.created_at, false, ci.post_url
   from content_items ci
   where ci.status = 'planned' and ci.planned_for <= current_date and ci.kind in ('linkedin_post', 'job_post', 'blog')
 )

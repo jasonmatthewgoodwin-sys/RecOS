@@ -7,6 +7,7 @@ import { TextLink } from '../../components/TextLink'
 import type { Search } from '../../lib/data'
 import { binReasons, dueWord, primaryLabel, shownTitle, snoozeChoices, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
 import { agentWord as inboxAgentWord } from '../../lib/inbox'
+import { sourceLabel } from '../../lib/links'
 
 export type CardMode = 'view' | 'edit' | 'bin' | 'snooze'
 
@@ -256,6 +257,7 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
       primaryAction={{ label: primary, onClick: complete, busy }}
       links={
         <>
+          {task.sourceUrl && <PillButton label={sourceLabel(task.sourceUrl)} onClick={() => window.open(task.sourceUrl!, '_blank', 'noopener')} />}
           {email && <TextLink label="Open in Outlook" onClick={() => onOutlook(draft, subject)} />}
           {canCopy && <TextLink label={copied ? 'Copied' : 'Copy'} onClick={copyDraft} />}
           {mode !== 'edit' && <TextLink label="Edit" onClick={() => onMode('edit')} />}

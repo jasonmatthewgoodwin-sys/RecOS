@@ -986,6 +986,7 @@ function task(over: Partial<Task> & Pick<Task, 'key' | 'source' | 'kind' | 'titl
     searchId: null,
     createdAt: new Date(Date.now() - 3_600_000).toISOString(),
     stale: false,
+    sourceUrl: over.links?.[0]?.url ?? null,
     edits: noEdits(),
     ...over,
   }

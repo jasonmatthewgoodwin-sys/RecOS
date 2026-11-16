@@ -2106,6 +2106,7 @@ const live: DataSource = {
       search_id: string | null
       created_at: string
       stale: boolean
+      source_url: string | null
       o_title: string | null
       o_notes: string | null
       o_due_on: string | null
@@ -2136,6 +2137,7 @@ const live: DataSource = {
       searchId: r.search_id,
       createdAt: r.created_at,
       stale: r.stale,
+      sourceUrl: r.source_url,
       edits: { title: r.o_title, notes: r.o_notes, dueOn: r.o_due_on, sortOrder: r.o_sort_order },
     }))
   },

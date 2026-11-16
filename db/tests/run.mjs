@@ -930,6 +930,85 @@ test('0049 after each call: the calendar asks for a write-up ten minutes after a
   await db.exec(`delete from run_requests where agent = 'a6_calls'`)
 })
 
+// ---------------------------------------------------------------- 0051 Spec and the workspace
+
+test('0051 spec: the owner asks for matches on someone spoken to; the agent claims it with the calls and the live jobs, answers with skills and matches, and the pasted CV goes', async () => {
+  const [p] = await rows(`select id from people where display_name = 'Ada Example'`)
+  await anon(async () => assert.match(String(await refused(`select request_spec('${p.id}')`)), /permission denied|Only the owner/))
+  await reviewer(async () => assert.match(String(await refused(`select request_spec('${p.id}')`)), /Only the owner/))
+  await owner(async () => {
+    const [{ j1 }] = await rows(`select request_spec($1, 'https://example.com/in/ada', 'pasted', 'Ada Example. Senior PMM. Launches, pricing, sales enablement.') as j1`, [p.id])
+    const [{ j2 }] = await rows(`select request_spec($1) as j2`, [p.id])
+    assert.equal(j2, j1, 'a second ask returns the open request')
+    const jid = j1
+    const [me] = await rows(`select linkedin_url, warm_spec from people where id = $1`, [p.id])
+    assert.equal(me.linkedin_url, 'https://example.com/in/ada')
+    assert.equal(me.warm_spec, true, 'asking marks them a good candidate')
+    assert.match(String(await refused(`select cv_text from spec_requests`)), /permission denied/)
+    const [seen] = await rows(`select status, cv_where from spec_requests where id = $1`, [jid])
+    assert.deepEqual(seen, { status: 'waiting', cv_where: 'pasted' })
+    assert.match(String(await refused(`select request_spec($1, null, 'pasted', '')`, [p.id])), /needs the text/)
+  })
+  // The owner's block rolled back. The agent part starts from a row written directly.
+  const jid = (await rows(`insert into spec_requests (owner_id, person_id, linkedin_url, cv_where, cv_text) values ($1, $2, 'https://example.com/in/ada', 'pasted', 'Ada Example. Senior PMM. Launches, pricing, sales enablement.') returning id`, [ownerId, p.id]))[0].id
+  // The agent claims it through context.
+  const [{ ctx }] = await rows(`select agent_context('a6_calls', array['spec_jobs']) as ctx`)
+  const job = ctx.spec_jobs.find((j) => j.job_id === jid)
+  assert.ok(job, 'claimed')
+  assert.equal(job.person.name, 'Ada Example')
+  assert.equal(job.cv.where, 'pasted')
+  assert.match(job.cv.text, /Launches/)
+  assert.ok(Array.isArray(job.calls) && Array.isArray(job.leads) && Array.isArray(job.searches) && Array.isArray(job.accounts))
+  assert.ok(job.leads.length >= 1, 'live leads to match against')
+  await assert.rejects(db.query(`select agent_context('a3_jobs', array['spec_jobs'])`), /may not ask/)
+  // The answer.
+  await db.exec(`insert into agent_runs (agent, trigger) values ('a6_calls', 'manual')`)
+  const [run] = await rows(`select id from agent_runs where agent = 'a6_calls' order by started_at desc limit 1`)
+  const lead = job.leads[0]
+  const bad = (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([{ kind: 'spec_result', data: { job_id: jid, status: 'ready', skills: ['launches'], summary: 'Call her on 07700 900123', matches: [] } }])]))[0].r
+  assert.equal(bad.results[0].outcome, 'rejected', 'a phone number is refused')
+  const good = (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([{ kind: 'spec_result', data: { job_id: jid, status: 'ready', skills: ['launch planning', 'pricing and packaging'], summary: 'Strong senior PMM with two launches a year.', matches: [{ kind: 'job_lead', id: lead.id, name: lead.company, role: lead.role, why: 'Same level, same city', fit: 82 }] } }])]))[0].r
+  assert.equal(good.results[0].outcome, 'created', JSON.stringify(good.results[0]))
+  const [done] = await rows(`select status, cv_text, result from spec_requests where id = $1`, [jid])
+  assert.equal(done.status, 'ready')
+  assert.equal(done.cv_text, null, 'the pasted CV is gone once answered')
+  assert.equal(done.result.matches[0].name, lead.company)
+  const again = (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([{ kind: 'spec_result', data: { job_id: jid, status: 'ready', skills: [], summary: '', matches: [] } }])]))[0].r
+  assert.equal(again.results[0].code, 'wrong_state')
+  // Only a6_calls may answer.
+  await db.exec(`insert into agent_runs (agent, trigger) values ('a3_jobs', 'manual')`)
+  const [r3] = await rows(`select id from agent_runs where agent = 'a3_jobs' order by started_at desc limit 1`)
+  const no = (await rows(`select agent_write($1, $2::jsonb) as r`, [r3.id, JSON.stringify([{ kind: 'spec_result', data: { job_id: jid, status: 'failed' } }])]))[0].r
+  assert.equal(no.results[0].code, 'not_allowed')
+})
+
+test('0051 brief and call summary: a brief job is asked for like the others and answered into the brief tab; a call carries a short summary and never more', async () => {
+  const [s] = await rows(`select id, client, role from searches where status in ('open', 'intake') and not confidential order by opened_on limit 1`)
+  await owner(async () => {
+    const [{ j }] = await rows(`select request_search_job($1, 'brief') as j`, [s.id])
+    assert.ok(j, 'the owner can ask for a brief')
+  })
+  const jid = (await rows(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'brief') returning id`, [ownerId, s.id]))[0].id
+  const [{ ctx }] = await rows(`select agent_context('a6_calls', array['search_jobs']) as ctx`)
+  assert.ok(ctx.search_jobs.some((j) => j.job_id === jid && j.kind === 'brief'))
+  await db.exec(`insert into agent_runs (agent, trigger) values ('a6_calls', 'manual')`)
+  const [run] = await rows(`select id from agent_runs where agent = 'a6_calls' order by started_at desc limit 1`)
+  const out = (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([
+    { kind: 'search_result', data: { job_id: jid, status: 'ready', content: 'Why open: the last director left.', structured: { why_open: 'The last director left in October', reports_to: 'CMO', sources: [{ label: 'Spott job', url: 'https://example.com/spott/jobs/1' }] } } },
+    { kind: 'call', data: { granola_ref: 'g-sum-1', granola_url: 'https://example.com/notes/g-sum-1', held_at: '2026-11-16T10:00:00Z', call_type: 'client_update', search_client: s.client, search_role: s.role, match_confidence: 'confirmed', summary: 'Client happy with the shortlist. Wants two more by Friday. Jason to send the role outline.' } },
+    { kind: 'call', data: { granola_ref: 'g-sum-2', held_at: '2026-11-16T11:00:00Z', call_type: 'candidate_screen', person_name: 'Ada Example', summary: 'x'.repeat(601) } },
+  ])]))[0].r
+  assert.equal(out.results[0].outcome, 'created', JSON.stringify(out.results[0]))
+  const [note] = await rows(`select tab, structured from search_notes where search_id = $1 and tab = 'brief' order by version desc limit 1`, [s.id])
+  assert.equal(note.structured.reports_to, 'CMO')
+  const [c1] = await rows(`select summary, search_id from calls where granola_ref = 'g-sum-1'`)
+  assert.equal(c1.search_id, s.id)
+  assert.match(c1.summary, /^Client happy/)
+  const [c2] = await rows(`select length(summary) as n from calls where granola_ref = 'g-sum-2'`)
+  assert.equal(c2.n, 600, 'a summary is cut at 600 characters')
+  await assert.rejects(db.query(`insert into calls (owner_id, held_at, summary) values ('${ownerId}', now(), repeat('x', 601))`), /summary|check/)
+})
+
 async function refusedPlain(sql) {
   await db.exec('begin')
   try {
@@ -1984,7 +2063,7 @@ test('0048 intake: the owner starts a search and asks for research; one open job
       { kind: 'lowdown', status: 'waiting', owner_id: ownerId },
       { kind: 'questions', status: 'waiting', owner_id: ownerId },
     ])
-    assert.match(String(await refused(`select request_search_job($1, 'gossip')`, [sid])), /questions, lowdown or map/)
+    assert.match(String(await refused(`select request_search_job($1, 'gossip')`, [sid])), /questions, lowdown, map or brief/)
     assert.match(String(await refused(`select request_search_job(gen_random_uuid(), 'map')`)), /No such search/)
     // The browser reads the queue and writes none of it.
     assert.match(String(await refused(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'map')`, [ownerId, sid])), /permission denied/)

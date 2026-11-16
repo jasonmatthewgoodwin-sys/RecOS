@@ -68,6 +68,8 @@ export type Task = {
   searchId: string | null
   createdAt: string
   stale: boolean
+  /** Where the task came from: the post, the email, the call notes, the CRM record. */
+  sourceUrl: string | null
   edits: TaskEdits
 }
 

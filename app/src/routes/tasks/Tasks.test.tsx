@@ -160,6 +160,8 @@ describe('Tasks', () => {
     expect(card).toHaveTextContent('Spoke yesterday about the GrailPay role. CV promised.')
     expect(within(card).getByRole('link', { name: 'Call notes' })).toHaveAttribute('href', 'https://example.com/notes/ada')
     expect(within(card).getByRole('link', { name: 'Open in CRM' })).toHaveAttribute('href', 'https://example.com/crm/candidates/ada')
+    // The source the task came from is one button, named for where it goes.
+    expect(within(card).getByRole('button', { name: 'Open source' })).toBeInTheDocument()
     expect(within(card).getByRole('textbox', { name: 'Subject' })).toHaveValue('Good to speak yesterday')
     expect((within(card).getByRole('textbox', { name: 'Email' }) as HTMLTextAreaElement).value).toMatch(/thank you for your time yesterday/)
     expect(card.querySelector('[data-kind="primary"]')).toHaveTextContent('Send')
