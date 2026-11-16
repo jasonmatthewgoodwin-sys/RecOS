@@ -2,7 +2,7 @@
 // Local). Every name here is made up. Nothing in this file is real.
 
 import { composeLink } from './send'
-import type { Task, TaskEdits } from './tasks'
+import type { Task, TaskChat, TaskEdits } from './tasks'
 import type {
   SpokenPerson, SpecRequest,
   SendLogRow, Template,
@@ -593,6 +593,20 @@ export function freshSampleAStar(): AStarSuggestion[] {
 }
 let sampleAStar = freshSampleAStar()
 let sampleWarm = new Set<string>(['p-ada'])
+/** The chat on each task, by task key. Ada's follow-up has one exchange so the screen can be seen. */
+const sampleChat = new Map<string, TaskChat>([
+  [
+    'follow_ups:f-ada',
+    {
+      lines: [
+        { id: 'chat-a1', author: 'owner', kind: 'check', body: 'Is this still relevant?', at: '2026-11-13T09:10:00Z' },
+        { id: 'chat-a2', author: 'agent', kind: 'answer', body: 'Yes. Her last email, on Thursday, asks for the role outline and nothing has gone back. The draft covers it.', at: '2026-11-13T09:25:00Z' },
+      ],
+      job: { id: 'job-a1', kind: 'check', instruction: null, status: 'ready', note: null, requestedAt: '2026-11-13T09:10:00Z', finishedAt: '2026-11-13T09:25:00Z' },
+    },
+  ],
+])
+
 let sampleSpecs: SpecRequest[] = [
   {
     id: 'spec-ada', personId: 'p-ada', linkedinUrl: 'https://example.com/in/ada', cvWhere: 'spott', status: 'ready', note: null,
@@ -2027,6 +2041,21 @@ export const sampleSource: DataSource = {
   async specRequests() {
     return sampleSpecs.map((r) => ({ ...r }))
   },
+  async taskChat(taskKey) {
+    const held = sampleChat.get(taskKey) ?? { lines: [], job: null }
+    return { lines: held.lines.map((l) => ({ ...l })), job: held.job ? { ...held.job } : null }
+  },
+
+  async askTask(taskKey, kind, instruction) {
+    const held = sampleChat.get(taskKey) ?? { lines: [], job: null }
+    const words = instruction?.trim() || (kind === 'check' ? 'Is this still relevant?' : 'Do this for me.')
+    const now = new Date().toISOString()
+    held.lines.push({ id: `chat-${held.lines.length + 1}`, author: 'owner', kind, body: words, at: now })
+    held.job = { id: `job-${taskKey}`, kind, instruction: instruction?.trim() || null, status: 'waiting', note: null, requestedAt: now, finishedAt: null }
+    sampleChat.set(taskKey, held)
+    return held.job.id
+  },
+
   async requestSpec(personId, ask) {
     sampleWarm.add(personId)
     if (sampleSpecs.some((r) => r.personId === personId && (r.status === 'waiting' || r.status === 'working'))) return

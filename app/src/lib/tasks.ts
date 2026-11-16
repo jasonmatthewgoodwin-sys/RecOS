@@ -363,3 +363,45 @@ export function sourceWords(task: Task): string {
       return 'RecOS'
   }
 }
+
+// ---- The chat on a task (0052)
+
+export type TaskChatLine = {
+  id: string
+  author: 'owner' | 'agent'
+  kind: 'note' | 'check' | 'change' | 'do' | 'answer'
+  body: string
+  at: string
+}
+
+export type TaskJobKind = 'check' | 'change' | 'do'
+
+export type TaskJob = {
+  id: string
+  kind: TaskJobKind
+  instruction: string | null
+  status: 'waiting' | 'working' | 'ready' | 'failed'
+  note: string | null
+  requestedAt: string
+  finishedAt: string | null
+}
+
+export type TaskChat = { lines: TaskChatLine[]; job: TaskJob | null }
+
+export const chatKey = (taskKey: string) => `tasks.chat.${taskKey}`
+
+/** The three asks, in the owner's words. */
+export const askWord: Record<TaskJobKind, string> = {
+  check: 'Still relevant?',
+  change: 'Change it',
+  do: 'Do this for me',
+}
+
+/** What the chat says while the assistant has the task. */
+export function jobWord(job: TaskJob | null): string | null {
+  if (!job) return null
+  if (job.status === 'waiting') return 'Waiting for the task assistant. It looks every quarter of an hour on weekdays.'
+  if (job.status === 'working') return 'The task assistant has it.'
+  if (job.status === 'failed') return job.note ?? 'It could not be done this time.'
+  return null
+}

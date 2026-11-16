@@ -212,7 +212,7 @@ test('T-RLS-6: owner can neither read nor change agents.key_hash', async () => {
     assert.match(await refused(`select key_hash from agents`), /permission denied/)
     assert.match(await refused(`update agents set key_hash = 'x'`), /permission denied/)
     assert.equal(await refused(`update agents set enabled = false where code = 'a7_events' returning code`), null)
-    assert.equal((await rows(`select code from agents`)).length, 9) // the seven agents, the sender (0039) and the campaign runner (0040)
+    assert.equal((await rows(`select code from agents`)).length, 10) // the seven agents, the sender (0039), the campaign runner (0040) and the task assistant (0052)
   })
 })
 
@@ -1007,6 +1007,107 @@ test('0051 brief and call summary: a brief job is asked for like the others and 
   const [c2] = await rows(`select length(summary) as n from calls where granola_ref = 'g-sum-2'`)
   assert.equal(c2.n, 600, 'a summary is cut at 600 characters')
   await assert.rejects(db.query(`insert into calls (owner_id, held_at, summary) values ('${ownerId}', now(), repeat('x', 601))`), /summary|check/)
+})
+
+test('0052 task chat: the owner asks a task whether it is still relevant, changes its directive or hands it over; the task assistant claims it with the chat, the draft and the calls, answers in the chat and closes the task; nobody else may', async () => {
+  // An open follow-up with a draft, written directly.
+  const [p] = await rows(`select id from people where display_name = 'Ada Example'`)
+  const mid = (await rows(`insert into messages (owner_id, type, channel, person_id, to_name, subject, body, created_by, level_at_creation, state) values ($1, 'email_reply', 'email', $2, 'Ada Example', 'Your CV', 'Any news on the brief?', 'a5_followups', 'draft_only', 'draft') returning id`, [ownerId, p.id]))[0].id
+  const fid = (await rows(`insert into follow_ups (owner_id, person_id, person_name, company, kind, reason, source, direction, due_on, status, dedup_key, message_id) values ($1, $2, 'Ada Example', 'Example Co', 'email_owed', 'Promised her CV on Friday', 'email', 'owed', current_date, 'open', 'test:chat', $3) returning id`, [ownerId, p.id, mid]))[0].id
+  const fu = { key: 'follow_ups:' + fid, id: fid, message_id: mid }
+  await anon(async () => assert.match(String(await refused(`select request_task_job('${fu.key}', 'check')`)), /permission denied|Only the owner/))
+  await reviewer(async () => assert.match(String(await refused(`select request_task_job('${fu.key}', 'check')`)), /Only the owner/))
+  await owner(async () => {
+    assert.match(String(await refused(`select request_task_job('${fu.key}', 'change')`)), /Say what should change/)
+    const [{ j1 }] = await rows(`select request_task_job($1, 'check') as j1`, [fu.key])
+    const [{ j2 }] = await rows(`select request_task_job($1, 'do', 'Send it as a short nudge') as j2`, [fu.key])
+    assert.equal(j2, j1, 'one open job per task; a second ask changes it')
+    const [job] = await rows(`select kind, instruction, status from task_jobs where id = $1`, [j1])
+    assert.deepEqual(job, { kind: 'do', instruction: 'Send it as a short nudge', status: 'waiting' })
+    const chat = await rows(`select author, kind, body from task_chat where task_key = $1 order by created_at`, [fu.key])
+    assert.equal(chat.length, 2)
+    assert.equal(chat[0].body, 'Is this still relevant?')
+    assert.match(String(await refused(`insert into task_chat (task_key, author, body) values ('${fu.key}', 'agent', 'no')`)), /row-level security/)
+    assert.match(String(await refused(`insert into task_jobs (task_key, kind) values ('${fu.key}', 'do')`)), /permission denied/)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('task_chat'), 0)
+    assert.equal(await count('task_jobs'), 0)
+  })
+  // The owner's block rolled back. The agent part starts from rows written directly.
+  await db.exec(`insert into task_chat (owner_id, task_key, author, kind, body) values ('${ownerId}', '${fu.key}', 'owner', 'do', 'Send it as a short nudge')`)
+  const jid = (await rows(`insert into task_jobs (owner_id, task_key, kind, instruction) values ($1, $2, 'do', 'Send it as a short nudge') returning id`, [ownerId, fu.key]))[0].id
+  const [{ ctx }] = await rows(`select agent_context('a9_tasks', array['task_jobs']) as ctx`)
+  const job = ctx.task_jobs.find((j) => j.job_id === jid)
+  assert.ok(job, 'claimed')
+  assert.equal(job.kind, 'do')
+  assert.equal(job.task.kind, 'follow_up')
+  assert.equal(job.task.message.id, fu.message_id)
+  assert.equal(job.chat.length, 1)
+  assert.ok(job.person && job.person.name, 'the person, by name and links only')
+  assert.ok(Array.isArray(job.calls))
+  assert.equal(JSON.stringify(job).includes('@'), false, 'no address in what the agent gets')
+  await assert.rejects(db.query(`select agent_context('a3_jobs', array['task_jobs'])`), /may not ask/)
+  // The answer: a new draft and a reply, then the task is done.
+  await db.exec(`insert into agent_runs (agent, trigger) values ('a9_tasks', 'manual')`)
+  const [run] = await rows(`select id from agent_runs where agent = 'a9_tasks' order by started_at desc limit 1`)
+  const bad = (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([{ kind: 'task_result', data: { job_id: jid, status: 'ready', reply: 'Ring 07700 900123' } }])]))[0].r
+  assert.equal(bad.results[0].outcome, 'rejected', 'a phone number in the chat is refused')
+  const good = (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([{ kind: 'task_result', data: { job_id: jid, status: 'ready', reply: 'Rewritten as a two-line nudge and ready to send.', done: true, draft: { body: 'A quick nudge: any news on the brief?' }, actions: ['draft rewritten'] } }])]))[0].r
+  assert.equal(good.results[0].outcome, 'created', JSON.stringify(good.results[0]))
+  const [m] = await rows(`select body from messages where id = $1`, [fu.message_id])
+  assert.equal(m.body, 'A quick nudge: any news on the brief?')
+  const [f] = await rows(`select status from follow_ups where id = $1`, [fu.id])
+  assert.equal(f.status, 'done', 'done closes the task')
+  const [j] = await rows(`select status, result from task_jobs where id = $1`, [jid])
+  assert.equal(j.status, 'ready')
+  assert.equal(j.result.closed, 'done')
+  const chat = await rows(`select author, body from task_chat where task_key = $1 order by created_at`, [fu.key])
+  assert.equal(chat.at(-1).author, 'agent')
+  const again = (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([{ kind: 'task_result', data: { job_id: jid, status: 'ready', reply: 'x' } }])]))[0].r
+  assert.equal(again.results[0].code, 'wrong_state')
+  // Not relevant any more closes a derived task through the override.
+  const [cv] = await rows(`select task_key from tasks_view where source not in ('inbox_items', 'follow_ups') limit 1`)
+  const jid2 = (await rows(`insert into task_jobs (owner_id, task_key, kind) values ($1, $2, 'check') returning id`, [ownerId, cv.task_key]))[0].id
+  await rows(`select agent_context('a9_tasks', array['task_jobs'])`)
+  const gone = (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([{ kind: 'task_result', data: { job_id: jid2, status: 'ready', reply: 'They replied on Friday. Nothing to chase.', relevant: false } }])]))[0].r
+  assert.equal(gone.results[0].outcome, 'created')
+  const [o] = await rows(`select status from task_overrides where task_key = $1`, [cv.task_key])
+  assert.equal(o.status, 'binned')
+  // Only a9_tasks may answer.
+  await db.exec(`insert into agent_runs (agent, trigger) values ('a3_jobs', 'manual')`)
+  const [r3] = await rows(`select id from agent_runs where agent = 'a3_jobs' order by started_at desc limit 1`)
+  const no = (await rows(`select agent_write($1, $2::jsonb) as r`, [r3.id, JSON.stringify([{ kind: 'task_result', data: { job_id: jid, status: 'failed' } }])]))[0].r
+  assert.equal(no.results[0].code, 'not_allowed')
+})
+
+test('0053 search status follows the evidence: the agent may set intake, open, offer or on hold, counts at offer imply offer, at offer the words still update, and placed is left to the owner', async () => {
+  const sid = (await rows(`insert into searches (owner_id, client, client_key, role, status) values ($1, 'Example Co', 'example-co', 'Head of Product Marketing', 'intake') returning id`, [ownerId]))[0].id
+  await db.exec(`insert into agent_runs (agent, trigger) values ('a6_calls', 'manual')`)
+  const [run] = await rows(`select id from agent_runs where agent = 'a6_calls' order by started_at desc limit 1`)
+  const write = async (data) => (await rows(`select agent_write($1, $2::jsonb) as r`, [run.id, JSON.stringify([{ kind: 'search_counts', data: { search_id: sid, ...data } }])]))[0].r.results[0]
+  // Spoken to two people: intake becomes open by itself.
+  const first = await write({ n_spoken: 2, health: "warm", health_reason: "Two first calls booked." }); assert.equal(first.outcome, "merged", JSON.stringify(first))
+  assert.equal((await rows(`select status from searches where id = $1`, [sid]))[0].status, 'open')
+  // The agent says on hold, then open again.
+  assert.equal((await write({ status: 'on_hold', health_reason: 'Client paused hiring until January.' })).outcome, 'merged')
+  assert.equal((await rows(`select status from searches where id = $1`, [sid]))[0].status, 'on_hold')
+  assert.equal((await write({ status: 'open' })).outcome, 'merged')
+  // Placed, lost and closed are refused.
+  assert.equal((await write({ status: 'placed' })).code, 'policy_refused')
+  assert.equal((await write({ status: 'lost' })).code, 'policy_refused')
+  // One at offer sets offer, and the status moves.
+  assert.equal((await write({ n_offer: 1, health_reason: 'Verbal offer out.' })).outcome, 'merged')
+  const [atOffer] = await rows(`select status, n_offer from searches where id = $1`, [sid])
+  assert.deepEqual(atOffer, { status: 'offer', n_offer: 1 })
+  // At offer: words update, counts and status stay (SEA-4, softened).
+  const r = await write({ n_spoken: 9, status: 'open', health: 'cooling', health_reason: 'Contract sent, not yet signed.', next_step: 'Confirm the signature.', waiting_on: 'candidate' })
+  assert.equal(r.outcome, 'merged')
+  const [still] = await rows(`select status, n_spoken, health, health_reason, waiting_on from searches where id = $1`, [sid])
+  assert.deepEqual(still, { status: 'offer', n_spoken: 2, health: 'cooling', health_reason: 'Contract sent, not yet signed.', waiting_on: 'candidate' })
+  // Finished searches take nothing.
+  await db.exec(`update searches set status = 'placed', placed_on = current_date where id = '${sid}'`)
+  assert.equal((await write({ health: 'warm' })).code, 'wrong_state')
 })
 
 async function refusedPlain(sql) {

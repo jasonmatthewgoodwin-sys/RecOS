@@ -7,7 +7,7 @@ import { supabase } from './supabase'
 import { splitCopy, topicFrom, topicKey } from './calendar'
 import type { CaptureKind, SearchHit } from './capture'
 import { mondayOf, shiftDate, ukClock, weekdayOf } from './time'
-import { band, type Task, type TaskEdits, type TaskKind, type TaskLink, type TaskSource } from './tasks'
+import { band, type Task, type TaskChat, type TaskChatLine, type TaskEdits, type TaskJob, type TaskJobKind, type TaskKind, type TaskLink, type TaskSource } from './tasks'
 import type { Tone } from '../theme/tokens'
 
 export type CalendarCall = {
@@ -974,6 +974,10 @@ export interface DataSource {
   openInOutlook(task: Task): Promise<string>
   /** A task with no agent draft gets its own message row, so Open in Outlook and Copy work. Returns the message id. */
   createTaskDraft(task: Task, subject: string, body: string): Promise<string>
+  /** The chat on a task (0052): every line so far and the open or last job. */
+  taskChat(taskKey: string): Promise<TaskChat>
+  /** Ask the task assistant: is it still relevant, change what it is for, or do it. Returns the job id. */
+  askTask(taskKey: string, kind: TaskJobKind, instruction?: string): Promise<string>
   /** Settings, Connections (24.9): status only. Secrets never reach the browser. */
   connections(): Promise<Connection[]>
   /** The address that starts the Outlook sign-in, carrying a one-time state made for the owner. */
@@ -2338,6 +2342,28 @@ const live: DataSource = {
     const id = (data as { id: string }).id
     if (task.source === 'follow_ups') fail((await supabase!.from('follow_ups').update({ message_id: id }).eq('id', task.sourceId)).error)
     return id
+  },
+
+  async taskChat(taskKey) {
+    const [c, j] = await Promise.all([
+      supabase!.from('task_chat').select('id, author, kind, body, created_at').eq('task_key', taskKey).order('created_at'),
+      supabase!.from('task_jobs').select('id, kind, instruction, status, note, requested_at, finished_at').eq('task_key', taskKey).order('requested_at', { ascending: false }).limit(1),
+    ])
+    fail(c.error)
+    fail(j.error)
+    type CRow = { id: string; author: 'owner' | 'agent'; kind: TaskChatLine['kind']; body: string; created_at: string }
+    type JRow = { id: string; kind: TaskJobKind; instruction: string | null; status: TaskJob['status']; note: string | null; requested_at: string; finished_at: string | null }
+    const job = ((j.data ?? []) as JRow[])[0]
+    return {
+      lines: ((c.data ?? []) as CRow[]).map((r) => ({ id: r.id, author: r.author, kind: r.kind, body: r.body, at: r.created_at })),
+      job: job ? { id: job.id, kind: job.kind, instruction: job.instruction, status: job.status, note: job.note, requestedAt: job.requested_at, finishedAt: job.finished_at } : null,
+    }
+  },
+
+  async askTask(taskKey, kind, instruction) {
+    const { data, error } = await supabase!.rpc('request_task_job', { p_task_key: taskKey, p_kind: kind, p_instruction: instruction ?? null })
+    fail(error)
+    return data as string
   },
 
   async openInOutlook(task) {

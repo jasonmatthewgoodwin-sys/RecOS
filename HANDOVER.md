@@ -286,3 +286,15 @@ Note for anyone running `cd app && npm test` on a new computer: the page
 tests spy on the live data object, so the file `app/.env.test` must hold
 the two public lines from "Get it running" above, or 89 tests fail with a
 stack overflow. The file is ignored by git.
+
+## Task chat, the task assistant and the status rules (16 November, cloud session, later)
+
+What changed: every task card has a chat at the bottom with three asks: Still relevant?, Change it (needs words) and Do this for me. The ask goes to a new agent, the task assistant (`a9_tasks`), which reads the task, the chat, the draft, the thread in Outlook and the call notes, then answers in the chat and either closes the task, rewrites its draft or does the work. Open in Outlook now makes the draft as a reply in the last thread with that person when Outlook is connected. A search's status (intake, open, offer, on hold) follows what the morning searches run finds. Job leads and ad chases never sit in Later.
+
+What must be done by hand, in order:
+
+1. Run, in the Supabase SQL editor on the project, in this order: `db/migrations/0052_task_chat.sql`, `db/migrations/0053_search_status_follows.sql`, `db/policies/task_chat.sql`, `db/policies/task_jobs.sql`, `db/views/tasks_view.sql`, `db/seed/agent_prompts_a6_searches.sql`. Each is safe to run once; the policy, view and seed files are safe to run again.
+2. Redeploy the send function from the repository folder: `supabase functions deploy send --no-verify-jwt`.
+3. In RecOS, Settings, Agents: Task assistant, Create key. Then make the four claude.ai routines in `agents/prompts/a9_tasks.md`.
+4. Still waiting from the morning: `db/seed/remove_sample_week.sql` takes the invented sample week out of the project. Run it once, in the SQL editor, and the Tasks board holds only what the agents found.
+

@@ -17,10 +17,63 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { authenticateAgent, fail, fromDbError, ok, readJson, serviceClient } from '../_shared/agent.ts'
+import { createDraft, findMessages, readMessage } from '../outlook/graph.ts'
 
 const ACTIONS = ['approve', 'open_draft', 'mark_sent', 'cancel']
 
 /** A compose link for the owner's Outlook on the web. The address is left for Outlook's own autocomplete when RecOS does not hold one (MSG-1). */
+/**
+ * Make the draft in Outlook through Graph as a reply to the last message in
+ * the thread this task is about: the thread the follow-up came from, else the
+ * newest message from that person, else a message naming them. Null when
+ * Outlook is not connected or Graph says no, so the caller falls back.
+ */
+async function draftInThread(
+  db: ReturnType<typeof serviceClient>,
+  token: string,
+  messageId: string,
+  d: { subject: string | null; body: string | null; to_address: string | null; to_name: string },
+): Promise<{ webLink: string; inThread: boolean; subject: string } | null> {
+  try {
+    const { data: who } = await db.auth.getUser(token)
+    const owner = who.user?.id
+    if (!owner) return null
+    const { data: conn } = await db.from('connections').select('status').eq('owner_id', owner).eq('provider', 'outlook').maybeSingle()
+    if ((conn as { status: string } | null)?.status !== 'connected') return null
+
+    // 1. The thread the follow-up came from, when the agent kept its link.
+    let replyToId: string | null = null
+    let subject = d.subject ?? ''
+    const { data: fu } = await db.from('follow_ups').select('source_url').eq('message_id', messageId).maybeSingle()
+    const sourceUrl = (fu as { source_url: string | null } | null)?.source_url ?? ''
+    const item = /[?&]ItemID=([^&]+)/i.exec(sourceUrl)
+    if (item) {
+      try {
+        const id = decodeURIComponent(item[1])
+        const m = await readMessage(db, owner, id)
+        replyToId = m.id
+        subject = m.subject || subject
+      } catch {
+        replyToId = null
+      }
+    }
+    // 2. Else the newest message from that person, or one that names them.
+    if (!replyToId && d.to_name) {
+      const from = d.to_address ? await findMessages(db, owner, { sender: d.to_address, limit: 1 }) : []
+      const found = from.length ? from : await findMessages(db, owner, { text: `participants:${d.to_name}`, limit: 1 })
+      if (found.length) {
+        replyToId = found[0].id
+        subject = found[0].subject || subject
+      }
+    }
+    const made = await createDraft(db, owner, { to: d.to_address ?? '', toName: d.to_name, subject: subject || `About ${d.to_name}`, body: d.body ?? '', replyToId })
+    return { webLink: made.webLink, inThread: replyToId !== null, subject }
+  } catch (e) {
+    console.error('draftInThread', e instanceof Error ? e.message : e)
+    return null
+  }
+}
+
 export function composeLink(to: string | null, subject: string | null, body: string | null): string {
   const q = new URLSearchParams()
   if (to) q.set('to', to)
@@ -50,14 +103,23 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     })
     if (action === 'open_draft') {
-      // Two steps: read the draft, build the link, store it with the message.
+      // Two steps: read the draft, make the Outlook draft, store its link with the message.
       const first = await asUser.rpc('send_action', { p_message: messageId, p_action: 'open_draft' })
       if (first.error) return fromDbError(first.error.message)
       const d = first.data as { subject: string | null; body: string | null; to_address: string | null; to_name: string }
-      const link = composeLink(d.to_address, d.subject, d.body)
+      // With Outlook connected (Route B), the draft is a reply in the last
+      // thread with that person (Mia, 16 November 2026), so the context sits
+      // under it and the send threads normally. Otherwise a compose link.
+      const made = await draftInThread(db, token, messageId, d)
+      const link = made?.webLink ?? composeLink(d.to_address, d.subject, d.body)
       const second = await asUser.rpc('send_action', { p_message: messageId, p_action: 'open_draft', p_outlook_url: link })
       if (second.error) return fromDbError(second.error.message)
-      return ok({ state: 'draft', outlook_draft_url: link, note: `Opens a draft to ${d.to_name} in Outlook. Nothing is sent until you press Send there.` })
+      const note = made?.inThread
+        ? `Opens a reply to ${d.to_name} in the thread "${made.subject}" in Outlook. Nothing is sent until you press Send there.`
+        : made
+          ? `Opens a new draft to ${d.to_name} in Outlook; no earlier thread was found. Nothing is sent until you press Send there.`
+          : `Opens a draft to ${d.to_name} in Outlook. Nothing is sent until you press Send there.`
+      return ok({ state: 'draft', outlook_draft_url: link, note, in_thread: made?.inThread ?? false })
     }
     const { data, error } = await asUser.rpc('send_action', { p_message: messageId, p_action: action })
     if (error) return fromDbError(error.message)

@@ -326,6 +326,11 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
           onDraft={(body, subject) => saveDraft(card, body, subject)}
           onSend={() => send(card)}
           onOutlook={(body, subject) => outlook(card, body, subject)}
+          onAnswered={() => {
+            invalidate(TASKS_KEY)
+            invalidate('home.')
+          }}
+          onNote={setNote}
           onClose={closeCard}
         />
       )}

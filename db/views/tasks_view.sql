@@ -17,7 +17,13 @@ with base as (
   select
     'inbox_items:' || i.id as task_key, 'inbox_items' as source, i.id as source_id,
     i.type as kind, i.title, i.why, p.display_name as person_name, i.company,
-    i.due_on, i.rank + least(extract(day from now() - i.created_at), 10) as rank,
+    -- A lead or a chase is this week's work, not someday's (Jason, 16 Nov
+    -- 2026): with no date from the agent it falls due three days after it
+    -- was found, and ranks at least as a week item.
+    case when i.type in ('job_lead', 'wider_lead', 'ad_chase', 'referral', 'signal') and i.due_on is null
+      then (i.created_at at time zone 'Europe/London')::date + 3 else i.due_on end as due_on,
+    case when i.type in ('job_lead', 'wider_lead', 'ad_chase') then greatest(i.rank, 30) else i.rank end
+      + least(extract(day from now() - i.created_at), 10) as rank,
     null::text as waiting_on,
     i.draft, i.draft_original, null::text as subject, null::text as channel, null::uuid as message_id, null::text as message_state,
     i.links, i.ref_table, i.ref_id, i.agent, null::uuid as search_id, i.created_at,

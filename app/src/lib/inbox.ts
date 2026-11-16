@@ -76,6 +76,7 @@ export const agentWord: Record<string, string> = {
   a6_calls: 'the calls agent',
   a7_events: 'the events agent',
   a8_campaigns: 'the campaign runner',
+  a9_tasks: 'the task assistant',
   manual: 'you',
   system: 'a rule',
 }

@@ -1,7 +1,11 @@
 -- The a6_calls `searches` mode (Jason, 16 November): every weekday morning,
 -- bring each live search's status up to date from mail, calendar and calls.
--- Puts the section in front of the active a6_calls prompt. Safe to run twice:
--- it does nothing when the section is already there. Needs migration 0046.
+-- Puts the section in front of the active a6_calls prompt, replacing an
+-- earlier copy. Safe to run twice. Needs migrations 0046 and 0053 (status).
+
+update public.agent_prompts
+set body = regexp_replace(body, '## Mode: searches \(read this first\).*?(?=## Mode: |$)', '', 'n')
+where agent = 'a6_calls' and active and position('## Mode: searches' in body) > 0;
 
 update public.agent_prompts
 set body = $s$## Mode: searches (read this first)
@@ -22,9 +26,11 @@ Job: keep every live search's status current so Jason sees, each morning, where 
    - health_reason: one plain line on where it stands, under 200 characters, no names of other clients.
    - next_step: the single next action for Jason, under 200 characters; next_step_on: its date (YYYY-MM-DD) if one is implied, else today when Jason owes a reply, else leave out.
    - last_client_contact_on: date of the latest two-way contact with the client.
-4. Write one record per search: `{"kind":"search_counts","data":{"search_client":"<client>","search_role":"<role>","health":"...","health_reason":"...","waiting_on":"...","next_step":"...","next_step_on":"...","last_client_contact_on":"..."}}` through `$RECOS_URL/agent-write`, in one batch. A search at offer is refused by RecOS (policy_refused); that is expected, so leave it.
+   - status, from the evidence, so the board never lags the description: `intake` (brief not yet agreed, nobody sourced), `open` (sourcing, speaking, sending or interviewing), `offer` (an offer is out, verbal or written, or someone has accepted but not started), `on_hold` (the client has paused it in writing). Send status only when the evidence is clear; leave it out to keep what is there. Never send placed, lost or closed: Jason closes a search himself, because money and the close checks follow.
+   - counts, when the CRM or mail gives them: n_spoken, n_submitted, n_first_stage, n_later_stage, n_offer. Someone at offer sets the status to offer by itself.
+4. Write one record per search: `{"kind":"search_counts","data":{"search_client":"<client>","search_role":"<role>","status":"...","health":"...","health_reason":"...","waiting_on":"...","next_step":"...","next_step_on":"...","last_client_contact_on":"..."}}` through `$RECOS_URL/agent-write`, in one batch. For a search already at offer RecOS keeps your words (health, reason, next step, waiting on) and leaves its counts and status alone; that is expected.
 5. If Jason owes a reply to a client, also write one `follow_up` record (direction `owed`, the thread as source) so it shows in his queue.
 6. Finish with run-finish: status ok, or partial if a source could not be read. Summary line 1: "N searches updated: X warm, Y cooling, Z cold". Line 2: the most urgent next step.
 
 $s$ || body
-where agent = 'a6_calls' and active and position('## Mode: searches' in body) = 0;
+where agent = 'a6_calls' and active;

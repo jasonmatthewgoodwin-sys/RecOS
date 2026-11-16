@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SignedIn } from '../../App'
 import { data } from '../../lib/data'
-import { freshSampleTasks } from '../../lib/sample'
+import { freshSampleTasks, sampleSource } from '../../lib/sample'
 
 // The Tasks tab: the board, the filters, the order, the card, the deck and
 // the two ways out for an email. Runs on the invented sample tasks.
@@ -32,6 +32,8 @@ function mock(over: { fail?: boolean } = {}) {
   const outlook = vi.spyOn(data, 'openInOutlook').mockResolvedValue('https://example.com/outlook/drafts/m-ada')
   vi.spyOn(data, 'reopenTask').mockResolvedValue()
   vi.spyOn(data, 'requestRun').mockResolvedValue()
+  vi.spyOn(data, 'taskChat').mockImplementation((key) => sampleSource.taskChat(key))
+  vi.spyOn(data, 'askTask').mockImplementation((key, kind, words) => sampleSource.askTask(key, kind, words))
   if (over.fail) {
     complete.mockRejectedValue(new Error('down'))
     bin.mockRejectedValue(new Error('down'))
@@ -317,6 +319,30 @@ describe('Tasks', () => {
     }
     await userEvent.click(screen.getByRole('button', { name: 'List' }))
     await waitFor(() => expect(board()).toBeInTheDocument())
+  })
+
+  it('the chat on a task shows what was asked and answered, takes a new ask and then waits for the task assistant', async () => {
+    mock()
+    open()
+    await waitFor(() => expect(board()).toBeInTheDocument())
+    await userEvent.click(tile('Ada Example, Northwind Sample Co'))
+    const card = screen.getByRole('dialog', { name: 'Ada Example, Northwind Sample Co' })
+    const chat = await within(card).findByTestId('task-chat')
+    expect(within(chat).getByRole('list', { name: 'Chat' }).children).toHaveLength(2)
+    expect(chat).toHaveTextContent('Her last email, on Thursday, asks for the role outline')
+    // Change needs words.
+    await userEvent.click(within(chat).getByRole('button', { name: 'Change it' }))
+    expect(data.askTask).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Say what should change first'))
+    await userEvent.type(within(chat).getByRole('textbox', { name: 'Tell the task assistant' }), 'Make it a two-line nudge')
+    await userEvent.click(within(chat).getByRole('button', { name: 'Do this for me' }))
+    expect(data.askTask).toHaveBeenCalledWith('follow_ups:f-ada', 'do', 'Make it a two-line nudge')
+    await waitFor(() => expect(within(chat).getByTestId('task-chat-standing')).toHaveTextContent('Waiting for the task assistant'))
+    expect(within(chat).getByRole('list', { name: 'Chat' }).children).toHaveLength(3)
+    expect(within(chat).queryByRole('button', { name: 'Do this for me' })).toBeNull()
+    expect(within(chat).getByRole('button', { name: 'Look again' })).toBeInTheDocument()
+    // One primary on the screen still.
+    expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
   })
 
   it('Write up now asks the write-up agent to run and says so once', async () => {

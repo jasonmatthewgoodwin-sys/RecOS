@@ -8,6 +8,7 @@ import type { Search } from '../../lib/data'
 import { binReasons, dueWord, primaryLabel, shownTitle, snoozeChoices, sourceWords, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
 import { agentWord as inboxAgentWord } from '../../lib/inbox'
 import { sourceLabel } from '../../lib/links'
+import { TaskChat } from './TaskChat'
 
 export type CardMode = 'view' | 'edit' | 'bin' | 'snooze'
 
@@ -26,6 +27,9 @@ type Props = {
   onOutlook: (body: string, subject: string) => void
   onClose: () => void
   busy?: boolean
+  /** The assistant answered in the chat: read the board again. */
+  onAnswered?: () => void
+  onNote?: (words: string) => void
 }
 
 const agentWord: Record<string, string> = {
@@ -115,7 +119,7 @@ export function TaskBody({
 // The task card (right half of the sheet): the agent's words, the owner's
 // edits beside them, the context links, the draft with its two ways out,
 // one primary action and the quiet links.
-export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBin, onSnooze, onEdits, onDraft, onSend, onOutlook, onClose, busy }: Props) {
+export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBin, onSnooze, onEdits, onDraft, onSend, onOutlook, onClose, busy, onAnswered, onNote }: Props) {
   const [title, setTitle] = useState(task.edits.title ?? task.title)
   const [notes, setNotes] = useState(task.edits.notes ?? '')
   const [due, setDue] = useState(task.edits.dueOn ?? task.dueOn ?? '')
@@ -220,6 +224,10 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
           }
         />
       ),
+    },
+    {
+      label: 'Ask the task assistant',
+      body: <TaskChat task={task} onAnswered={() => onAnswered?.()} onNote={(w) => (onNote ? onNote(w) : setProblem(w))} />,
     },
     ...(mode === 'bin'
       ? [
