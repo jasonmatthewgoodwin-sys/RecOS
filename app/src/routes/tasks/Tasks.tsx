@@ -157,10 +157,17 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
     }
   }
 
-  async function outlook(task: Task) {
+  async function outlook(task: Task, body?: string, subject?: string) {
     setBusy(true)
     try {
-      const url = await data.openInOutlook(task)
+      let t = task
+      if (!t.messageId && body) {
+        // The agent left no draft: the start on the card becomes the message, so Outlook has something to open.
+        const messageId = await data.createTaskDraft(task, subject ?? '', body)
+        t = { ...task, messageId, channel: 'email', draft: body, subject: subject ?? null, draftOriginal: body }
+        setQueryData<Task[]>(TASKS_KEY, (rows) => (rows ?? []).map((x) => (x.key === task.key ? t : x)))
+      }
+      const url = await data.openInOutlook(t)
       window.open(url, '_blank', 'noopener')
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Could not open Outlook. Try again.')
@@ -314,7 +321,7 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
           onEdits={(edits) => saveEdits(card, edits)}
           onDraft={(body, subject) => saveDraft(card, body, subject)}
           onSend={() => send(card)}
-          onOutlook={() => outlook(card)}
+          onOutlook={(body, subject) => outlook(card, body, subject)}
           onClose={closeCard}
         />
       )}

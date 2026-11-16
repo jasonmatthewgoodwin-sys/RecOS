@@ -45,7 +45,7 @@ export function TaskTile({ task, today, onOpen, draggable, onDragStart, onDragOv
         type="button"
         data-task={task.key}
         onClick={onOpen}
-        className="flex min-h-11 w-full flex-col gap-1 rounded-card border border-rule bg-sheet py-3 pl-4 pr-3 text-left hover:border-ink"
+        className="flex h-44 w-full flex-col gap-1 rounded-card border border-rule bg-sheet py-3 pl-4 pr-3 text-left hover:border-ink"
       >
         <span className="flex items-center justify-between gap-2">
           <span className="label-caps text-ink-2">{typeWord[task.kind]}</span>
@@ -59,8 +59,8 @@ export function TaskTile({ task, today, onOpen, draggable, onDragStart, onDragOv
           </span>
         </span>
         <span className="line-clamp-2 text-body text-ink">{shownTitle(task)}</span>
-        {task.why && <span className="line-clamp-1 text-label text-ink-2">{task.why}</span>}
-        <span className="label-caps text-ink-2">
+        {task.why && <span className="line-clamp-2 text-label text-ink-2">{task.why}</span>}
+        <span className="label-caps mt-auto text-ink-2">
           {statusWord[st]}
           {task.waitingOn ? ` on ${task.waitingOn.toLowerCase()}` : ''}
         </span>

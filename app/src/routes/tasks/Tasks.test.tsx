@@ -77,7 +77,7 @@ describe('Tasks', () => {
     await waitFor(() => expect(board()).toBeInTheDocument())
     expect(values()).toEqual(['06', '02'])
     expect(screen.getByRole('main').querySelectorAll('[data-hero-stat]')).toHaveLength(2)
-    expect(screen.getByRole('main').querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
     expect(column('Now')).toBeInTheDocument()
     expect(column('This week')).toBeInTheDocument()
@@ -165,7 +165,7 @@ describe('Tasks', () => {
     expect(card.querySelector('[data-kind="primary"]')).toHaveTextContent('Send')
     expect(within(card).getByRole('button', { name: 'Open in Outlook' })).toBeInTheDocument()
     expect(card).toHaveTextContent('Raised by the call write-up')
-    expect(screen.getByRole('main').querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
@@ -186,6 +186,21 @@ describe('Tasks', () => {
     await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ key: 'follow_ups:f-ada' })))
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Queued to send'))
     expect(screen.queryByRole('button', { name: /Ada Example, Northwind/ })).not.toBeInTheDocument()
+  })
+
+  it('a task the agent left no draft for still carries a start on the email, and Open in Outlook makes it the message first', async () => {
+    const { outlook } = mock()
+    const create = vi.spyOn(data, 'createTaskDraft').mockResolvedValue('m-new')
+    const opened = vi.spyOn(window, 'open').mockImplementation(() => null)
+    open('/tasks?card=task:cv_chase:c-ada')
+    const card = await screen.findByRole('dialog', { name: 'CV still to come from Ada Example' })
+    expect(within(card).getByRole('textbox', { name: 'Subject' })).toHaveValue('Your CV')
+    expect((within(card).getByRole('textbox', { name: 'Email, a start' }) as HTMLTextAreaElement).value).toMatch(/^Hi Ada,/)
+    expect(within(card).getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+    await userEvent.click(within(card).getByRole('button', { name: 'Open in Outlook' }))
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ key: 'cv_chase:c-ada' }), 'Your CV', expect.stringMatching(/^Hi Ada,/)))
+    await waitFor(() => expect(outlook).toHaveBeenCalledWith(expect.objectContaining({ messageId: 'm-new' })))
+    expect(opened).toHaveBeenCalled()
   })
 
   it('Open in Outlook asks the engine for the draft and opens it in a new tab', async () => {
@@ -288,7 +303,7 @@ describe('Tasks', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Start' }))
     expect(await screen.findByTestId('deck-counter')).toHaveTextContent('01 of 06')
     expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('Cara Placeholder, Fabrikam Test Ltd')
-    expect(screen.getByRole('main').querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
     await userEvent.keyboard('j')
     expect(screen.getByRole('heading', { level: 3 })).not.toHaveTextContent('Cara Placeholder')
     const primary = screen.getByRole('main').querySelector<HTMLButtonElement>('[data-kind="primary"]')!

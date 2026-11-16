@@ -1717,6 +1717,19 @@ export const sampleSource: DataSource = {
     if (!task.messageId) throw new Error('Nothing to open')
     return `https://example.com/outlook/drafts/${task.messageId}`
   },
+  async createTaskDraft(task, subject, body) {
+    const t = sampleTasks.find((x) => x.key === task.key)
+    const id = `m-${task.sourceId}`
+    if (t) {
+      t.messageId = id
+      t.messageState = 'draft'
+      t.channel = 'email'
+      t.subject = subject
+      t.draft = body
+      t.draftOriginal = body
+    }
+    return id
+  },
   async connections() {
     return sampleConnections.map((c) => ({ ...c }))
   },

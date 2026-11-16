@@ -101,7 +101,7 @@ describe('Jobs', () => {
     const card = screen.getByRole('dialog', { name: 'Head of Product Marketing' })
     expect(within(card).getByRole('button', { name: 'Tell the account owner' })).toHaveAttribute('data-kind', 'primary')
     expect(within(card).getByText('Introduction')).toBeInTheDocument()
-    expect(screen.getByRole('main').querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
   })
 
   it('T-LEAD-6 shows the funnel as one line of five numbers, with ratios on a click. No chart', async () => {
@@ -158,7 +158,7 @@ describe('Jobs', () => {
     expect(stage).toHaveBeenCalledWith('job-northwind', 'chased', undefined)
     expect(within(card).getByRole('group', { name: 'Stage' }).querySelector('[aria-current="true"]')).toHaveTextContent('Chased')
     expect(primaryIn(card)).toHaveTextContent('Replied')
-    expect(screen.getByRole('main').querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
   })
 
   it('Bin asks for a reason in words, refuses without one, then moves the lead to dead', async () => {

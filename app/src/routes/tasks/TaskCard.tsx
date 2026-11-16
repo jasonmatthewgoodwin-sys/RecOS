@@ -5,7 +5,8 @@ import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
 import { TextLink } from '../../components/TextLink'
 import type { Search } from '../../lib/data'
-import { binReasons, dueWord, primaryLabel, shownTitle, snoozeChoices, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
+import { binReasons, dueWord, primaryLabel, shownTitle, snoozeChoices, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
+import { agentWord as inboxAgentWord } from '../../lib/inbox'
 
 export type CardMode = 'view' | 'edit' | 'bin' | 'snooze'
 
@@ -21,12 +22,13 @@ type Props = {
   onEdits: (edits: Partial<TaskEdits>) => void
   onDraft: (body: string, subject: string | null) => void
   onSend: () => void
-  onOutlook: () => void
+  onOutlook: (body: string, subject: string) => void
   onClose: () => void
   busy?: boolean
 }
 
 const agentWord: Record<string, string> = {
+  ...inboxAgentWord,
   jobs: 'the jobs agent',
   signals: 'the signals agent',
   content: 'the content agent',
@@ -58,6 +60,8 @@ export function TaskBody({
   notes?: ReactNode
 }) {
   const needsSearch = task.kind === 'call_confirm' || task.kind === 'call_writeup'
+  const hasDraft = task.draft !== null || starterDraft(task) !== null
+  const starter = task.draft === null
   return (
     <div className="flex flex-col gap-6">
       {task.why && <p className="text-body text-ink">{task.why}</p>}
@@ -87,11 +91,11 @@ export function TaskBody({
           choices={searches.map((s) => ({ value: s.id, label: `${s.client}, ${s.role}` }))}
         />
       )}
-      {task.draft !== null && (
+      {hasDraft && (
         <div className="flex flex-col gap-4">
-          {task.channel === 'email' && <Field label="Subject" value={subject} onChange={(v) => onDraft(draft, v)} />}
+          {(task.channel === 'email' || starter) && <Field label="Subject" value={subject} onChange={(v) => onDraft(draft, v)} />}
           <Draft
-            label={task.channel === 'email' ? 'Email' : task.channel === 'linkedin' ? 'Message' : 'Draft'}
+            label={starter ? 'Email, a start' : task.channel === 'email' ? 'Email' : task.channel === 'linkedin' ? 'Message' : 'Draft'}
             text={draft}
             original={task.draftOriginal ?? undefined}
             onChange={(t) => onDraft(t, subject)}
@@ -109,15 +113,17 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
   const [title, setTitle] = useState(task.edits.title ?? task.title)
   const [notes, setNotes] = useState(task.edits.notes ?? '')
   const [due, setDue] = useState(task.edits.dueOn ?? task.dueOn ?? '')
-  const [draft, setDraft] = useState(task.draft ?? '')
-  const [subject, setSubject] = useState(task.subject ?? '')
+  const start = task.draft === null ? starterDraft(task) : null
+  const [draft, setDraft] = useState(task.draft ?? start?.body ?? '')
+  const [subject, setSubject] = useState(task.subject ?? start?.subject ?? '')
   const [searchId, setSearchId] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
   const st = status(task, today)
   const needsSearch = task.kind === 'call_confirm' || task.kind === 'call_writeup'
-  const email = task.channel === 'email' && task.messageId !== null
+  const email = (task.channel === 'email' && task.messageId !== null) || start !== null
+  const canCopy = task.draft !== null || start !== null
   const primary = primaryLabel(task)
 
   function complete() {
@@ -250,8 +256,8 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
       primaryAction={{ label: primary, onClick: complete, busy }}
       links={
         <>
-          {email && <TextLink label="Open in Outlook" onClick={onOutlook} />}
-          {task.draft !== null && <TextLink label={copied ? 'Copied' : 'Copy'} onClick={copyDraft} />}
+          {email && <TextLink label="Open in Outlook" onClick={() => onOutlook(draft, subject)} />}
+          {canCopy && <TextLink label={copied ? 'Copied' : 'Copy'} onClick={copyDraft} />}
           {mode !== 'edit' && <TextLink label="Edit" onClick={() => onMode('edit')} />}
           {mode !== 'snooze' && <TextLink label="Snooze" onClick={() => onMode('snooze')} />}
           {mode !== 'bin' && <TextLink label="Bin" onClick={() => onMode('bin')} />}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { toneBg } from '../lib/tone'
 import type { Tone } from '../theme/tokens'
 import { theme } from '../theme/tokens'
@@ -63,7 +64,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  return (
+  return createPortal(
     <div
       data-card-backdrop
       className={`fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-paper/70 p-0 backdrop-blur-sm sm:px-8 sm:pb-8 sm:pt-[12vh] ${closing ? 'animate-fade-out' : 'animate-fade'}`}
@@ -92,7 +93,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
         onTouchEnd={() => {
           touchStart.current = null
         }}
-        className={`relative flex w-full flex-col rounded-sheet border border-rule bg-sheet p-5 shadow-window outline-none sm:w-[46rem] sm:p-7 ${
+        className={`relative flex w-full flex-col overflow-hidden rounded-sheet border border-rule bg-sheet p-5 shadow-window outline-none sm:w-[46rem] sm:p-7 ${
           closing ? 'animate-rise-out' : 'animate-rise'
         }`}
       >
@@ -140,5 +141,5 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
         {foot && <p className="mt-auto pt-5 font-mono text-label text-ink-3">{foot}</p>}
       </aside>
     </div>
-  )
+  , document.body)
 }

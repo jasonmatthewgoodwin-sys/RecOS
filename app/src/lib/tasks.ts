@@ -272,3 +272,46 @@ export function snoozeChoices(today: string): { label: string; until: string }[]
 
 /** Where the queue is refreshed from, for the quiet line at the foot. */
 export const refreshLine = 'Write-ups after each call. Mail sweep Monday and Thursday 7:30. Calendar each weekday 8:45. Rules nightly.'
+
+/**
+ * A start on the email when the agent left none: built from the task's own
+ * words so Jason polishes rather than starts from nothing. Null when there is
+ * nobody to write to.
+ */
+export function starterDraft(task: Task, myFirstName = 'Jason'): { subject: string; body: string } | null {
+  if (!task.personName) return null
+  const first = task.personName.split(' ')[0]
+  const reason = (task.why ?? task.title).replace(/\.$/, '')
+  const lower = reason.charAt(0).toLowerCase() + reason.slice(1)
+  switch (task.kind) {
+    case 'follow_up':
+      return {
+        subject: task.waitingOn ? `Following up: ${reason}` : reason,
+        body: task.waitingOn
+          ? `Hi ${first},\n\nJust bringing this back to the top of your inbox. ${reason}. Any news your end?\n\nThanks,\n${myFirstName}`
+          : `Hi ${first},\n\nGood to speak. As promised, ${lower}.\n\n[Add the detail here]\n\nSpeak soon,\n${myFirstName}`,
+      }
+    case 'cv_chase':
+      return {
+        subject: 'Your CV',
+        body: `Hi ${first},\n\nWhen you get a minute, could you send over your latest CV? It means I can get you in front of the right people quickly.\n\nThanks,\n${myFirstName}`,
+      }
+    case 'feedback_chase':
+      return {
+        subject: `Feedback on ${task.title.replace(/^Chase feedback on /, '')}`,
+        body: `Hi ${first},\n\nA quick one to ask where you landed on the profile I sent over. ${reason}. Even a line either way helps me keep them warm.\n\nThanks,\n${myFirstName}`,
+      }
+    case 'search_health':
+      return {
+        subject: `${task.title.split(': ')[1] ?? task.title}: update`,
+        body: `Hi ${first},\n\nA short update on the ${task.title.split(': ')[1] ?? 'search'}. [Where things stand, in two lines.] Would a quick call this week suit?\n\nBest,\n${myFirstName}`,
+      }
+    case 'prepare_call':
+      return null
+    default:
+      return {
+        subject: reason,
+        body: `Hi ${first},\n\n${reason}.\n\n[Add the detail here]\n\nBest,\n${myFirstName}`,
+      }
+  }
+}

@@ -939,6 +939,8 @@ export interface DataSource {
   sendTask(task: Task): Promise<string>
   /** Create the draft in Outlook and return its link. */
   openInOutlook(task: Task): Promise<string>
+  /** A task with no agent draft gets its own message row, so Open in Outlook and Copy work. Returns the message id. */
+  createTaskDraft(task: Task, subject: string, body: string): Promise<string>
   /** Settings, Connections (24.9): status only. Secrets never reach the browser. */
   connections(): Promise<Connection[]>
   /** The address that starts the Outlook sign-in, carrying a one-time state made for the owner. */
@@ -2272,6 +2274,29 @@ const live: DataSource = {
     const out = await live.sendAction(task.messageId, 'approve')
     if (out.state === 'cancelled' || out.state === 'held') throw new Error(out.note ?? `Held by the send engine`)
     return out.note ?? (out.state === 'queued' ? 'Queued to send' : out.state)
+  },
+
+  async createTaskDraft(task, subject, body) {
+    const { data, error } = await supabase!
+      .from('messages')
+      .insert({
+        type: 'email_reply',
+        channel: 'email',
+        person_id: task.source === 'inbox_items' || task.source === 'follow_ups' ? undefined : undefined,
+        to_name: task.personName ?? task.title,
+        subject,
+        body,
+        search_id: task.searchId,
+        created_by: 'owner',
+        level_at_creation: 'draft_only',
+        state: 'draft',
+      })
+      .select('id')
+      .single()
+    fail(error)
+    const id = (data as { id: string }).id
+    if (task.source === 'follow_ups') fail((await supabase!.from('follow_ups').update({ message_id: id }).eq('id', task.sourceId)).error)
+    return id
   },
 
   async openInOutlook(task) {
