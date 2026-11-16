@@ -2317,6 +2317,19 @@ test('0048 research prompt: the seed puts the research mode in front of the acti
 // ---------------------------------------------------------------- run
 
 let failed = 0
+test('0054 map top-up: a map job carries the newest map on the search as previous; other kinds carry none', async () => {
+  const [s] = await rows(`select id from searches where status in ('open', 'intake') order by opened_on limit 1`)
+  await db.query(`update search_jobs set status = 'failed', finished_at = now() where status in ('waiting', 'working')`)
+  const [{ v }] = await rows(`select coalesce(max(version), 0) + 1 as v from search_notes where search_id = $1 and tab = 'map'`, [s.id])
+  await db.query(`insert into search_notes (owner_id, search_id, tab, content, structured, version, created_by) values ($1, $2, 'map', 'Map', $3::jsonb, $4, 'a6_calls')`, [ownerId, s.id, JSON.stringify({ marker: 'previous-map' }), v])
+  const mapJob = (await rows(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'map') returning id`, [ownerId, s.id]))[0].id
+  const qJob = (await rows(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'questions') returning id`, [ownerId, s.id]))[0].id
+  const [{ ctx }] = await rows(`select agent_context('a6_calls', array['search_jobs']) as ctx`)
+  assert.equal(ctx.search_jobs.find((j) => j.job_id === mapJob).previous.marker, 'previous-map')
+  assert.equal(ctx.search_jobs.find((j) => j.job_id === qJob).previous, null)
+  await db.query(`update search_jobs set status = 'failed', finished_at = now() where id in ($1, $2)`, [mapJob, qJob])
+})
+
 for (const { name, fn } of tests) {
   try {
     await fn()
