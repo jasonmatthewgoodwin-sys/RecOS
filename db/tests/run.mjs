@@ -856,6 +856,80 @@ test('rule 1: people hold no CV, phone, pay or note-text columns anywhere', asyn
   )
 })
 
+// ---------------------------------------------------------------- 0049 Tasks
+
+test('0049 tasks_view: one queue from every source, owner only, with the context links and no contact details', async () => {
+  const kinds = await owner(async () => rows(`select kind, count(*)::int as n from tasks_view group by kind order by kind`))
+  const byKind = Object.fromEntries(kinds.map((k) => [k.kind, k.n]))
+  assert.equal(byKind.follow_up, await count(`follow_ups where status = 'open'`), 'every open follow-up')
+  assert.ok((byKind.job_lead ?? 0) >= 1, 'job leads from the inbox')
+  assert.equal(byKind.auto_sent, undefined, 'sent for you is not a task')
+  const links = await owner(async () => rows(`select links from tasks_view where jsonb_array_length(links) > 0 limit 1`))
+  if (links.length) assert.ok(links[0].links.every((l) => l.label && l.url))
+  await reviewer(async () => assert.equal((await rows(`select * from tasks_view`)).length, 0))
+  await anon(async () => assert.match(await refused(`select * from tasks_view`), /permission denied/))
+  const cols = await rows(`select column_name from information_schema.columns where table_name = 'tasks_view'`)
+  assert.ok(!cols.some((c) => /email|phone|cv_text|note_text|address/.test(c.column_name)))
+})
+
+test('0049 task_overrides: the owner edits a task without touching the agent\'s row; done and snooze hide it; nobody else writes', async () => {
+  const [t] = await owner(async () => rows(`select task_key, title from tasks_view where kind = 'job_lead' limit 1`))
+  await owner(async () => {
+    await db.query(`insert into task_overrides (task_key, title, notes, due_on, sort_order) values ($1, 'My words', 'Remember this', current_date + 2, 1)`, [t.task_key])
+    const [seen] = await rows(`select title, o_title, o_notes, o_due_on, o_sort_order from tasks_view where task_key = $1`, [t.task_key])
+    assert.equal(seen.title, t.title, 'the agent\'s title is untouched')
+    assert.equal(seen.o_title, 'My words')
+    assert.equal(seen.o_notes, 'Remember this')
+    assert.equal(seen.o_sort_order, 1)
+    await db.query(`update task_overrides set status = 'snoozed', snoozed_until = current_date + 1 where task_key = $1`, [t.task_key])
+    assert.equal((await rows(`select 1 from tasks_view where task_key = $1`, [t.task_key])).length, 0, 'snoozed until tomorrow')
+    await db.query(`update task_overrides set status = 'done' where task_key = $1`, [t.task_key])
+    assert.equal((await rows(`select 1 from tasks_view where task_key = $1`, [t.task_key])).length, 0, 'done hides it')
+    assert.match(await refused(`delete from task_overrides where task_key = $1`, [t.task_key]), /permission denied|no rows/)
+  })
+  await reviewer(async () => assert.match(await refused(`insert into task_overrides (task_key, title) values ('x', 'y')`), /permission denied|policy/))
+})
+
+test('0049 raise_suggestions: standing rules propose once, never twice, and a binned one stays binned', async () => {
+  await db.exec(`insert into searches (owner_id, client, client_key, role, next_step, next_step_on) values ('${ownerId}', 'Rule Sample Ltd', 'rule sample', 'Head of PMM', 'Send the shortlist', current_date - 3)`)
+  const first = (await rows(`select raise_suggestions() as n`))[0].n
+  assert.ok(first >= 1, `raised ${first}`)
+  const [s] = await rows(`select title, type, agent from inbox_items where title = 'Rule Sample Ltd: Send the shortlist'`)
+  assert.equal(s.type, 'suggestion')
+  assert.equal(s.agent, 'system')
+  const before = await count(`inbox_items where type = 'suggestion'`)
+  await rows(`select raise_suggestions()`)
+  assert.equal(await count(`inbox_items where type = 'suggestion'`), before, 'running twice adds nothing')
+  const seen = await owner(async () => rows(`select kind from tasks_view where kind = 'suggestion'`))
+  assert.equal(seen.length, before)
+  await db.exec(`update inbox_items set status = 'binned', bin_reason = 'Already done' where title = 'Rule Sample Ltd: Send the shortlist'`)
+  await rows(`select raise_suggestions()`)
+  assert.equal(await count(`inbox_items where title = 'Rule Sample Ltd: Send the shortlist' and status <> 'binned'`), 0)
+  await db.exec(`update searches set next_step = null, next_step_on = null where client = 'Rule Sample Ltd'`)
+})
+
+test('0049 after each call: the calendar asks for a write-up ten minutes after an external call ends, once per call, and run-start takes only what is due', async () => {
+  await db.exec(`delete from run_requests where agent = 'a6_calls'`)
+  await db.exec(`insert into calendar_today (owner_id, starts_at, ends_at, title, call_type, is_external, event_ref) values
+    ('${ownerId}', now() - interval '2 hours', now() - interval '90 minutes', 'Past screen', 'candidate_screen', true, 'cal-past'),
+    ('${ownerId}', now() + interval '3 hours', now() + interval '4 hours', 'Later screen', 'candidate_screen', true, 'cal-later'),
+    ('${ownerId}', now() + interval '5 hours', null, 'Team catch-up', 'internal', false, 'cal-internal')`)
+  const reqs = await rows(`select calendar_ref, note, run_after from run_requests where agent = 'a6_calls' order by run_after`)
+  assert.deepEqual(reqs.map((r) => r.calendar_ref), ['cal-past', 'cal-later'])
+  assert.match(reqs[0].note, /Write up: Past screen/)
+  await db.exec(`update calendar_today set ends_at = ends_at + interval '30 minutes' where event_ref = 'cal-later'`)
+  assert.equal(await count(`run_requests where agent = 'a6_calls'`), 2, 'moving a call moves the request, not doubles it')
+  const started = (await rows(`select agent_run_start('a6_calls', 'schedule') as r`))[0].r
+  assert.equal(started.requests.length, 1, 'only the call that has ended is due')
+  assert.match(started.requests[0], /Write up: Past screen/)
+  assert.deepEqual(started.calendar_refs, ['cal-past'])
+  const [run] = await rows(`select trigger from agent_runs where id = '${started.run_id}'`)
+  assert.equal(run.trigger, 'after_call')
+  assert.equal(await count(`run_requests where agent = 'a6_calls' and taken_at is null`), 1, 'the later call still waits')
+  await db.exec(`delete from calendar_today where event_ref in ('cal-past', 'cal-later', 'cal-internal')`)
+  await db.exec(`delete from run_requests where agent = 'a6_calls'`)
+})
+
 async function refusedPlain(sql) {
   await db.exec('begin')
   try {
