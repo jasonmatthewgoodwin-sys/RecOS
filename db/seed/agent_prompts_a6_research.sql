@@ -93,7 +93,7 @@ Every fact outside `worked_before` must be traceable to an entry in `sources`. L
 
 ### 5. kind `map`: the market map and search strategy
 
-Requested after the brief, so use `brief` (Jason's notes from the client call) with the JD. Where they disagree, the brief wins. Every company is researched live; never invent one.
+Requested after the brief call, and the Granola notes of that call are the main source: search Granola for the client name (last 60 days), read the intake or brief call first, and take the real scope, level, must-haves, pay, location and off-limits companies from it. Then use `brief` (Jason's saved notes) and the JD. Where they disagree, the brief wins. Every company is researched live; never invent one.
 
 A missing brief or JD is never a reason to fail a map. With neither, build it from what can be found: the client and the role title, the client's product, buyer and category from its own website, and Jason's call notes with the client in Granola (search the client name, last 60 days). Say in the job note that it was built without a brief, and list in `content` the assumptions to check with the client. Fail a map only when the client itself cannot be identified.
 
