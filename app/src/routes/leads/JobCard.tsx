@@ -208,12 +208,10 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onCam
       label: 'Pipeline',
       body: (
         <div className="flex flex-col gap-4">
-          {/* One band of pills, never stacked (Mia, 15 November 2026): the outreach ladder above says how far the chase has got; this says where the job is. */}
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Stage">
+          {/* One band of pills that wraps when the window is narrow, never a scroll bar (Jason, 15 November 2026): the outreach ladder above says how far the chase has got; this says where the job is. */}
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Stage">
             {stagePills.map((s) => (
-              <span key={s} className="shrink-0">
-                <PillButton label={stageWord[s]} current={s === lead.stage} disabled={!open} onClick={() => pick(s)} />
-              </span>
+              <PillButton key={s} label={stageWord[s]} current={s === lead.stage} disabled={!open} onClick={() => pick(s)} />
             ))}
           </div>
           {mode === 'bin' && (

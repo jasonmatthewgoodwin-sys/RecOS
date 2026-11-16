@@ -66,7 +66,7 @@ export function Card({ label, title, sections = [], primaryAction, links, foot, 
   return (
     <div
       data-card-backdrop
-      className={`absolute inset-0 z-20 flex items-start justify-center overflow-y-auto bg-paper/70 p-0 backdrop-blur-sm sm:px-8 sm:pb-8 sm:pt-6 ${closing ? 'animate-fade-out' : 'animate-fade'}`}
+      className={`fixed inset-0 z-20 flex items-start justify-center overflow-y-auto bg-paper/70 p-0 backdrop-blur-sm sm:px-8 sm:pb-8 sm:pt-[12vh] ${closing ? 'animate-fade-out' : 'animate-fade'}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close()
       }}
