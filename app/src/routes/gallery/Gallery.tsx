@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Board } from '../../components/Board'
 import { Card } from '../../components/Card'
 import { Deck } from '../../components/Deck'
 import { Draft } from '../../components/Draft'
@@ -15,6 +16,8 @@ import { RowList } from '../../components/RowList'
 import { Switch } from '../../components/Switch'
 import { TextLink } from '../../components/TextLink'
 import { TickMeter } from '../../components/TickMeter'
+import { freshSampleTasks } from '../../lib/sample'
+import { columns } from '../../lib/tasks'
 import { getTheme, setTheme } from '../../theme/tokens'
 
 // The component gallery (FE-3): every shared component in every state, for
@@ -288,6 +291,16 @@ export function Gallery() {
 
       <Block name="Deck: empty">
         <Deck items={[]} renderItem={() => null} primaryAction={{ label: () => 'Done', onClick: noop }} />
+      </Block>
+
+      <Block name="Board and TaskTile: Now, This week, Later and Waiting; late, today, on track and waiting marks. Drag or Shift and arrows to reorder">
+        <Board columns={columns(freshSampleTasks(), '2026-11-16')} today="2026-11-16" limit={2} onOpen={noop} onReorder={noop} />
+      </Block>
+
+      <Block name="Board: loading, empty, error">
+        <Board columns={[]} today="2026-11-16" state="loading" onOpen={noop} />
+        <Board columns={[]} today="2026-11-16" onOpen={noop} />
+        <Board columns={[]} today="2026-11-16" state="error" onOpen={noop} />
       </Block>
 
       <Block name="Card: open and closing">

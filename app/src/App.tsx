@@ -24,6 +24,7 @@ import { Drafts } from './routes/content/Drafts'
 import { Events } from './routes/content/Events'
 import { Home } from './routes/home/Home'
 import { Inbox } from './routes/inbox/Inbox'
+import { Tasks } from './routes/tasks/Tasks'
 import { Quarter } from './routes/numbers/Quarter'
 import { Review } from './routes/numbers/Review'
 import { ThisWeek } from './routes/numbers/ThisWeek'
@@ -115,7 +116,7 @@ export function SignedIn({ session }: { session: Session }) {
   // load and again after any action that could change them.
   const needsYou = useQuery('home.needsYou', data.needsYou)
   const followUps = useQuery('home.followUps', data.followUpsDue)
-  const dots: Record<string, boolean> = owner ? { inbox: (needsYou.data ?? 0) > 0, leads: (followUps.data?.due ?? 0) > 0 } : {}
+  const dots: Record<string, boolean> = owner ? { tasks: (needsYou.data ?? 0) > 0, leads: (followUps.data?.due ?? 0) > 0 } : {}
 
   // The owner's theme and typefaces (32.4), read once and applied to the root.
   const prefs = useQuery('settings.app', data.appSettings)
@@ -149,6 +150,7 @@ export function SignedIn({ session }: { session: Session }) {
         <Routes>
           {owner && <Route path="/home" element={<Home firstName={session.firstName} />} />}
           {owner && <Route path="/settings/profile" element={<PhoneGate title="Settings"><Profile /></PhoneGate>} />}
+          {owner && <Route path="/tasks" element={<Tasks />} />}
           {owner && <Route path="/inbox" element={<Inbox />} />}
           {owner && <Route path="/leads/follow-ups" element={<FollowUps />} />}
           {allowed.filter((s) => s.key !== 'home').map((s) => sectionRoutes(s, built))}

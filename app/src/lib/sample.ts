@@ -2,6 +2,7 @@
 // Local). Every name here is made up. Nothing in this file is real.
 
 import { composeLink } from './send'
+import type { Task, TaskEdits } from './tasks'
 import type {
   SendLogRow, Template,
   Account,
@@ -956,6 +957,307 @@ export function resetSampleSignals() {
 const CHASED_BEFORE = 11
 const CHASED_TARGET = 20
 
+function daysFromToday(n: number): string {
+  return ukClock(new Date(Date.now() + n * 86_400_000)).date
+}
+
+const noEdits = (): TaskEdits => ({ title: null, notes: null, dueOn: null, sortOrder: null })
+
+function task(over: Partial<Task> & Pick<Task, 'key' | 'source' | 'kind' | 'title'>): Task {
+  const [, sourceId] = over.key.split(':')
+  return {
+    sourceId,
+    why: null,
+    personName: null,
+    company: null,
+    dueOn: null,
+    rank: 0,
+    waitingOn: null,
+    draft: null,
+    draftOriginal: null,
+    subject: null,
+    channel: null,
+    messageId: null,
+    messageState: null,
+    links: [],
+    refTable: null,
+    refId: null,
+    agent: null,
+    searchId: null,
+    createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+    stale: false,
+    edits: noEdits(),
+    ...over,
+  }
+}
+
+// The sample week's tasks, mirroring db/seed/sample_week.sql and what
+// tasks_view makes of it. Held in memory so an action on one page shows on
+// the next. Every name is invented.
+export function freshSampleTasks(): Task[] {
+  const thanks =
+    'Hi Ada, thank you for your time yesterday. As discussed, could you send over your CV when you have a moment? I will come back to you on the GrailPay role by Thursday.'
+  return [
+    task({
+      key: 'follow_ups:f-ada',
+      source: 'follow_ups',
+      kind: 'follow_up',
+      title: 'Ada Example, Northwind Sample Co',
+      why: 'Spoke yesterday about the GrailPay role. CV promised.',
+      personName: 'Ada Example',
+      company: 'Northwind Sample Co',
+      dueOn: daysFromToday(0),
+      rank: 45,
+      draft: thanks,
+      draftOriginal: thanks,
+      subject: 'Good to speak yesterday',
+      channel: 'email',
+      messageId: 'm-ada',
+      messageState: 'draft',
+      links: [
+        { label: 'Call notes', url: 'https://example.com/notes/ada' },
+        { label: 'Open in CRM', url: 'https://example.com/crm/candidates/ada' },
+      ],
+      agent: 'call_to_crm',
+      searchId: 's-grail',
+    }),
+    task({
+      key: 'follow_ups:f-cara',
+      source: 'follow_ups',
+      kind: 'follow_up',
+      title: 'Cara Placeholder, Fabrikam Test Ltd',
+      why: 'Asked for the shortlist by Friday. Nothing sent yet.',
+      personName: 'Cara Placeholder',
+      company: 'Fabrikam Test Ltd',
+      dueOn: daysFromToday(-3),
+      rank: 42,
+      draft: 'Hi Cara, the shortlist is attached as promised. Three names, two of whom can start within a month. Shall we walk through them on Thursday?',
+      draftOriginal: 'Hi Cara, the shortlist is attached as promised. Three names, two of whom can start within a month. Shall we walk through them on Thursday?',
+      subject: 'Shortlist as promised',
+      channel: 'email',
+      messageId: 'm-cara',
+      messageState: 'draft',
+      links: [{ label: 'Open thread', url: 'https://example.com/mail/cara' }],
+      agent: 'follow_ups',
+    }),
+    task({
+      key: 'follow_ups:f-ben',
+      source: 'follow_ups',
+      kind: 'follow_up',
+      title: 'Ben Sample, Contoso Demo Inc',
+      why: 'You asked about their Q1 hiring plan six days ago. No reply.',
+      personName: 'Ben Sample',
+      company: 'Contoso Demo Inc',
+      dueOn: daysFromToday(0),
+      rank: 10,
+      waitingOn: 'Their reply',
+      draft: 'Hi Ben, just bringing this back to the top of your inbox. Any news on the Q1 plan?',
+      draftOriginal: 'Hi Ben, just bringing this back to the top of your inbox. Any news on the Q1 plan?',
+      subject: 'Q1 hiring plan',
+      channel: 'email',
+      messageId: 'm-ben',
+      messageState: 'draft',
+      links: [{ label: 'Open thread', url: 'https://example.com/mail/ben' }],
+      agent: 'follow_ups',
+    }),
+    task({
+      key: 'prepare_call:cal-1',
+      source: 'calendar_today',
+      kind: 'prepare_call',
+      title: 'Prepare: Candidate screen',
+      why: 'Candidate screen. Read the brief and their profile first',
+      personName: 'Dev Madeup',
+      company: 'GrailPay Sample',
+      dueOn: daysFromToday(0),
+      rank: 30,
+      links: [
+        { label: 'Open in CRM', url: 'https://example.com/crm/candidates/dev' },
+        { label: 'Search in CRM', url: 'https://example.com/crm/jobs/grailpay' },
+      ],
+      agent: 'follow_ups',
+      searchId: 's-grail',
+    }),
+    task({
+      key: 'search_health:s-tailspin',
+      source: 'searches',
+      kind: 'search_health',
+      title: 'Tailspin Example Inc: Senior PMM, Platform',
+      why: 'No client contact for 10 working days',
+      company: 'Tailspin Example Inc',
+      dueOn: daysFromToday(0),
+      rank: 50,
+      draft:
+        'Hi there, a quick update on the Senior PMM search. Two strong profiles are in final conversations and I expect to have names to you this week. Would Thursday suit for a short call?',
+      draftOriginal:
+        'Hi there, a quick update on the Senior PMM search. Two strong profiles are in final conversations and I expect to have names to you this week. Would Thursday suit for a short call?',
+      subject: 'Senior PMM search: update',
+      channel: 'email',
+      messageId: 'm-tailspin',
+      messageState: 'draft',
+      links: [{ label: 'Search in CRM', url: 'https://example.com/crm/jobs/tailspin' }],
+      agent: 'rules',
+      searchId: 's-tailspin',
+    }),
+    task({
+      key: 'inbox_items:i-north',
+      source: 'inbox_items',
+      kind: 'job_lead',
+      title: 'Senior PMM at Northwind Sample Co',
+      why: 'B2B SaaS, about 400 people, New York. Posted two days ago.',
+      company: 'Northwind Sample Co',
+      rank: 32,
+      draft: 'Hi, I saw the Senior PMM role. I work only on product marketing hires into the US and have two people worth a look. Would a short call this week suit?',
+      draftOriginal: 'Hi, I saw the Senior PMM role. I work only on product marketing hires into the US and have two people worth a look. Would a short call this week suit?',
+      channel: 'linkedin',
+      links: [{ label: 'LinkedIn post', url: 'https://example.com/post/northwind' }],
+      refTable: 'job_leads',
+      refId: 'job-northwind',
+      agent: 'jobs',
+    }),
+    task({
+      key: 'inbox_items:i-contoso',
+      source: 'inbox_items',
+      kind: 'job_lead',
+      title: 'Director of PMM at Contoso Demo Inc',
+      why: 'Fits the ICP. The hiring leader is on the league.',
+      company: 'Contoso Demo Inc',
+      rank: 31,
+      links: [{ label: 'LinkedIn advert', url: 'https://example.com/advert/contoso' }],
+      refTable: 'job_leads',
+      refId: 'job-contoso',
+      agent: 'jobs',
+    }),
+    task({
+      key: 'inbox_items:i-signal',
+      source: 'inbox_items',
+      kind: 'signal',
+      title: 'Ben Sample was promoted to VP',
+      why: 'Now VP Product Marketing at Contoso Demo Inc. Likely to build a team.',
+      personName: 'Ben Sample',
+      company: 'Contoso Demo Inc',
+      rank: 30,
+      draft: 'Congratulations on the VP move, Ben. If the team grows this quarter I would be glad to help.',
+      draftOriginal: 'Congratulations on the VP move, Ben. If the team grows this quarter I would be glad to help.',
+      channel: 'linkedin',
+      links: [{ label: 'Profile', url: 'https://example.com/in/ben-sample' }],
+      agent: 'signals',
+    }),
+    task({
+      key: 'call_confirm:c-finn',
+      source: 'calls',
+      kind: 'call_confirm',
+      title: 'Which search was Finn Fictional for?',
+      why: 'The call write-up could not tell which search this was. Nothing is written to the CRM until you say.',
+      personName: 'Finn Fictional',
+      dueOn: daysFromToday(0),
+      rank: 35,
+      links: [{ label: 'Call notes', url: 'https://example.com/notes/finn' }],
+      agent: 'call_to_crm',
+    }),
+    task({
+      key: 'cv_chase:c-ada',
+      source: 'calls',
+      kind: 'cv_chase',
+      title: 'CV still to come from Ada Example',
+      why: 'Asked yesterday. Needed before she can be put forward.',
+      personName: 'Ada Example',
+      company: 'Northwind Sample Co',
+      dueOn: daysFromToday(1),
+      rank: 20,
+      waitingOn: 'The candidate',
+      links: [
+        { label: 'Where the CV will be', url: 'https://example.com/crm/candidates/ada' },
+        { label: 'Call notes', url: 'https://example.com/notes/ada' },
+      ],
+      agent: 'call_to_crm',
+    }),
+    task({
+      key: 'content_approve:ct-1',
+      source: 'content_items',
+      kind: 'content_approve',
+      title: 'Approve: Why first PMM hires fail in month three',
+      why: 'Most first PMM hires are set up to fail by week twelve.',
+      dueOn: daysFromToday(4),
+      rank: 14,
+      draft:
+        'Most first PMM hires are set up to fail by week twelve.\n\nThe hiring manager wanted a launch engine. The board wanted positioning. The new PMM got both briefs and no owner. Three calls this week, same story.\n\nIf you are hiring your first PMM, agree who owns the brief before you open the role.',
+      draftOriginal:
+        'Most first PMM hires are set up to fail by week twelve.\n\nThe hiring manager wanted a launch engine. The board wanted positioning. The new PMM got both briefs and no owner. Three calls this week, same story.\n\nIf you are hiring your first PMM, agree who owns the brief before you open the role.',
+      channel: 'linkedin',
+      agent: 'content',
+    }),
+    task({
+      key: 'content_post:ct-2',
+      source: 'content_items',
+      kind: 'content_post',
+      title: 'Post: Remote PMM roles are back',
+      why: 'Remote PMM postings are up again.',
+      dueOn: daysFromToday(0),
+      rank: 30,
+      draft:
+        'Remote PMM postings are up again.\n\nA third of the PMM roles we saw this month are remote across the US. Last quarter it was a fifth. Candidates who held out are getting calls.\n\nWorth a look at your own location line.',
+      draftOriginal:
+        'Remote PMM postings are up again.\n\nA third of the PMM roles we saw this month are remote across the US. Last quarter it was a fifth. Candidates who held out are getting calls.\n\nWorth a look at your own location line.',
+      channel: 'linkedin',
+      agent: 'content',
+    }),
+    task({
+      key: 'inbox_items:i-suggest',
+      source: 'inbox_items',
+      kind: 'suggestion',
+      title: 'Decide on Dev Madeup for GrailPay Sample',
+      why: 'Spoken to over a week ago on the Director of Product Marketing search and still at spoken. Submit, or let them know.',
+      personName: 'Dev Madeup',
+      company: 'GrailPay Sample',
+      dueOn: daysFromToday(2),
+      rank: 20,
+      links: [{ label: 'Open in CRM', url: 'https://example.com/crm/candidates/dev' }],
+      agent: 'rules',
+      searchId: 's-grail',
+    }),
+    task({
+      key: 'inbox_items:i-referral',
+      source: 'inbox_items',
+      kind: 'referral',
+      title: 'Hal Hypothetical, named by Eve Invented',
+      why: 'Group PMM at Northwind Sample Co. Said to be looking.',
+      personName: 'Hal Hypothetical',
+      company: 'Northwind Sample Co',
+      dueOn: daysFromToday(9),
+      rank: 20,
+      refTable: 'referrals',
+      refId: 'ref-hal',
+      agent: 'call_to_crm',
+    }),
+    task({
+      key: 'inbox_items:i-idea',
+      source: 'inbox_items',
+      kind: 'event_idea',
+      title: 'Breakfast for heads of PMM, New York, January',
+      why: 'Four league members in New York asked about meeting peers this quarter.',
+      dueOn: daysFromToday(16),
+      rank: 5,
+      agent: 'events',
+    }),
+  ]
+}
+
+let sampleTasks = freshSampleTasks()
+const sampleGone = new Map<string, Task>()
+
+/** Tests only. */
+export function resetSampleTasks() {
+  sampleTasks = freshSampleTasks()
+  sampleGone.clear()
+}
+
+function takeOut(key: string) {
+  const t = sampleTasks.find((x) => x.key === key)
+  if (!t) throw new Error('No such task')
+  sampleGone.set(key, t)
+  sampleTasks = sampleTasks.filter((x) => x.key !== key)
+}
+
 export const sampleSource: DataSource = {
   async needsYou() {
     return sampleInbox.filter((i) => (i.status === 'new' || i.status === 'stale') && i.type !== 'auto_sent').length
@@ -1367,6 +1669,53 @@ export const sampleSource: DataSource = {
   },
   async requestRun(code) {
     if (!sampleAgents.some((x) => x.code === code)) throw new Error('No such agent')
+  },
+
+  // ---- Tasks (0049)
+  async tasks() {
+    return sampleTasks.map((t) => ({ ...t, links: [...t.links], edits: { ...t.edits } }))
+  },
+  async completeTask(task, detail) {
+    if ((task.kind === 'call_confirm' || task.kind === 'call_writeup') && !detail?.searchId) throw new Error('Choose the search first')
+    takeOut(task.key)
+  },
+  async binTask(task) {
+    takeOut(task.key)
+  },
+  async snoozeTask(task) {
+    takeOut(task.key)
+  },
+  async reopenTask(task) {
+    const back = sampleGone.get(task.key)
+    if (back) {
+      sampleTasks = [...sampleTasks, back]
+      sampleGone.delete(task.key)
+    }
+  },
+  async saveTaskEdits(task, edits) {
+    const t = sampleTasks.find((x) => x.key === task.key)
+    if (t) t.edits = { ...t.edits, ...edits }
+  },
+  async reorderTasks(keys) {
+    keys.forEach((key, i) => {
+      const t = sampleTasks.find((x) => x.key === key)
+      if (t) t.edits = { ...t.edits, sortOrder: i + 1 }
+    })
+  },
+  async saveDraft(task, body, subject) {
+    const t = sampleTasks.find((x) => x.key === task.key)
+    if (t) {
+      t.draft = body
+      t.subject = subject
+    }
+  },
+  async sendTask(task) {
+    if (!task.messageId) throw new Error('Nothing to send')
+    return 'Queued to send'
+  },
+  async openInOutlook(task) {
+    if (!task.messageId) throw new Error('Nothing to open')
+    return `https://example.com/outlook/drafts/${task.messageId}`
   },
   async connections() {
     return sampleConnections.map((c) => ({ ...c }))

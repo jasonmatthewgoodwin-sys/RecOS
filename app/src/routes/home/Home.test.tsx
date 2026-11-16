@@ -246,12 +246,12 @@ describe('Home', () => {
     expect(grid.className).toContain('md:grid-cols-4')
   })
 
-  it('HOME-5 puts a dot on Inbox and Leads only, with no count', async () => {
+  it('HOME-5 puts a dot on Tasks and Leads only, with no count', async () => {
     mock({ needsYou: 7, due: 3, late: 3 })
     open()
     await waitFor(() => expect(screen.getAllByTestId('tab-dot')).toHaveLength(2))
     const tabs = screen.getAllByRole('navigation', { name: 'Sections' })[0]
-    expect(within(tabs).getByRole('link', { name: /Inbox/ })).toContainElement(screen.getAllByTestId('tab-dot')[0])
+    expect(within(tabs).getByRole('link', { name: /Tasks/ })).toContainElement(screen.getAllByTestId('tab-dot')[0])
     expect(within(tabs).getByRole('link', { name: /Business development/ })).toContainElement(screen.getAllByTestId('tab-dot')[1])
     expect(tabs.textContent).not.toMatch(/\d/)
   })
@@ -260,7 +260,7 @@ describe('Home', () => {
     mock()
     open()
     await userEvent.keyboard('2')
-    expect(await screen.findByRole('heading', { name: 'Inbox' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
     await userEvent.keyboard('3')
     expect(await screen.findByRole('heading', { name: 'Business development' })).toBeInTheDocument()
     await userEvent.keyboard(']')

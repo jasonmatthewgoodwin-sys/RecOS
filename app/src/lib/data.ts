@@ -7,6 +7,7 @@ import { supabase } from './supabase'
 import { splitCopy, topicFrom, topicKey } from './calendar'
 import type { CaptureKind, SearchHit } from './capture'
 import { mondayOf, shiftDate, ukClock, weekdayOf } from './time'
+import { band, type Task, type TaskEdits, type TaskKind, type TaskLink, type TaskSource } from './tasks'
 import type { Tone } from '../theme/tokens'
 
 export type CalendarCall = {
@@ -918,6 +919,26 @@ export interface DataSource {
   revokeAgentKey(code: string): Promise<void>
   /** E9: ask for a manual run. The agent picks it up at the top of its schedule. */
   requestRun(code: string): Promise<void>
+
+  // ---- Tasks (0049): everything the owner has to do, from every source.
+  /** Raises the standing suggestions, then reads the queue. */
+  tasks(): Promise<Task[]>
+  /** The primary action for a task: done, with the record behind it moved where 22.3 says. */
+  completeTask(task: Task, detail?: { searchId?: string }): Promise<void>
+  binTask(task: Task, reason: string): Promise<void>
+  snoozeTask(task: Task, until: string): Promise<void>
+  /** Put a task back after an undo. */
+  reopenTask(task: Task): Promise<void>
+  /** The owner's own words and dates, kept beside the agent's. */
+  saveTaskEdits(task: Task, edits: Partial<TaskEdits>): Promise<void>
+  /** The owner's order within a column. Keys in the order they should show. */
+  reorderTasks(keys: string[]): Promise<void>
+  /** The draft the owner polished. Only while the message is still a draft (MSG-4). */
+  saveDraft(task: Task, body: string, subject: string | null): Promise<void>
+  /** Send through the engine (E5). Returns the engine's one-line answer. */
+  sendTask(task: Task): Promise<string>
+  /** Create the draft in Outlook and return its link. */
+  openInOutlook(task: Task): Promise<string>
   /** Settings, Connections (24.9): status only. Secrets never reach the browser. */
   connections(): Promise<Connection[]>
   /** The address that starts the Outlook sign-in, carrying a one-time state made for the owner. */
@@ -1055,13 +1076,10 @@ async function invokeFunction<T = unknown>(name: string, body: Record<string, un
 const live: DataSource = {
   // Section 14.1: new and stale items, not counting sent-for-you.
   async needsYou() {
-    const { count, error } = await supabase!
-      .from('inbox_items')
-      .select('id', { count: 'exact', head: true })
-      .in('status', ['new', 'stale'])
-      .neq('type', 'auto_sent')
-    fail(error)
-    return count ?? 0
+    // Needs you is the Now column of the Tasks board: late, due today or urgent (16 November).
+    const today = ukClock(new Date()).date
+    const all = await live.tasks()
+    return all.filter((t) => !t.waitingOn && band(t, today) === 'now').length
   },
 
   async followUpsDue() {
@@ -2051,6 +2069,216 @@ const live: DataSource = {
   async requestRun(code) {
     const { error } = await supabase!.rpc('request_run', { p_agent: code })
     fail(error)
+  },
+
+  // ---- Tasks (0049)
+
+  async tasks() {
+    // The standing rules run when the page opens as well as nightly. They
+    // never raise the same suggestion twice, so this is cheap.
+    await supabase!.rpc('raise_suggestions')
+    const { data, error } = await supabase!.from('tasks_view').select('*')
+    fail(error)
+    type Row = {
+      task_key: string
+      source: TaskSource
+      source_id: string
+      kind: TaskKind
+      title: string
+      why: string | null
+      person_name: string | null
+      company: string | null
+      due_on: string | null
+      rank: number | string
+      waiting_on: string | null
+      draft: string | null
+      draft_original: string | null
+      subject: string | null
+      channel: 'email' | 'linkedin' | null
+      message_id: string | null
+      message_state: string | null
+      links: TaskLink[] | null
+      ref_table: string | null
+      ref_id: string | null
+      agent: string | null
+      search_id: string | null
+      created_at: string
+      stale: boolean
+      o_title: string | null
+      o_notes: string | null
+      o_due_on: string | null
+      o_sort_order: number | null
+    }
+    return ((data ?? []) as Row[]).map((r) => ({
+      key: r.task_key,
+      source: r.source,
+      sourceId: r.source_id,
+      kind: r.kind,
+      title: r.title,
+      why: r.why,
+      personName: r.person_name,
+      company: r.company,
+      dueOn: r.due_on,
+      rank: Number(r.rank),
+      waitingOn: r.waiting_on,
+      draft: r.draft,
+      draftOriginal: r.draft_original,
+      subject: r.subject,
+      channel: r.channel,
+      messageId: r.message_id,
+      messageState: r.message_state,
+      links: Array.isArray(r.links) ? r.links.filter((l) => l && l.url) : [],
+      refTable: r.ref_table,
+      refId: r.ref_id,
+      agent: r.agent,
+      searchId: r.search_id,
+      createdAt: r.created_at,
+      stale: r.stale,
+      edits: { title: r.o_title, notes: r.o_notes, dueOn: r.o_due_on, sortOrder: r.o_sort_order },
+    }))
+  },
+
+  async completeTask(task, detail) {
+    const today = ukClock(new Date()).date
+    switch (task.source) {
+      case 'inbox_items': {
+        fail((await supabase!.from('inbox_items').update({ status: 'done', actioned_at: new Date().toISOString() }).eq('id', task.sourceId)).error)
+        // 22.3: the record behind the item moves with it.
+        if (task.refTable === 'job_leads' && task.refId && task.kind === 'job_lead') {
+          fail((await supabase!.from('job_leads').update({ stage: 'chased' }).eq('id', task.refId).eq('stage', 'new')).error)
+        }
+        if (task.refTable === 'referrals' && task.refId && task.kind === 'referral') {
+          fail((await supabase!.from('referrals').update({ stage: 'contacted' }).eq('id', task.refId)).error)
+        }
+        if (task.refTable === 'content_items' && task.refId && task.kind === 'content_draft') {
+          fail((await supabase!.from('content_items').update({ status: 'approved' }).eq('id', task.refId)).error)
+        }
+        if (task.refTable === 'calls' && task.refId && task.kind === 'call_writeup' && detail?.searchId) {
+          fail((await supabase!.from('calls').update({ search_id: detail.searchId, match_confidence: 'confirmed' }).eq('id', task.refId)).error)
+        }
+        return
+      }
+      case 'follow_ups':
+        fail((await supabase!.from('follow_ups').update({ status: 'done' }).eq('id', task.sourceId)).error)
+        return
+      case 'calls':
+        if (task.kind === 'cv_chase') {
+          fail((await supabase!.from('calls').update({ w_cv: true }).eq('id', task.sourceId)).error)
+          return
+        }
+        if (task.kind === 'call_confirm' && detail?.searchId) {
+          fail((await supabase!.from('calls').update({ search_id: detail.searchId, match_confidence: 'confirmed' }).eq('id', task.sourceId)).error)
+          return
+        }
+        break
+      case 'content_items':
+        if (task.kind === 'content_post') {
+          fail((await supabase!.from('content_items').update({ status: 'posted', posted_on: today }).eq('id', task.sourceId)).error)
+          return
+        }
+        if (task.kind === 'content_approve') {
+          fail((await supabase!.from('content_items').update({ status: 'approved' }).eq('id', task.sourceId)).error)
+          return
+        }
+        break
+      case 'search_candidates':
+        if (task.kind === 'feedback_chase') {
+          const { data } = await supabase!.from('search_candidates').select('feedback_nudges').eq('id', task.sourceId).single()
+          const n = Number((data as { feedback_nudges: number } | null)?.feedback_nudges ?? 0)
+          fail((await supabase!.from('search_candidates').update({ feedback_nudges: n + 1 }).eq('id', task.sourceId)).error)
+        }
+        break
+      default:
+        break
+    }
+    // Derived tasks with no row of their own are closed through the override.
+    fail((await supabase!.from('task_overrides').upsert({ task_key: task.key, status: 'done' }, { onConflict: 'task_key' })).error)
+  },
+
+  async binTask(task, reason) {
+    if (task.source === 'inbox_items') {
+      fail((await supabase!.from('inbox_items').update({ status: 'binned', bin_reason: reason }).eq('id', task.sourceId)).error)
+      if (task.refTable === 'job_leads' && task.refId && task.kind === 'job_lead') {
+        const code = reason === 'Filled' ? 'filled' : reason === 'Uses another agency' ? 'other_agency' : reason === 'Not ICP' || reason === 'Not a fit' ? 'not_icp' : 'other'
+        fail((await supabase!.from('job_leads').update({ stage: 'dead', dead_reason: code }).eq('id', task.refId)).error)
+      }
+      return
+    }
+    if (task.source === 'follow_ups') {
+      // FUP-1: a follow-up closes with a choice. Already handled means handled offline, never raised again.
+      const status = reason === 'Already handled' ? 'handled_offline' : 'closed'
+      fail((await supabase!.from('follow_ups').update({ status }).eq('id', task.sourceId)).error)
+      return
+    }
+    fail((await supabase!.from('task_overrides').upsert({ task_key: task.key, status: 'binned', notes: reason }, { onConflict: 'task_key' })).error)
+  },
+
+  async snoozeTask(task, until) {
+    if (task.source === 'inbox_items') {
+      fail((await supabase!.from('inbox_items').update({ status: 'snoozed', snoozed_until: until }).eq('id', task.sourceId)).error)
+      return
+    }
+    if (task.source === 'follow_ups') {
+      fail((await supabase!.from('follow_ups').update({ status: 'snoozed', snoozed_until: until }).eq('id', task.sourceId)).error)
+      return
+    }
+    fail((await supabase!.from('task_overrides').upsert({ task_key: task.key, status: 'snoozed', snoozed_until: until }, { onConflict: 'task_key' })).error)
+  },
+
+  async reopenTask(task) {
+    if (task.source === 'inbox_items') {
+      fail((await supabase!.from('inbox_items').update({ status: 'new', bin_reason: null, snoozed_until: null, actioned_at: null }).eq('id', task.sourceId)).error)
+      if (task.refTable === 'job_leads' && task.refId && task.kind === 'job_lead') {
+        fail((await supabase!.from('job_leads').update({ stage: 'new' }).eq('id', task.refId)).error)
+      }
+      return
+    }
+    if (task.source === 'follow_ups') {
+      fail((await supabase!.from('follow_ups').update({ status: 'open', snoozed_until: null }).eq('id', task.sourceId)).error)
+      return
+    }
+    if (task.kind === 'cv_chase') fail((await supabase!.from('calls').update({ w_cv: false }).eq('id', task.sourceId)).error)
+    if (task.kind === 'content_post') fail((await supabase!.from('content_items').update({ status: 'planned', posted_on: null }).eq('id', task.sourceId)).error)
+    if (task.kind === 'content_approve') fail((await supabase!.from('content_items').update({ status: 'draft' }).eq('id', task.sourceId)).error)
+    fail((await supabase!.from('task_overrides').upsert({ task_key: task.key, status: 'open', snoozed_until: null }, { onConflict: 'task_key' })).error)
+  },
+
+  async saveTaskEdits(task, edits) {
+    const row: Record<string, unknown> = { task_key: task.key }
+    if ('title' in edits) row.title = edits.title
+    if ('notes' in edits) row.notes = edits.notes
+    if ('dueOn' in edits) row.due_on = edits.dueOn
+    if ('sortOrder' in edits) row.sort_order = edits.sortOrder
+    fail((await supabase!.from('task_overrides').upsert(row, { onConflict: 'task_key' })).error)
+  },
+
+  async reorderTasks(keys) {
+    const rows = keys.map((task_key, i) => ({ task_key, sort_order: i + 1 }))
+    fail((await supabase!.from('task_overrides').upsert(rows, { onConflict: 'task_key' })).error)
+  },
+
+  async saveDraft(task, body, subject) {
+    if (task.messageId) {
+      fail((await supabase!.from('messages').update({ body, subject }).eq('id', task.messageId).eq('state', 'draft')).error)
+      return
+    }
+    if (task.source === 'inbox_items') {
+      fail((await supabase!.from('inbox_items').update({ draft: body }).eq('id', task.sourceId)).error)
+    }
+  },
+
+  async sendTask(task) {
+    if (!task.messageId) throw new Error('Nothing to send')
+    const out = await live.sendAction(task.messageId, 'approve')
+    if (out.state === 'cancelled' || out.state === 'held') throw new Error(out.note ?? `Held by the send engine`)
+    return out.note ?? (out.state === 'queued' ? 'Queued to send' : out.state)
+  },
+
+  async openInOutlook(task) {
+    if (!task.messageId) throw new Error('Nothing to open')
+    const out = await live.sendAction(task.messageId, 'open_draft')
+    if (!out.outlook_draft_url) throw new Error(out.note ?? 'Outlook is not connected yet. Copy the draft for now')
+    return out.outlook_draft_url
   },
 
   async connections() {

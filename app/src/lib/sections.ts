@@ -17,7 +17,7 @@ export type Section = {
 
 export const sections: Section[] = [
   { key: 'home', label: 'Home', path: '/home', arrives: 'week 1', pages: [] },
-  { key: 'inbox', label: 'Inbox', path: '/inbox', arrives: 'week 2', pages: [] },
+  { key: 'tasks', label: 'Tasks', path: '/tasks', arrives: 'now', pages: [] },
   {
     key: 'leads',
     // Renamed from Leads on 14 November 2026 at Mia's request: the one two-word tab (docs/decisions.md).

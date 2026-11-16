@@ -69,7 +69,7 @@ export function nextLine(input: NextLineInput): NextLine {
   // 5. Inbox has new items.
   if (input.needsYou && input.needsYou > 0) {
     const n = input.needsYou
-    return { text: n === 1 ? '1 thing needs you' : `${n} things need you`, to: '/inbox' }
+    return { text: n === 1 ? '1 thing needs you' : `${n} things need you`, to: '/tasks?view=deck' }
   }
 
   // 6. League members are late.

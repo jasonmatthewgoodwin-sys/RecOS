@@ -99,7 +99,7 @@ export function Home({ firstName }: { firstName: string }) {
       </h1>
 
       <div className="mt-10 grid grid-cols-2 gap-x-8 gap-y-8 sm:mt-14 md:grid-cols-4">
-        <HeroStat label="Needs you" value={n1?.text} plus={n1?.plus} tone={toneForCount(needsYou.data, true)} icon="inbox" onClick={() => navigate('/inbox')} />
+        <HeroStat label="Needs you" value={n1?.text} plus={n1?.plus} tone={toneForCount(needsYou.data, true)} icon="inbox" onClick={() => navigate('/tasks')} />
         <HeroStat label="Live searches" value={n2?.text} plus={n2?.plus} tone={toneForCount(live?.length, anyCold)} icon="search" onClick={() => navigate('/searches')} />
         <HeroStat label="Calls today" value={n3?.text} plus={n3?.plus} tone={toneForCount(isWeekend(now) ? 0 : calls.data?.length)} icon="phone" onClick={() => openCard('calls')} />
         <HeroStat

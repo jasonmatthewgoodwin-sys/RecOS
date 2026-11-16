@@ -72,11 +72,11 @@ describe('next line (section 14.9)', () => {
       to: '/leads/follow-ups?focus=monday',
     })
     const mondayNoon = new Date('2026-11-09T12:00:00Z')
-    expect(nextLine({ now: mondayNoon, followUps: { due: 6, late: 0, lateFromDay: null }, needsYou: 5 }).to).toBe('/inbox')
+    expect(nextLine({ now: mondayNoon, followUps: { due: 6, late: 0, lateFromDay: null }, needsYou: 5 }).to).toBe('/tasks?view=deck')
   })
 
   it('5: new inbox items', () => {
-    expect(nextLine({ now: wed, needsYou: 7 })).toEqual({ text: '7 things need you', to: '/inbox' })
+    expect(nextLine({ now: wed, needsYou: 7 })).toEqual({ text: '7 things need you', to: '/tasks?view=deck' })
     expect(nextLine({ now: wed, needsYou: 1 }).text).toBe('1 thing needs you')
   })
 
