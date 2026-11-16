@@ -554,8 +554,79 @@ export type SearchCandidate = {
 }
 export type CandidatePatch = Partial<Pick<SearchCandidate, 'stage' | 'consentToSubmit' | 'feedbackReceivedOn' | 'feedbackNudges' | 'nextInterviewAt' | 'prepSent' | 'lastCandidateContactOn' | 'outcomeReason' | 'offerStatus' | 'decisionDueOn' | 'startOn' | 'referencesTaken' | 'referencesNeeded' | 'competingProcess' | 'risks' | 'wouldSwing'>>
 
-export type SearchNoteTab = 'brief' | 'map' | 'calibration' | 'client_updates' | 'interviews' | 'offer' | 'close_out'
+export type SearchNoteTab = 'brief' | 'map' | 'calibration' | 'client_updates' | 'interviews' | 'offer' | 'close_out' | 'questions' | 'lowdown'
 export type SearchNote = { id: string; searchId: string; tab: SearchNoteTab; title: string | null; content: string; structured: Record<string, unknown> | null; version: number; updatedAt: string }
+
+// ======================================================================
+// The new search flow, Jason's half (docs/new-search-split.md, contract 4;
+// migration 0048). Mia's screens call these and do not edit this block.
+// Results are read with data.searchNotes and saved with data.saveSearchNote:
+// the newest version of tab `questions`, `lowdown` or `map` is the current
+// one. With no Supabase project the stand-in in searchResearch.ts answers: a
+// requested job turns ready a few seconds later with an invented result.
+// ======================================================================
+import { createSampleSearchResearch, type SearchIntake, type SearchJob, type SearchJobKind, type SearchResearch, type StartSearchInput } from './searchResearch'
+import { isRoleType } from './questionBank'
+
+export { questionBank, questionSet, questionsAsText, isRoleType, ROLE_TYPES } from './questionBank'
+export type { RoleType, QuestionSource, BriefQuestion, QuestionGroup, QuestionSet } from './questionBank'
+export { latestJobs } from './searchResearch'
+export type { SearchJob, SearchJobKind, SearchJobStatus, StartSearchInput, SearchIntake } from './searchResearch'
+
+const liveResearch: SearchResearch = {
+  async startSearch(input) {
+    const { data: id, error } = await supabase!.rpc('start_search', {
+      p_client: input.client,
+      p_role: input.role,
+      p_role_type: input.roleType ?? null,
+      p_jd_text: input.jdText ?? null,
+      p_brief_due_on: input.briefDueOn ?? null,
+    })
+    fail(error)
+    return id as string
+  },
+  async requestSearchJob(searchId, kind) {
+    const { error } = await supabase!.rpc('request_search_job', { p_search: searchId, p_kind: kind })
+    fail(error)
+  },
+  async searchJobs(searchId) {
+    const { data: found, error } = await supabase!.from('search_jobs').select('kind, status, note, requested_at, finished_at').eq('search_id', searchId).order('requested_at', { ascending: false })
+    fail(error)
+    type Row = { kind: SearchJob['kind']; status: SearchJob['status']; note: string | null; requested_at: string; finished_at: string | null }
+    return ((found ?? []) as Row[]).map((j) => ({ kind: j.kind, status: j.status, note: j.note, requestedAt: j.requested_at, finishedAt: j.finished_at }))
+  },
+  async searchIntake(searchId) {
+    const { data: row, error } = await supabase!.from('searches').select('role_type, jd_text, brief_due_on').eq('id', searchId).maybeSingle()
+    fail(error)
+    const r = row as { role_type: string | null; jd_text: string | null; brief_due_on: string | null } | null
+    return { roleType: isRoleType(r?.role_type) ? r.role_type : null, jdText: r?.jd_text ?? null, briefDueOn: r?.brief_due_on ?? null }
+  },
+}
+
+const research: SearchResearch = supabase
+  ? liveResearch
+  : createSampleSearchResearch({
+      addSearch: async ({ client, role }) => (await data.addSearch({ client, role, function: 'pmm', crmUrl: null, priority: 'active' })).id,
+      saveNote: (searchId, tab, content, structured) => data.saveSearchNote(searchId, tab, content, structured),
+    })
+
+/** Start a search from the intake step, at status `intake`. Gives back the new search's id. */
+export function startSearch(input: StartSearchInput): Promise<string> {
+  return research.startSearch(input)
+}
+/** Ask for tailored questions, the client lowdown or the market map. A second ask while one is open does nothing. */
+export function requestSearchJob(searchId: string, kind: SearchJobKind): Promise<void> {
+  return research.requestSearchJob(searchId, kind)
+}
+/** Every job asked for on a search, newest first. `latestJobs` picks one per kind. */
+export function searchJobs(searchId: string): Promise<SearchJob[]> {
+  return research.searchJobs(searchId)
+}
+/** The role type, job description and brief date the intake step saved (not in the contract; here so a screen can reopen a search). */
+export function searchIntake(searchId: string): Promise<SearchIntake> {
+  return research.searchIntake(searchId)
+}
+// ====================================================== end of the block
 
 /** A recorded conversation (11.4): the five write-up ticks and the links. No note text, ever. */
 export type Call = {
