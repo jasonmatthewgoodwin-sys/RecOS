@@ -255,3 +255,34 @@ Mia asked for these while directing the build; each is a row in `docs/decisions.
 Open a terminal in the repository folder, start Claude Code and paste:
 
 > Read CLAUDE.md, HANDOVER.md, docs/build-log.md and docs/decisions.md. Do not write any code yet. Tell me in plain English what is built, what is blocked, and what you need from me. Then we will get Jason signed in, load the sample week, and start the week 2 tickets in the order HANDOVER.md gives.
+
+
+## Tasks tab (16 November, cloud session)
+
+Mia asked for the Inbox to become a master to-do list called Tasks, filled
+automatically from every source, with colour for status, filters, reorder,
+email from the task and context links. It is built on branch
+`claude/tasks-main`, on top of main at `9163de4`, as three commits. The
+cloud session could not push (GitHub refuses `mia61666`), so the commits are
+also in `tasks-main.patch` beside this file when handed over: apply with
+`git am --3way tasks-main.patch` on a branch from main, as the P1-23 patch was.
+
+Applied to the test project already, through the Supabase management API on
+16 November: migration 0049, `db/policies/task_overrides.sql` and
+`db/views/tasks_view.sql`. The view returns 205 tasks on the live data and
+write-up requests exist for this week's calls. Nothing else on the project
+was changed. So once the patch lands and Vercel deploys, `/tasks` works on
+the live data at once.
+
+Decisions for Jason, Pending in `docs/decisions.md` dated 16 November:
+Inbox becomes Tasks; the board opens first; the tone marks for status; the
+write-up agent after each call.
+
+Still to do for after-each-call write-ups: change A6's scheduled task in
+Claude to every 30 minutes, Monday to Friday 9:00 to 19:30, with the prompt
+told to finish at once when run-start returns no `requests`.
+
+Note for anyone running `cd app && npm test` on a new computer: the page
+tests spy on the live data object, so the file `app/.env.test` must hold
+the two public lines from "Get it running" above, or 89 tests fail with a
+stack overflow. The file is ignored by git.
