@@ -650,12 +650,45 @@ export type Call = {
   cvRequested: boolean
   isNewAStar: boolean
   skipReason: string | null
+  /** The agent's own few lines on the call (0051). Never the note text. */
+  summary: string | null
 }
 export type CallPatch = Partial<Pick<Call, 'searchId' | 'matchConfidence' | 'wRecord' | 'wCv' | 'wNote' | 'wOnSearch' | 'wFollowUp' | 'cvRequested' | 'skipReason'>>
 
 export type AStarSuggestion = { id: string; name: string; title: string | null; company: string | null; city: string | null; linkedinUrl: string | null; why: string | null; week: string; verdict: 'pending' | 'good' | 'not_good' }
 
 /** A warm spec (31.1): someone worth putting in front of companies, with the open leads they match. */
+/** Someone Jason has spoken to, from the calls the Granola agent writes (0051). */
+export type SpokenPerson = {
+  personId: string
+  name: string
+  title: string | null
+  company: string | null
+  city: string | null
+  crmUrl: string | null
+  profileUrl: string | null
+  /** Good candidate: the warm spec flag on the person. */
+  good: boolean
+  /** The agent flagged them as a new A-star on a call. */
+  suggested: boolean
+  lastCallOn: string
+  calls: { id: string; heldAt: string; callType: string; granolaUrl: string | null; summary: string | null; searchId: string | null }[]
+}
+
+export type SpecMatch = { kind: 'job_lead' | 'search' | 'account'; id: string; name: string; role: string | null; why: string; fit: number | null }
+export type SpecRequest = {
+  id: string
+  personId: string
+  linkedinUrl: string | null
+  cvWhere: 'spott' | 'email' | 'pasted' | 'none'
+  status: 'waiting' | 'working' | 'ready' | 'failed'
+  note: string | null
+  result: { skills: string[]; summary: string; matches: SpecMatch[] } | null
+  requestedAt: string
+  finishedAt: string | null
+}
+export type SpecAsk = { linkedinUrl?: string | null; cvWhere: SpecRequest['cvWhere']; cvText?: string | null }
+
 export type WarmSpec = { personId: string; name: string; title: string | null; company: string | null; crmUrl: string | null; profileUrl: string | null; matches: { leadId: string; company: string; role: string }[] }
 
 export type CampaignStep = { channel: string; note: string; doneOn?: string | null }
@@ -1022,6 +1055,12 @@ export interface DataSource {
   aStarVerdict(id: string, verdict: 'good' | 'not_good'): Promise<void>
   warmSpecs(): Promise<WarmSpec[]>
   setWarmSpec(personId: string, on: boolean): Promise<void>
+  /** The library behind Spec: everyone with a call in the last 90 days, newest call first. */
+  spokenTo(): Promise<SpokenPerson[]>
+  /** The newest spec request per person. */
+  specRequests(): Promise<SpecRequest[]>
+  /** Ask the research agent for matches. Marks them a good candidate. */
+  requestSpec(personId: string, ask: SpecAsk): Promise<void>
   campaigns(): Promise<Campaign[]>
   addCampaign(input: { name: string; tool: string; jobLeadId: string | null; candidatePersonId: string | null; steps?: CampaignStep[] }): Promise<void>
   updateCampaign(id: string, patch: CampaignPatch): Promise<void>
@@ -2774,6 +2813,7 @@ const live: DataSource = {
     return ((data ?? []) as unknown as Row[]).map((r) => ({
       id: r.id, granolaUrl: r.granola_url, title: r.title, heldAt: r.held_at, minutes: r.minutes, callType: r.call_type, personId: r.person_id, personName: r.person?.display_name ?? null, crmUrl: r.person?.crm_url ?? null,
       searchId: r.search_id, matchConfidence: r.match_confidence, wRecord: r.w_record, wCv: r.w_cv, wNote: r.w_note, wOnSearch: r.w_on_search, wFollowUp: r.w_follow_up, cvRequested: r.cv_requested, isNewAStar: r.is_new_a_star, skipReason: r.skip_reason,
+      summary: (r as unknown as { summary?: string | null }).summary ?? null,
     }))
   },
 
@@ -2810,6 +2850,48 @@ const live: DataSource = {
 
   async setWarmSpec(personId, on) {
     const { error } = await supabase!.from('people').update({ warm_spec: on }).eq('id', personId)
+    fail(error)
+  },
+
+  async spokenTo() {
+    const since = new Date(Date.now() - 90 * 86_400_000).toISOString()
+    const { data, error } = await supabase!
+      .from('calls')
+      .select('id, held_at, call_type, granola_url, summary, search_id, is_new_a_star, person:people!person_id (id, display_name, display_title, display_company, city, crm_url, linkedin_url, warm_spec)')
+      .gte('held_at', since)
+      .not('person_id', 'is', null)
+      .in('call_type', ['candidate_screen', 'coaching', 'interview_prep', 'debrief', 'reference', 'other', 'unknown'])
+      .order('held_at', { ascending: false })
+    fail(error)
+    type Row = { id: string; held_at: string; call_type: string; granola_url: string | null; summary: string | null; search_id: string | null; is_new_a_star: boolean; person: { id: string; display_name: string; display_title: string | null; display_company: string | null; city: string | null; crm_url: string | null; linkedin_url: string | null; warm_spec: boolean } | null }
+    const out = new Map<string, SpokenPerson>()
+    for (const r of (data ?? []) as unknown as Row[]) {
+      if (!r.person) continue
+      const p = r.person
+      const held = out.get(p.id) ?? { personId: p.id, name: p.display_name, title: p.display_title, company: p.display_company, city: p.city, crmUrl: p.crm_url, profileUrl: p.linkedin_url, good: p.warm_spec, suggested: false, lastCallOn: r.held_at.slice(0, 10), calls: [] }
+      held.suggested = held.suggested || r.is_new_a_star
+      held.calls.push({ id: r.id, heldAt: r.held_at, callType: r.call_type, granolaUrl: r.granola_url, summary: r.summary, searchId: r.search_id })
+      out.set(p.id, held)
+    }
+    return [...out.values()]
+  },
+
+  async specRequests() {
+    const { data, error } = await supabase!.from('spec_requests').select('id, person_id, linkedin_url, cv_where, status, note, result, requested_at, finished_at').order('requested_at', { ascending: false })
+    fail(error)
+    type Row = { id: string; person_id: string; linkedin_url: string | null; cv_where: SpecRequest['cvWhere']; status: SpecRequest['status']; note: string | null; result: SpecRequest['result']; requested_at: string; finished_at: string | null }
+    const seen = new Set<string>()
+    const out: SpecRequest[] = []
+    for (const r of (data ?? []) as Row[]) {
+      if (seen.has(r.person_id)) continue
+      seen.add(r.person_id)
+      out.push({ id: r.id, personId: r.person_id, linkedinUrl: r.linkedin_url, cvWhere: r.cv_where, status: r.status, note: r.note, result: r.result, requestedAt: r.requested_at, finishedAt: r.finished_at })
+    }
+    return out
+  },
+
+  async requestSpec(personId, ask) {
+    const { error } = await supabase!.rpc('request_spec', { p_person: personId, p_linkedin_url: ask.linkedinUrl ?? null, p_cv_where: ask.cvWhere, p_cv_text: ask.cvText ?? null })
     fail(error)
   },
 

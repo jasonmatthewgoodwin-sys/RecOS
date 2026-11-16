@@ -19,7 +19,7 @@ function mock() {
   vi.spyOn(data, 'followUpsDue').mockResolvedValue({ due: 3, late: 3, lateFromDay: 'Monday' })
   vi.spyOn(data, 'callsToday').mockResolvedValue([])
   vi.spyOn(data, 'weekTargets').mockResolvedValue({ hit: 2, total: 4 })
-  for (const k of ['searches', 'searchCandidates', 'searchNotes', 'calls', 'aStarSuggestions', 'warmSpecs', 'campaigns', 'contentItems', 'members', 'agents', 'kpiThisWeek', 'jobLeads'] as const) {
+  for (const k of ['searches', 'searchCandidates', 'searchNotes', 'calls', 'aStarSuggestions', 'warmSpecs', 'campaigns', 'contentItems', 'members', 'agents', 'kpiThisWeek', 'jobLeads', 'spokenTo', 'specRequests'] as const) {
     vi.spyOn(data, k).mockImplementation((...args: unknown[]) => (sampleSource[k] as (...a: unknown[]) => Promise<unknown>)(...args) as never)
   }
   return {
@@ -30,6 +30,8 @@ function mock() {
     call: vi.spyOn(data, 'updateCall').mockImplementation((id, patch) => sampleSource.updateCall(id, patch)),
     verdict: vi.spyOn(data, 'aStarVerdict').mockImplementation((id, v) => sampleSource.aStarVerdict(id, v)),
     warm: vi.spyOn(data, 'setWarmSpec').mockImplementation((id, on) => sampleSource.setWarmSpec(id, on)),
+    spec: vi.spyOn(data, 'requestSpec').mockImplementation((id, ask) => sampleSource.requestSpec(id, ask)),
+    run: vi.spyOn(data, 'requestRun').mockResolvedValue(),
     content: vi.spyOn(data, 'updateContent').mockImplementation((id, patch) => sampleSource.updateContent(id, patch)),
     campaign: vi.spyOn(data, 'updateCampaign').mockImplementation((id, patch) => sampleSource.updateCampaign(id, patch)),
     addCampaign: vi.spyOn(data, 'addCampaign').mockImplementation((input) => sampleSource.addCampaign(input)),
@@ -88,17 +90,24 @@ describe('Searches, Open', () => {
     expect(numberLine(northwind)).toBe('10 . 6 . 4 . 1')
   })
 
-  it('opens the workspace with its own tabs and the brief says what is still to ask', async () => {
+  it('opens the workspace with Pre-brief, Brief, Pipeline and Calls; the brief is read, not typed, and says what is still to find out', async () => {
     mock()
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     open('/searches/open')
     await user.click(await screen.findByText('Head of Product Marketing'))
     const dialog = await screen.findByRole('dialog')
     const nav = within(dialog).getByRole('navigation', { name: 'Workspace' })
-    for (const t of ['Brief', 'Pipeline', 'Calls', 'Offer', 'Close']) expect(within(nav).getByRole('button', { name: t })).toBeInTheDocument()
+    for (const t of ['Pre-brief', 'Brief', 'Pipeline', 'Calls', 'Offer', 'Close']) expect(within(nav).getByRole('button', { name: t })).toBeInTheDocument()
     expect(within(dialog).getByText(/3 in play/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/From Spott/)).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Brief' }))
-    expect(await within(dialog).findByTestId('still-to-ask')).toHaveTextContent(/Still to ask: .*nice to have, .*timeline/)
+    expect(await within(dialog).findByText('The last head moved to a VP role in-house')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('textbox')).toBeNull()
+    expect(within(dialog).getByTestId('still-to-find')).toHaveTextContent(/Still to find out: .*nice to have, .*timeline/)
+    expect(within(dialog).getByRole('button', { name: 'Refresh from Spott and calls' })).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Calls' }))
+    expect(within(dialog).getAllByRole('link', { name: 'Open the call notes' }).length).toBeGreaterThan(0)
+    expect(within(dialog).getByText(/ran pricing for the platform line/)).toBeInTheDocument()
   })
 
   it('moves a candidate a stage and refuses a submission without consent', async () => {
@@ -184,14 +193,24 @@ describe('Searches, the candidate pages', () => {
     expect(screen.getByText('Dev Madeup')).toBeInTheDocument()
   })
 
-  it('Warm specs lists the flagged people with the leads they match, and can take one off', async () => {
+  it('Spec lists everyone spoken to from the calls, with Good candidate, the calls and the matches on the card, and Find matches asks the agent', async () => {
     const m = mock()
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     open('/searches/warm-specs')
-    await user.click(await screen.findByText('Ada Example'))
+    expect(await screen.findByText('Finn Fictional')).toBeInTheDocument()
+    expect(screen.getByText('Ada Example')).toBeInTheDocument()
+    await user.click(screen.getByText('Ada Example'))
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Open leads they match')).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('button', { name: 'Take off the list' }))
+    expect(within(dialog).getByRole('switch', { name: 'Good candidate' })).toBeChecked()
+    expect(within(dialog).getByText('Your calls')).toBeInTheDocument()
+    expect(within(dialog).getAllByRole('link', { name: 'Open the call notes' }).length).toBeGreaterThan(0)
+    expect(within(dialog).getByText('Matches')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Northwind Sample Co, Senior PMM/)).toBeInTheDocument()
+    expect(within(dialog).getByText('launch planning')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/@/)).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: 'Find matches again' }))
+    await waitFor(() => expect(m.spec).toHaveBeenCalledWith('p-ada', expect.objectContaining({ cvWhere: 'spott' })))
+    await user.click(within(dialog).getByRole('switch', { name: 'Good candidate' }))
     await waitFor(() => expect(m.warm).toHaveBeenCalledWith('p-ada', false))
   })
 

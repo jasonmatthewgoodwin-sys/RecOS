@@ -160,13 +160,14 @@ describe('Tasks', () => {
     expect(card).toHaveTextContent('Spoke yesterday about the GrailPay role. CV promised.')
     expect(within(card).getByRole('link', { name: 'Call notes' })).toHaveAttribute('href', 'https://example.com/notes/ada')
     expect(within(card).getByRole('link', { name: 'Open in CRM' })).toHaveAttribute('href', 'https://example.com/crm/candidates/ada')
-    // The source the task came from is one button, named for where it goes.
-    expect(within(card).getByRole('button', { name: 'Open source' })).toBeInTheDocument()
+    // Where the task came from, in words, with the link when it was a call.
+    expect(within(card).getByTestId('task-source')).toHaveTextContent('A call with Ada Example, written up by the call agent')
+    expect(within(within(card).getByTestId('task-source')).getByRole('link')).toHaveAttribute('href', 'https://example.com/notes/ada')
     expect(within(card).getByRole('textbox', { name: 'Subject' })).toHaveValue('Good to speak yesterday')
     expect((within(card).getByRole('textbox', { name: 'Email' }) as HTMLTextAreaElement).value).toMatch(/thank you for your time yesterday/)
     expect(card.querySelector('[data-kind="primary"]')).toHaveTextContent('Send')
     expect(within(card).getByRole('button', { name: 'Open in Outlook' })).toBeInTheDocument()
-    expect(card).toHaveTextContent('Raised by the call write-up')
+    expect(card).toHaveTextContent(/Raised \d{4}-\d{2}-\d{2} by the calls agent/)
     expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())

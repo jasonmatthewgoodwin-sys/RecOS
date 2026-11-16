@@ -5,7 +5,7 @@ import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
 import { TextLink } from '../../components/TextLink'
 import type { Search } from '../../lib/data'
-import { binReasons, dueWord, primaryLabel, shownTitle, snoozeChoices, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
+import { binReasons, dueWord, primaryLabel, shownTitle, snoozeChoices, sourceWords, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
 import { agentWord as inboxAgentWord } from '../../lib/inbox'
 import { sourceLabel } from '../../lib/links'
 
@@ -73,6 +73,11 @@ export function TaskBody({
           {task.waitingOn}
         </p>
       )}
+      <p className="flex flex-wrap items-baseline gap-x-4 text-body text-ink-2" data-testid="task-source">
+        <span className="label-caps">Source</span>
+        <span>{sourceWords(task)}</span>
+        {task.sourceUrl && <TextLink label={sourceLabel(task.sourceUrl)} href={task.sourceUrl} />}
+      </p>
       {task.links.length > 0 && (
         <ul className="flex flex-wrap gap-x-6">
           {task.links.map((l) => (
@@ -257,7 +262,6 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
       primaryAction={{ label: primary, onClick: complete, busy }}
       links={
         <>
-          {task.sourceUrl && <PillButton label={sourceLabel(task.sourceUrl)} onClick={() => window.open(task.sourceUrl!, '_blank', 'noopener')} />}
           {email && <TextLink label="Open in Outlook" onClick={() => onOutlook(draft, subject)} />}
           {canCopy && <TextLink label={copied ? 'Copied' : 'Copy'} onClick={copyDraft} />}
           {mode !== 'edit' && <TextLink label="Edit" onClick={() => onMode('edit')} />}
@@ -265,7 +269,7 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
           {mode !== 'bin' && <TextLink label="Bin" onClick={() => onMode('bin')} />}
         </>
       }
-      foot={task.agent ? `Raised by ${agentWord[task.agent] ?? task.agent}` : undefined}
+      foot={`Raised ${task.createdAt.slice(0, 10)}${task.agent ? ` by ${agentWord[task.agent] ?? task.agent}` : ''}`}
       onClose={onClose}
     />
   )

@@ -63,7 +63,7 @@ export const sections: Section[] = [
       { label: 'Open', slug: 'open' },
       { label: 'This week', slug: 'this-week' },
       { label: 'In process', slug: 'in-process' },
-      { label: 'Warm specs', slug: 'warm-specs' },
+      { label: 'Spec', slug: 'warm-specs' },
       { label: 'Placed', slug: 'placed' },
     ],
   },

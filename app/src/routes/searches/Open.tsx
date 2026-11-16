@@ -15,9 +15,10 @@ import { daysSince } from '../../lib/bd'
 import { data, type CandidatePatch, type CandidateStage, type Member, type NewSearch, type OfferStatus, type Search, type SearchCandidate, type SearchNote, type SearchPatch, type SearchPriority } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
-import { briefFields, candidateNeedsDesk, closeChecks, feedbackWord, healthOf, healthWord, inPlay, isLive, numberLine, offerWord, priorityOrder, priorityWord, searchTone, stageOrder, stageWord, statusWord, writeUpTicks } from '../../lib/searches'
+import { candidateNeedsDesk, closeChecks, feedbackWord, healthOf, healthWord, inPlay, isLive, numberLine, offerWord, priorityOrder, priorityWord, searchTone, stageOrder, stageWord, statusWord } from '../../lib/searches'
 import { sections } from '../../lib/sections'
-import { ukClock, ukTime } from '../../lib/time'
+import { BriefTab, CallsTab, PipelineHeader, PreBriefTab } from './WorkspaceTabs'
+import { ukClock } from '../../lib/time'
 
 // Searches (30.1 to 30.8): one short list grouped by priority, two numbers
 // at most, and a workspace window per search with its own small tabs,
@@ -29,8 +30,8 @@ export const CANDIDATES_KEY = 'searches.candidates'
 export const CALLS_KEY = 'searches.calls'
 export const notesKey = (id: string) => `searches.notes.${id}`
 
-type Tab = 'brief' | 'pipeline' | 'calls' | 'offer' | 'close'
-const tabWord: Record<Tab, string> = { brief: 'Brief', pipeline: 'Pipeline', calls: 'Calls', offer: 'Offer', close: 'Close' }
+type Tab = 'prebrief' | 'brief' | 'pipeline' | 'calls' | 'offer' | 'close'
+const tabWord: Record<Tab, string> = { prebrief: 'Pre-brief', brief: 'Brief', pipeline: 'Pipeline', calls: 'Calls', offer: 'Offer', close: 'Close' }
 
 export function Open({ role = 'owner' }: { role?: 'owner' | 'reviewer' }) {
   const [params, setParams] = useSearchParams()
@@ -212,7 +213,7 @@ type WorkspaceProps = {
 export function Workspace({ search: s, candidates, today, onPatch, onNote, onClose }: WorkspaceProps) {
   const [params, setParams] = useSearchParams()
   const tabParam = params.get('tab') as Tab | null
-  const tab: Tab = tabParam && tabParam in tabWord ? tabParam : candidates.length > 0 ? 'pipeline' : 'brief'
+  const tab: Tab = tabParam && tabParam in tabWord ? tabParam : candidates.length > 0 ? 'pipeline' : s.status === 'intake' ? 'prebrief' : 'brief'
   const candId = params.get('cand')
   const cand = candId ? candidates.find((c) => c.id === candId) : undefined
   const notes = useQuery(notesKey(s.id), () => data.searchNotes(s.id))
@@ -280,38 +281,21 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
 
   let body: ReactElement
   let primary: { label: string; onClick: () => void } | undefined
-  if (tab === 'brief') {
-    body = <BriefTab search={s} note={brief} loading={notes.status === 'loading' && !notes.data} onSaved={() => invalidate(notesKey(s.id))} onNote={onNote} />
+  if (tab === 'prebrief') {
+    body = <PreBriefTab search={s} notes={notes.data ?? []} onNote={onNote} />
+  } else if (tab === 'brief') {
+    body = <BriefTab search={s} note={brief} loading={notes.status === 'loading' && !notes.data} onNote={onNote} />
   } else if (tab === 'pipeline') {
     body = cand ? (
       <CandidateView c={cand} today={today} onBack={() => setCand(null)} onPatch={(change) => void patchCand(cand, change)} />
     ) : (
-      <PipelineTab search={s} candidates={candidates} today={today} onOpen={(id) => setCand(id)} onAdded={() => invalidate(CANDIDATES_KEY)} onNote={onNote} />
-    )
-  } else if (tab === 'calls') {
-    body = (
-      <div className="flex flex-col gap-2">
-        <p className="font-mono text-label text-ink-3">{writeUpTicks.map((t) => t.label).join(' . ')}</p>
-        {calls.status === 'loading' && !calls.data ? (
-          <Dots />
-        ) : myCalls.length === 0 ? (
-          <p className="text-ink-3">No calls on this search yet.</p>
-        ) : (
-          <ul className="flex flex-col" aria-label="Calls on this search">
-            {myCalls.map((c) => (
-              <li key={c.id} className="flex min-h-11 items-center gap-4 border-b border-rule">
-                <span className="font-mono text-label text-ink-2">{c.heldAt.slice(0, 10)} {ukTime(new Date(c.heldAt))}</span>
-                <span className="min-w-0 flex-1 truncate">{c.personName ?? c.title ?? c.callType.replace(/_/g, ' ')}</span>
-                <span className="font-mono text-label text-ink" aria-label="Write-up">
-                  {writeUpTicks.map((t) => (c[t.key] ? '✓' : '–')).join(' ')}
-                </span>
-                {(c.matchConfidence === 'low' || c.matchConfidence === 'none') && <span className="label-caps text-ink">Confirm</span>}
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="flex flex-col gap-6">
+        <PipelineHeader search={s} onNote={onNote} />
+        <PipelineTab search={s} candidates={candidates} today={today} onOpen={(id) => setCand(id)} onAdded={() => invalidate(CANDIDATES_KEY)} onNote={onNote} />
       </div>
     )
+  } else if (tab === 'calls') {
+    body = <CallsTab calls={myCalls} loading={calls.status === 'loading' && !calls.data} />
   } else if (tab === 'offer') {
     const atOffer = candidates.filter((c) => c.stage === 'offer' || c.stage === 'placed')
     body = atOffer.length === 0 ? <p className="text-ink-3">Nobody at offer yet.</p> : (
@@ -342,51 +326,6 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
       foot={`Opened ${s.openedOn}${s.firstSubmissionOn ? `, first shortlist ${s.firstSubmissionOn}` : ''}${s.placedOn ? `, placed ${s.placedOn}` : ''}`}
       onClose={onClose}
     />
-  )
-}
-
-function BriefTab({ search: s, note, loading, onSaved, onNote }: { search: Search; note: SearchNote | null; loading: boolean; onSaved: () => void; onNote: (t: string) => void }) {
-  const [fields, setFields] = useState<Record<string, string>>(() => Object.fromEntries(briefFields.map((f) => [f.key, String((note?.structured as Record<string, unknown> | null)?.[f.key] ?? '')])))
-  const [busy, setBusy] = useState(false)
-  const [saved, setSaved] = useState(false)
-  if (loading) return <Dots />
-  const missing = briefFields.filter((f) => !fields[f.key]?.trim())
-  async function save() {
-    setBusy(true)
-    try {
-      const content = briefFields.filter((f) => fields[f.key]?.trim()).map((f) => `${f.label}: ${fields[f.key].trim()}`).join('\n')
-      await data.saveSearchNote(s.id, 'brief', content, fields)
-      setSaved(true)
-      onSaved()
-    } catch {
-      onNote('That did not save. Try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <form
-      className="flex flex-col gap-4"
-      aria-label="Brief"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void save()
-      }}
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        {briefFields.map((f) => (
-          <Field key={f.key} label={f.label} kind="lines" rows={2} value={fields[f.key] ?? ''} onChange={(v) => { setFields((x) => ({ ...x, [f.key]: v })); setSaved(false) }} />
-        ))}
-      </div>
-      {missing.length > 0 && (
-        <p className="font-mono text-label text-ink-3" data-testid="still-to-ask">
-          Still to ask: {missing.map((f) => f.label.toLowerCase()).join(', ')}
-        </p>
-      )}
-      <div>
-        <PillButton label={saved ? 'Saved' : 'Save'} type="submit" kind="primary" busy={busy} />
-      </div>
-    </form>
   )
 }
 

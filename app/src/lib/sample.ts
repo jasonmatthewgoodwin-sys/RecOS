@@ -4,6 +4,7 @@
 import { composeLink } from './send'
 import type { Task, TaskEdits } from './tasks'
 import type {
+  SpokenPerson, SpecRequest,
   SendLogRow, Template,
   Account,
   AStarSuggestion,
@@ -571,14 +572,15 @@ let sampleNotes: SearchNote[] = [
 export function freshSampleCalls(): Call[] {
   const c = (over: Partial<Call> & Pick<Call, 'id' | 'heldAt' | 'callType'>): Call => ({
     granolaUrl: 'https://example.com/granola/' + over.id, title: null, minutes: 30, personId: null, personName: null, crmUrl: null, searchId: null, matchConfidence: 'none',
-    wRecord: false, wCv: false, wNote: false, wOnSearch: false, wFollowUp: false, cvRequested: false, isNewAStar: false, skipReason: null, ...over,
+    wRecord: false, wCv: false, wNote: false, wOnSearch: false, wFollowUp: false, cvRequested: false, isNewAStar: false, skipReason: null, summary: null, ...over,
   })
   return [
-    c({ id: 'call-1', heldAt: `${daysAgo(0)}T09:00:00Z`, callType: 'candidate_screen', personId: 'p-finn', personName: 'Finn Fictional', crmUrl: 'https://example.com/crm/person/p-finn', searchId: 's-contoso', matchConfidence: 'high', wRecord: true, wNote: true, wOnSearch: true }),
+    c({ id: 'call-1', heldAt: `${daysAgo(0)}T09:00:00Z`, callType: 'candidate_screen', personId: 'p-finn', personName: 'Finn Fictional', crmUrl: 'https://example.com/crm/person/p-finn', searchId: 's-contoso', matchConfidence: 'high', wRecord: true, wNote: true, wOnSearch: true, summary: 'Six years in B2B SaaS, two launches a year, wants a first leadership step. Open to Boston. Keen on the Contoso role.' }),
     c({ id: 'call-2', heldAt: `${daysAgo(1)}T14:00:00Z`, callType: 'candidate_screen', personId: null, personName: 'Someone New', matchConfidence: 'none', wRecord: true }),
     c({ id: 'call-3', heldAt: `${daysAgo(1)}T16:30:00Z`, callType: 'coaching', personId: 'p-ben', personName: 'Ben Sample', crmUrl: 'https://example.com/crm/person/p-ben', wRecord: true, wNote: true, wFollowUp: true, isNewAStar: true }),
     c({ id: 'call-4', heldAt: `${daysAgo(2)}T11:00:00Z`, callType: 'client_update', searchId: 's-northwind', matchConfidence: 'confirmed', wRecord: true, wNote: true, wOnSearch: true, wFollowUp: true, wCv: true }),
-    c({ id: 'call-5', heldAt: `${daysAgo(9)}T11:00:00Z`, callType: 'candidate_screen', personId: 'p-dev', personName: 'Dev Madeup', searchId: 's-northwind', matchConfidence: 'confirmed', wRecord: true, wNote: true, wOnSearch: true, wFollowUp: true, wCv: true }),
+    c({ id: 'call-5', heldAt: `${daysAgo(9)}T11:00:00Z`, callType: 'candidate_screen', personId: 'p-dev', personName: 'Dev Madeup', searchId: 's-northwind', matchConfidence: 'confirmed', wRecord: true, wNote: true, wOnSearch: true, wFollowUp: true, wCv: true, summary: 'PMM lead at Initech, ran pricing for the platform line. Strong on positioning, lighter on launches. Would move for a director title.' }),
+    c({ id: 'call-6', heldAt: `${daysAgo(12)}T15:00:00Z`, callType: 'candidate_screen', personId: 'p-ada', personName: 'Ada Example', crmUrl: 'https://example.com/crm/person/p-ada', searchId: 's-northwind', matchConfidence: 'confirmed', wRecord: true, wNote: true, wOnSearch: true, wFollowUp: true, wCv: true, isNewAStar: true, summary: 'Senior PMM in New York. Launches at scale, built the sales deck from nothing, pricing and packaging on two products. Wants a head of role.' }),
   ]
 }
 let sampleCalls = freshSampleCalls()
@@ -591,6 +593,25 @@ export function freshSampleAStar(): AStarSuggestion[] {
 }
 let sampleAStar = freshSampleAStar()
 let sampleWarm = new Set<string>(['p-ada'])
+let sampleSpecs: SpecRequest[] = [
+  {
+    id: 'spec-ada', personId: 'p-ada', linkedinUrl: 'https://example.com/in/ada', cvWhere: 'spott', status: 'ready', note: null,
+    result: {
+      skills: ['launch planning', 'pricing and packaging', 'sales enablement', 'positioning', 'B2B SaaS', 'finance buyer', 'team of two', 'New York'],
+      summary: 'A senior PMM who has run launches at scale and rebuilt a sales deck from nothing. Pricing and packaging on two products. Ready for a head of role.',
+      matches: [
+        { kind: 'job_lead', id: 'job-northwind', name: 'Northwind Sample Co', role: 'Senior PMM', why: 'Same level, same city, launches are the heart of the role', fit: 84 },
+        { kind: 'search', id: 's-contoso', name: 'Contoso Demo Inc', role: 'Senior Product Marketing Manager', why: 'Boston is a move but the brief wants exactly her pricing work', fit: 71 },
+        { kind: 'account', id: 'Fabrikam Test Ltd', name: 'Fabrikam Test Ltd', role: 'Sam Colleague', why: 'The account is hiring in marketing and Sam asked for PMM names', fit: 58 },
+      ],
+    },
+    requestedAt: `${daysAgo(1)}T09:00:00Z`, finishedAt: `${daysAgo(1)}T09:20:00Z`,
+  },
+]
+export function resetSampleSpecs() {
+  sampleSpecs = [...sampleSpecs.filter((r) => r.id === 'spec-ada')]
+  sampleWarm = new Set(['p-ada'])
+}
 
 export function freshSampleCampaigns(): Campaign[] {
   return [
@@ -1019,7 +1040,7 @@ export function freshSampleTasks(): Task[] {
         { label: 'Call notes', url: 'https://example.com/notes/ada' },
         { label: 'Open in CRM', url: 'https://example.com/crm/candidates/ada' },
       ],
-      agent: 'call_to_crm',
+      agent: 'a6_calls',
       searchId: 's-grail',
     }),
     task({
@@ -1039,7 +1060,7 @@ export function freshSampleTasks(): Task[] {
       messageId: 'm-cara',
       messageState: 'draft',
       links: [{ label: 'Open thread', url: 'https://example.com/mail/cara' }],
-      agent: 'follow_ups',
+      agent: 'a5_followups',
     }),
     task({
       key: 'follow_ups:f-ben',
@@ -1059,7 +1080,7 @@ export function freshSampleTasks(): Task[] {
       messageId: 'm-ben',
       messageState: 'draft',
       links: [{ label: 'Open thread', url: 'https://example.com/mail/ben' }],
-      agent: 'follow_ups',
+      agent: 'a5_followups',
     }),
     task({
       key: 'prepare_call:cal-1',
@@ -1075,7 +1096,7 @@ export function freshSampleTasks(): Task[] {
         { label: 'Open in CRM', url: 'https://example.com/crm/candidates/dev' },
         { label: 'Search in CRM', url: 'https://example.com/crm/jobs/grailpay' },
       ],
-      agent: 'follow_ups',
+      agent: 'a5_followups',
       searchId: 's-grail',
     }),
     task({
@@ -1096,7 +1117,7 @@ export function freshSampleTasks(): Task[] {
       messageId: 'm-tailspin',
       messageState: 'draft',
       links: [{ label: 'Search in CRM', url: 'https://example.com/crm/jobs/tailspin' }],
-      agent: 'rules',
+      agent: 'system',
       searchId: 's-tailspin',
     }),
     task({
@@ -1113,7 +1134,7 @@ export function freshSampleTasks(): Task[] {
       links: [{ label: 'LinkedIn post', url: 'https://example.com/post/northwind' }],
       refTable: 'job_leads',
       refId: 'job-northwind',
-      agent: 'jobs',
+      agent: 'a3_jobs',
     }),
     task({
       key: 'inbox_items:i-contoso',
@@ -1126,7 +1147,7 @@ export function freshSampleTasks(): Task[] {
       links: [{ label: 'LinkedIn advert', url: 'https://example.com/advert/contoso' }],
       refTable: 'job_leads',
       refId: 'job-contoso',
-      agent: 'jobs',
+      agent: 'a3_jobs',
     }),
     task({
       key: 'inbox_items:i-signal',
@@ -1141,7 +1162,7 @@ export function freshSampleTasks(): Task[] {
       draftOriginal: 'Congratulations on the VP move, Ben. If the team grows this quarter I would be glad to help.',
       channel: 'linkedin',
       links: [{ label: 'Profile', url: 'https://example.com/in/ben-sample' }],
-      agent: 'signals',
+      agent: 'a4_signals',
     }),
     task({
       key: 'call_confirm:c-finn',
@@ -1153,7 +1174,7 @@ export function freshSampleTasks(): Task[] {
       dueOn: daysFromToday(0),
       rank: 35,
       links: [{ label: 'Call notes', url: 'https://example.com/notes/finn' }],
-      agent: 'call_to_crm',
+      agent: 'a6_calls',
     }),
     task({
       key: 'cv_chase:c-ada',
@@ -1170,7 +1191,7 @@ export function freshSampleTasks(): Task[] {
         { label: 'Where the CV will be', url: 'https://example.com/crm/candidates/ada' },
         { label: 'Call notes', url: 'https://example.com/notes/ada' },
       ],
-      agent: 'call_to_crm',
+      agent: 'a6_calls',
     }),
     task({
       key: 'content_approve:ct-1',
@@ -1185,7 +1206,7 @@ export function freshSampleTasks(): Task[] {
       draftOriginal:
         'Most first PMM hires are set up to fail by week twelve.\n\nThe hiring manager wanted a launch engine. The board wanted positioning. The new PMM got both briefs and no owner. Three calls this week, same story.\n\nIf you are hiring your first PMM, agree who owns the brief before you open the role.',
       channel: 'linkedin',
-      agent: 'content',
+      agent: 'a2_content',
     }),
     task({
       key: 'content_post:ct-2',
@@ -1200,7 +1221,7 @@ export function freshSampleTasks(): Task[] {
       draftOriginal:
         'Remote PMM postings are up again.\n\nA third of the PMM roles we saw this month are remote across the US. Last quarter it was a fifth. Candidates who held out are getting calls.\n\nWorth a look at your own location line.',
       channel: 'linkedin',
-      agent: 'content',
+      agent: 'a2_content',
     }),
     task({
       key: 'inbox_items:i-suggest',
@@ -1213,7 +1234,7 @@ export function freshSampleTasks(): Task[] {
       dueOn: daysFromToday(2),
       rank: 20,
       links: [{ label: 'Open in CRM', url: 'https://example.com/crm/candidates/dev' }],
-      agent: 'rules',
+      agent: 'system',
       searchId: 's-grail',
     }),
     task({
@@ -1228,7 +1249,7 @@ export function freshSampleTasks(): Task[] {
       rank: 20,
       refTable: 'referrals',
       refId: 'ref-hal',
-      agent: 'call_to_crm',
+      agent: 'a6_calls',
     }),
     task({
       key: 'inbox_items:i-idea',
@@ -1238,7 +1259,7 @@ export function freshSampleTasks(): Task[] {
       why: 'Four league members in New York asked about meeting peers this quarter.',
       dueOn: daysFromToday(16),
       rank: 5,
-      agent: 'events',
+      agent: 'a7_events',
     }),
   ]
 }
@@ -1991,6 +2012,38 @@ export const sampleSource: DataSource = {
         personId: m.personId, name: m.name, title: m.title, company: m.company, crmUrl: m.crmUrl, profileUrl: m.profileUrl,
         matches: sampleLeads.filter((l) => l.stage !== 'dead' && l.stage !== 'passed' && l.matched.some((x) => x.personId === m.personId || x.name === m.name)).map((l) => ({ leadId: l.id, company: l.company, role: l.role })),
       }))
+  },
+  async spokenTo() {
+    const out = new Map<string, SpokenPerson>()
+    for (const c of [...sampleCalls].sort((a, b) => b.heldAt.localeCompare(a.heldAt))) {
+      if (!c.personId || !c.personName || !['candidate_screen', 'coaching', 'interview_prep', 'debrief', 'reference', 'other', 'unknown'].includes(c.callType)) continue
+      const held = out.get(c.personId) ?? { personId: c.personId, name: c.personName, title: null, company: null, city: null, crmUrl: c.crmUrl, profileUrl: sampleSpecs.find((r) => r.personId === c.personId)?.linkedinUrl ?? null, good: sampleWarm.has(c.personId), suggested: false, lastCallOn: c.heldAt.slice(0, 10), calls: [] }
+      held.suggested = held.suggested || c.isNewAStar
+      held.calls.push({ id: c.id, heldAt: c.heldAt, callType: c.callType, granolaUrl: c.granolaUrl, summary: c.summary, searchId: c.searchId })
+      out.set(c.personId, held)
+    }
+    return [...out.values()]
+  },
+  async specRequests() {
+    return sampleSpecs.map((r) => ({ ...r }))
+  },
+  async requestSpec(personId, ask) {
+    sampleWarm.add(personId)
+    if (sampleSpecs.some((r) => r.personId === personId && (r.status === 'waiting' || r.status === 'working'))) return
+    const req: SpecRequest = { id: `spec-${personId}-${Date.now()}`, personId, linkedinUrl: ask.linkedinUrl ?? null, cvWhere: ask.cvWhere, status: 'waiting', note: null, result: null, requestedAt: new Date().toISOString(), finishedAt: null }
+    sampleSpecs = [req, ...sampleSpecs.filter((r) => r.personId !== personId)]
+    setTimeout(() => {
+      req.status = 'working'
+    }, 1500)
+    setTimeout(() => {
+      req.status = 'ready'
+      req.finishedAt = new Date().toISOString()
+      req.result = {
+        skills: ['positioning', 'launch planning', 'sales enablement', 'B2B SaaS'],
+        summary: 'A sample answer: a solid product marketer with launches and enablement behind them.',
+        matches: [{ kind: 'job_lead', id: 'job-northwind', name: 'Northwind Sample Co', role: 'Senior PMM', why: 'Level and city both fit', fit: 70 }],
+      }
+    }, 3500)
   },
   async setWarmSpec(personId, on) {
     if (on) sampleWarm.add(personId)

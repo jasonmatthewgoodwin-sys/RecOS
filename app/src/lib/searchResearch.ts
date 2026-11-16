@@ -7,7 +7,7 @@
 
 import { questionBank, questionsAsText, type QuestionGroup, type RoleType } from './questionBank'
 
-export type SearchJobKind = 'questions' | 'lowdown' | 'map'
+export type SearchJobKind = 'questions' | 'lowdown' | 'map' | 'brief'
 export type SearchJobStatus = 'waiting' | 'working' | 'ready' | 'failed'
 export type SearchJob = {
   kind: SearchJobKind
@@ -110,6 +110,29 @@ export function sampleMap(role: string): Result {
   return { content, structured }
 }
 
+/** The brief as the agent fills it from Spott and the calls (0051). */
+export function sampleBrief(client: string, role: string): Result {
+  const structured = {
+    why_open: 'The last head moved to a VP role in-house in October',
+    reports_to: 'The CMO, with a dotted line to the VP Product',
+    team: 'Two product marketers and one in competitive intelligence',
+    first_90: 'Own the launch calendar and rebuild the messaging house',
+    good_at_six: 'Two launches landed, sales using the new deck, pricing page rewritten',
+    must_have: 'B2B SaaS, launches at scale, has managed two or more',
+    nice_to_have: 'Finance buyer, pricing and packaging',
+    comp_band: 'Director band, equity on top',
+    location: 'New York, three days in the office',
+    process: 'Screen with the CMO, a case study with the team, a final with the CEO',
+    timeline: 'Shortlist by the end of the month, offer before the holidays',
+    competition: 'One internal candidate and one other agency, exclusive for three weeks',
+    selling_points: 'A real seat at the table and a product that sells itself to finance teams',
+    risks: 'The internal candidate, and the last head left after eleven months',
+    sources: [{ label: 'Spott job', url: `https://example.com/spott/jobs/${client.toLowerCase().replace(/[^a-z]+/g, '-')}` }, { label: 'Brief call notes', url: 'https://example.com/granola/brief-call' }],
+  }
+  const content = [`${role} at ${client}: brief`, ...Object.entries(structured).filter(([k]) => k !== 'sources').map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v as string}`)].join('\n')
+  return { content, structured }
+}
+
 // ---------------------------------------------------------------- the stand-in
 
 type Deps = {
@@ -149,7 +172,7 @@ export function createSampleSearchResearch(deps: Deps): SearchResearch {
       }, delay / 2)
       setTimeout(() => {
         const intake = intakes.get(searchId) ?? { client: 'The client', role: 'the role', roleType: null, jdText: null, briefDueOn: null }
-        const result = kind === 'questions' ? sampleQuestions(intake) : kind === 'lowdown' ? sampleLowdown(intake.client) : sampleMap(intake.role)
+        const result = kind === 'questions' ? sampleQuestions(intake) : kind === 'lowdown' ? sampleLowdown(intake.client) : kind === 'brief' ? sampleBrief(intake.client, intake.role) : sampleMap(intake.role)
         deps.saveNote(searchId, kind, result.content, result.structured).then(
           () => Object.assign(job, { status: 'ready', note: 'Sample result', finishedAt: new Date().toISOString() }),
           () => Object.assign(job, { status: 'failed', note: 'The sample result could not be saved.', finishedAt: new Date().toISOString() }),

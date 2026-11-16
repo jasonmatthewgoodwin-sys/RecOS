@@ -317,3 +317,49 @@ export function starterDraft(task: Task, myFirstName = 'Jason'): { subject: stri
       }
   }
 }
+
+/** Where the task came from, in words: the call, the email, the post, the rule. */
+export function sourceWords(task: Task): string {
+  const url = task.sourceUrl ?? ''
+  const linkedin = /linkedin\.com/i.test(url)
+  const granola = /granola/i.test(url)
+  const outlook = /outlook|office|live\.com|microsoft/i.test(url)
+  const who = task.personName ? ` with ${task.personName}` : ''
+  switch (task.kind) {
+    case 'job_lead':
+      return linkedin ? 'A LinkedIn post, found by the jobs agent' : url ? 'A job advert, found by the jobs agent' : 'A lead from the jobs agent'
+    case 'wider_lead':
+      return 'A lead outside product marketing, found by the jobs agent'
+    case 'signal':
+      return 'A signal on LinkedIn, found by the signals agent'
+    case 'content_draft':
+    case 'content_approve':
+    case 'content_post':
+      return 'The content agent, from your calls and the market'
+    case 'event_idea':
+      return 'The events agent'
+    case 'call_writeup':
+    case 'call_confirm':
+    case 'cv_chase':
+      return `A call${who}, written up by the call agent`
+    case 'referral':
+      return 'A name given on a call, written up by the call agent'
+    case 'follow_up':
+      if (task.agent === 'a6_calls' || granola) return `A call${who}, written up by the call agent`
+      if (task.agent === 'a5_followups' || outlook) return `An email thread${who}, found by the follow-up sweep`
+      if (task.agent === 'manual') return 'Added by you'
+      return 'A rule in RecOS'
+    case 'prepare_call':
+      return 'Your calendar for today'
+    case 'search_health':
+      return 'The search, as the call agent read it this morning'
+    case 'feedback_chase':
+      return 'The pipeline, from Spott'
+    case 'suggestion':
+      return 'A standing rule in RecOS'
+    case 'system_notice':
+      return 'RecOS itself'
+    default:
+      return 'RecOS'
+  }
+}

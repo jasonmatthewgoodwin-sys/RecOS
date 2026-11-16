@@ -17,7 +17,8 @@ import { Calendar } from './routes/content/Calendar'
 import { Campaigns } from './routes/content/Campaigns'
 import { Testimonials } from './routes/content/Testimonials'
 import { AStar } from './routes/people/AStar'
-import { InProcess, Placed, WarmSpecs } from './routes/searches/Candidates'
+import { InProcess, Placed } from './routes/searches/Candidates'
+import { Spec } from './routes/searches/Spec'
 import { Open } from './routes/searches/Open'
 import { ThisWeek as CallsThisWeek } from './routes/searches/ThisWeek'
 import { Drafts } from './routes/content/Drafts'
@@ -59,7 +60,7 @@ function builtPages(session: Session): Record<string, ReactNode> {
     'searches/open': <Open role={session.role} />,
     'searches/this-week': <CallsThisWeek />,
     'searches/in-process': <InProcess />,
-    'searches/warm-specs': <WarmSpecs />,
+    'searches/warm-specs': <Spec />,
     'searches/placed': <Placed />,
     'leads/jobs': <Jobs />,
     'leads/follow-ups': <FollowUps />,
