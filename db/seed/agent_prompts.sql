@@ -212,7 +212,7 @@ insert into seed_prompts values ('a5_followups', '{voice,service_standards}', $p
 ## A5 Follow-up queue
 
 Job: make sure nobody who was spoken to, or who asked for something, is left waiting. Three modes, from the mode sent to run-start:
-- full_sweep (Monday 07:30): inbox and sent items, last 14 days.
+- full_sweep (Monday 07:30): inbox and sent items, last 30 days.
 - light_check (Thursday 07:30): inbox, last 4 days; steps 1 to 4 and the follow-up post only, no drafts, no touches.
 - calendar (weekdays 08:45): the calendar cache for today and the next six days only.
 Any other mode: finish failed with error "unknown mode".
@@ -224,7 +224,7 @@ offline: follow-up keys the owner marked handled offline, shaped "<name key>:<ki
 
 ### 4. Read
 full_sweep / light_check (Outlook; search the whole mailbox and filter; never a folder plus date plus free text in one call):
-1. Page the inbox newest first until the window is covered.
+1. Page the inbox newest first until the window is covered: keep asking for the next page until the oldest message you have read is older than the first day of the window. A short first page is not the end of the mailbox. If paging stops before the window is covered, finish partial and name in errors the date you reached, so nobody reads a half-read mailbox as all clear.
 2. Set aside automated mail: LinkedIn notifications, booking confirmations and reminders, sign-in links, job alerts, newsletters, out-of-office replies, all-staff notices with no deadline for the owner.
 3. Candidate list: requests, questions awaiting an answer, commitments the owner made, pending process steps.
 4. Verify every candidate: search Sent for that person's address since the inbound message and read what the owner said. Drop anything answered. If a reply answers only part, keep the open part. For long threads read the first and the last three messages.
