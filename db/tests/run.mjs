@@ -1878,6 +1878,188 @@ test('0045: the calendar holds seven days; a batch replaces only the days it cov
   await db.query(`delete from calendar_today where event_ref like 'wk-%'`)
 })
 
+// ---------------------------------------------------------------- the new search flow (0048)
+
+test('0048 intake: the owner starts a search and asks for research; one open job per search and kind; nobody else may', async () => {
+  await anon(async () => {
+    assert.match(String(await refused(`select start_search('Globex Sample Inc', 'Senior PMM')`)), /permission denied|Only the owner/)
+    assert.match(String(await refused(`select request_search_job(gen_random_uuid(), 'questions')`)), /permission denied|Only the owner/)
+    assert.match(String(await refused(`select * from search_jobs`)), /permission denied/)
+  })
+  await reviewer(async () => {
+    assert.match(String(await refused(`select start_search('Globex Sample Inc', 'Senior PMM')`)), /Only the owner/)
+    assert.match(String(await refused(`select request_search_job(gen_random_uuid(), 'questions')`)), /Only the owner/)
+  })
+  await owner(async () => {
+    const [{ sid }] = await rows(`select start_search('  Globex Sample Inc ', ' Senior PMM, platform ', 'senior_pmm', 'We need a product marketer for the platform line.', '2026-11-20') as sid`)
+    const [s] = await rows(`select owner_id, client, client_key, role, function, status, role_type, jd_text, brief_due_on::text as due from searches where id = $1`, [sid])
+    assert.deepEqual(s, { owner_id: ownerId, client: 'Globex Sample Inc', client_key: 'globex sample', role: 'Senior PMM, platform', function: 'pmm', status: 'intake', role_type: 'senior_pmm', jd_text: 'We need a product marketer for the platform line.', due: '2026-11-20' })
+    // The least it takes: a client and a rough role.
+    const [{ bare }] = await rows(`select start_search('Initech Pretend', 'PMM') as bare`)
+    assert.deepEqual(await rows(`select role_type, jd_text, brief_due_on from searches where id = $1`, [bare]), [{ role_type: null, jd_text: null, brief_due_on: null }])
+    assert.match(String(await refused(`select start_search(' ', 'PMM')`)), /needs a client/)
+    assert.match(String(await refused(`select start_search('Globex Sample Inc', '')`)), /needs a role/)
+    assert.match(String(await refused(`select start_search('Globex Sample Inc', 'PMM', 'cmo')`)), /Unknown role type/)
+
+    const [{ j1 }] = await rows(`select request_search_job($1, 'questions') as j1`, [sid])
+    const [{ j2 }] = await rows(`select request_search_job($1, 'questions') as j2`, [sid])
+    assert.equal(j2, j1, 'a second ask returns the open job')
+    const [{ j3 }] = await rows(`select request_search_job($1, 'lowdown') as j3`, [sid])
+    assert.notEqual(j3, j1)
+    assert.deepEqual(await rows(`select kind, status, owner_id from search_jobs where search_id = $1 order by kind`, [sid]), [
+      { kind: 'lowdown', status: 'waiting', owner_id: ownerId },
+      { kind: 'questions', status: 'waiting', owner_id: ownerId },
+    ])
+    assert.match(String(await refused(`select request_search_job($1, 'gossip')`, [sid])), /questions, lowdown or map/)
+    assert.match(String(await refused(`select request_search_job(gen_random_uuid(), 'map')`)), /No such search/)
+    // The browser reads the queue and writes none of it.
+    assert.match(String(await refused(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'map')`, [ownerId, sid])), /permission denied/)
+    assert.match(String(await refused(`update search_jobs set status = 'ready' where id = $1`, [j1])), /permission denied/)
+    // The two new tabs take a note.
+    await db.query(`insert into search_notes (search_id, tab, content) values ($1, 'questions', 'x'), ($1, 'lowdown', 'y')`, [sid])
+  })
+})
+
+test('0048 research: a6_calls claims up to three jobs, search_result writes the next version and closes the job, and only a6_calls may', async () => {
+  const [{ sid }] = await rows(
+    `insert into searches (owner_id, client, client_key, role, role_type, jd_text, location, status, confidential)
+     values ($1, 'Initech Pretend', 'initech pretend', 'Senior Product Marketing Manager', 'senior_pmm', 'Own launches for two product lines.', 'Remote, US', 'intake', true) returning id as sid`, [ownerId])
+  const [{ sid2 }] = await rows(`insert into searches (owner_id, client, client_key, role, status) values ($1, 'Umbrella Invented', 'umbrella invented', 'Head of PMM', 'intake') returning id as sid2`, [ownerId])
+  await db.query(`insert into search_notes (owner_id, search_id, tab, structured, version) values ($1, $2, 'brief', '{"must_have": "old"}', 1), ($1, $2, 'brief', '{"must_have": "B2B SaaS"}', 2)`, [ownerId, sid])
+  // The owner has already edited a first set of questions.
+  await db.query(`insert into search_notes (owner_id, search_id, tab, content, structured) values ($1, $2, 'questions', 'Owner edit', '{"groups": []}')`, [ownerId, sid])
+  const job = async (search, kind, minutesAgo) =>
+    (await rows(`insert into search_jobs (owner_id, search_id, kind, requested_at) values ($1, $2, $3, now() - make_interval(mins => $4)) returning id`, [ownerId, search, kind, minutesAgo]))[0].id
+  const q = await job(sid, 'questions', 40)
+  const low = await job(sid, 'lowdown', 30)
+  const map = await job(sid, 'map', 20)
+  const late = await job(sid2, 'lowdown', 10)
+  await assert.rejects(db.query(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'map')`, [ownerId, sid]), /search_jobs_one_open/)
+
+  // Only a6_calls may ask for the queue.
+  await assert.rejects(db.query(`select agent_context('a3_jobs', array['search_jobs'])`), /not_allowed/)
+  await assert.rejects(db.query(`select agent_context('a5_followups', array['search_jobs'])`), /not_allowed/)
+  assert.equal(await count(`search_jobs where status = 'working'`), 0)
+
+  const [{ c1 }] = await rows(`select agent_context('a6_calls', array['search_jobs']) as c1`)
+  assert.deepEqual(c1.search_jobs.map((x) => [x.job_id, x.kind]), [[q, 'questions'], [low, 'lowdown'], [map, 'map']])
+  assert.deepEqual(c1.search_jobs[0].search, { id: sid, client: 'Initech Pretend', confidential: true, role: 'Senior Product Marketing Manager', role_type: 'senior_pmm', jd_text: 'Own launches for two product lines.', location: 'Remote, US' })
+  assert.deepEqual(c1.search_jobs[0].brief, { must_have: 'B2B SaaS' })
+  assert.equal(await count(`search_jobs where status = 'working' and claimed_at is not null and attempts = 1`), 3)
+  const [{ c2 }] = await rows(`select agent_context('a6_calls', array['search_jobs', 'dnc']) as c2`)
+  assert.deepEqual(c2.search_jobs.map((x) => x.job_id), [late])
+  assert.equal(c2.search_jobs[0].brief, null)
+  assert.ok(Array.isArray(c2.dnc))
+  const [{ c3 }] = await rows(`select agent_context('a6_calls', array['search_jobs']) as c3`)
+  assert.deepEqual(c3.search_jobs, [])
+  // The older contexts still answer.
+  const [{ c4 }] = await rows(`select agent_context('a6_calls', array['searches']) as c4`)
+  assert.ok(c4.searches.some((x) => x.id === sid && x.client === 'Confidential'))
+
+  // A job a run took over an hour ago and never answered is handed out again; after three tries it is closed.
+  await db.query(`update search_jobs set claimed_at = now() - interval '61 minutes' where id = $1`, [late])
+  const [{ c5 }] = await rows(`select agent_context('a6_calls', array['search_jobs']) as c5`)
+  assert.deepEqual(c5.search_jobs.map((x) => x.job_id), [late])
+  await db.query(`update search_jobs set claimed_at = now() - interval '61 minutes', attempts = 3 where id = $1`, [late])
+  const [{ c6 }] = await rows(`select agent_context('a6_calls', array['search_jobs']) as c6`)
+  assert.deepEqual(c6.search_jobs, [])
+  const [gone] = await rows(`select status, note, finished_at is not null as closed from search_jobs where id = $1`, [late])
+  assert.deepEqual(gone, { status: 'failed', note: 'No answer after three tries. Ask again.', closed: true })
+
+  const questions = { role_type: 'senior_pmm', from_jd: true, groups: [{ title: 'Scope and remit', questions: [{ id: 'q1', text: 'Who owns pricing?', why: 'The JD names two product lines but not who owns pricing', source: 'jd_gap' }] }] }
+  const tiers = { tiers: [{ tier: 1, title: 'Direct competitors', companies: [{ name: 'Hooli Sample', why: 'Same buyer' }] }], companies_csv: 'name,tier,why\nHooli Sample,1,Same buyer' }
+  const [{ run }] = await rows(`select agent_run_start('a6_calls', 'schedule', 'research') as run`)
+  const result = (d) => ({ kind: 'search_result', data: d })
+  const [{ out }] = await rows(`select agent_write($1, $2) as out`, [run.run_id, JSON.stringify([
+    result({ job_id: q, status: 'ready', content: 'Scope and remit\n1. Who owns pricing?', structured: questions }),
+    result({ job_id: low, status: 'failed', note: 'Nothing found on the open web under that name.' }),
+    result({ job_id: map, status: 'ready', content: 'Map', structured: [1] }),
+    result({ job_id: map, status: 'ready', content: 'x'.repeat(60000), structured: tiers }),
+    result({ job_id: map, status: 'ready', content: 'Map', structured: { groups: [] } }),
+    result({ job_id: map, status: 'ready', structured: tiers }),
+    result({ job_id: map, status: 'done' }),
+    result({ job_id: map, status: 'ready', content: 'Map', structured: tiers, tab: 'brief' }),
+    result({ job_id: q, status: 'ready', content: 'Again', structured: questions }),
+    result({ job_id: 'not-a-job', status: 'failed' }),
+    result({ job_id: '00000000-0000-0000-0000-000000000001', status: 'failed' }),
+    result({ job_id: map, status: 'ready', content: 'Tier 1: Hooli Sample', structured: tiers, note: 'Web search only' }),
+  ])])
+  const r = out.results
+  assert.equal(r[0].outcome, 'created', JSON.stringify(r[0]))
+  assert.equal(r[0].note, 'Version 2')
+  assert.equal(r[1].outcome, 'merged', JSON.stringify(r[1]))
+  assert.deepEqual([r[2].code, r[2].field], ['invalid', 'structured'])
+  assert.deepEqual([r[3].code, r[3].field], ['invalid', 'content'])
+  assert.deepEqual([r[4].code, r[4].field], ['invalid', 'structured'])
+  assert.deepEqual([r[5].code, r[5].field], ['invalid', 'content'])
+  assert.deepEqual([r[6].code, r[6].field], ['invalid', 'status'])
+  assert.deepEqual([r[7].outcome, r[7].field], ['rejected', 'tab'])
+  assert.equal(r[8].code, 'wrong_state')
+  assert.deepEqual([r[9].code, r[9].field], ['invalid', 'job_id'])
+  assert.equal(r[10].code, 'not_found')
+  assert.equal(r[11].outcome, 'created', JSON.stringify(r[11]))
+  assert.equal(r[11].note, 'Version 1')
+
+  // The owner's edited version stands; the agent's is the next one.
+  assert.deepEqual(await rows(`select version, created_by, content from search_notes where search_id = $1 and tab = 'questions' order by version`, [sid]), [
+    { version: 1, created_by: 'owner', content: 'Owner edit' },
+    { version: 2, created_by: 'agent', content: 'Scope and remit\n1. Who owns pricing?' },
+  ])
+  const [note] = await rows(`select id, owner_id, structured from search_notes where search_id = $1 and tab = 'questions' and version = 2`, [sid])
+  assert.equal(note.id, r[0].id)
+  assert.equal(note.owner_id, ownerId)
+  assert.deepEqual(note.structured, questions)
+  assert.equal(await count(`search_notes where search_id = '${sid}' and tab = 'lowdown'`), 0)
+  assert.deepEqual(await rows(`select kind, status, note, finished_at is not null as closed from search_jobs where search_id = $1 order by requested_at`, [sid]), [
+    { kind: 'questions', status: 'ready', note: null, closed: true },
+    { kind: 'lowdown', status: 'failed', note: 'Nothing found on the open web under that name.', closed: true },
+    { kind: 'map', status: 'ready', note: 'Web search only', closed: true },
+  ])
+  await rows(`select agent_run_finish($1, 'ok', '[]', '2 results written, 1 failed')`, [run.run_id])
+
+  // No other agent may send a result.
+  const again = await job(sid, 'lowdown', 1)
+  const [{ s3 }] = await rows(`select agent_run_start('a3_jobs', 'schedule', 'collect') as s3`)
+  const [{ no }] = await rows(`select agent_write($1, $2) as no`, [s3.run_id, JSON.stringify([result({ job_id: again, status: 'failed', note: 'x' })])])
+  assert.equal(no.results[0].code, 'not_allowed')
+  await rows(`select agent_run_finish($1, 'ok')`, [s3.run_id])
+  assert.equal(await count(`search_jobs where id = '${again}' and status = 'waiting'`), 1)
+
+  // The owner reads the queue and the results; the reviewer reads neither.
+  await owner(async () => {
+    assert.equal(await count(`search_jobs where search_id = '${sid}'`), 4)
+    assert.equal(await count(`search_notes where search_id = '${sid}' and created_by = 'agent'`), 2)
+    // Once a job is closed, the same kind can be asked for again.
+    const [{ next }] = await rows(`select request_search_job($1, 'questions') as next`, [sid])
+    assert.notEqual(next, q)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('search_jobs'), 0)
+    assert.equal(await count('search_notes'), 0)
+  })
+})
+
+test('0048 research prompt: the seed puts the research mode in front of the active a6_calls prompt, once', async () => {
+  await db.exec('begin')
+  try {
+    await db.exec(`update agent_prompts set active = false where agent = 'a6_calls' and active`)
+    await db.exec(`insert into agent_prompts (agent, version, body, active) values ('a6_calls', 901, '## Mode: searches (read this first)\n\nThe evening calls run.', true), ('a6_calls', 900, 'An old version.', false)`)
+    await db.exec(read('seed', 'agent_prompts_a6_research.sql'))
+    await db.exec(read('seed', 'agent_prompts_a6_research.sql'))
+    const [{ body }] = await rows(`select body from agent_prompts where agent = 'a6_calls' and active`)
+    assert.ok(body.startsWith('## Mode: research (read this first)'))
+    assert.equal(body.split('## Mode: research').length, 2, 'the section is there once')
+    assert.ok(body.endsWith('## Mode: searches (read this first)\n\nThe evening calls run.'), 'the rest of the prompt is kept')
+    assert.match(body, /context\?want=search_jobs/)
+    assert.match(body, /"kind":"search_result"/)
+    assert.doesNotMatch(body, /functions\/v1/, 'RECOS_URL already ends in /functions/v1')
+    assert.doesNotMatch(body, /—/)
+    assert.deepEqual(await rows(`select body from agent_prompts where agent = 'a6_calls' and version = 900`), [{ body: 'An old version.' }])
+  } finally {
+    await db.exec('rollback')
+  }
+})
+
 // ---------------------------------------------------------------- run
 
 let failed = 0

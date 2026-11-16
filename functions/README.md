@@ -43,6 +43,31 @@ supabase functions deploy run-agent --no-verify-jwt
 
 `--no-verify-jwt` because agents carry a key, not a session. The functions read `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`, which the platform sets for every function. No other secret is needed.
 
+## Research routine
+
+The new search flow (`docs/new-search-split.md`, migration 0048). When Jason asks for brief questions, a client lowdown or a market map on a search, the request waits in `search_jobs`. A Claude cloud routine picks it up, does the research and writes the result back; the screen reads Working, then the result appears. Nothing was added to the functions for this: `run-agent/context` passes `want=search_jobs` straight to the database, which allows it for `a6_calls` only, and `agent-write` passes the new kind `search_result` the same way. No redeploy is needed.
+
+It runs as the calls agent `a6_calls` in mode `research`, so it uses the key that agent already has. Before the first run, apply `db/migrations/0048_search_jobs.sql`, `db/policies/search_jobs.sql` and `db/seed/agent_prompts_a6_research.sql` in that order.
+
+1. In claude.ai, Routines, New routine. Name: RecOS A6: Research.
+2. Connectors: Outlook, Granola and Spott (all three are only read). Web search on.
+3. Environment variables: `RECOS_URL` (already ends in `/functions/v1`) and `RECOS_KEY_A6_CRM`, the same two the other A6 routines use.
+4. Schedule: every 15 minutes, 07:00 to 19:00 UK, weekdays. A routine runs at most hourly, so make four with the same prompt, at :02, :17, :32 and :47.
+5. Prompt: the text below.
+
+A run with nothing waiting makes two calls and stops. A run with work takes up to three jobs; a job it claims and never answers is handed out again after an hour and closed as failed after three tries.
+
+Prompt to paste:
+
+> You are the RecOS agent `a6_calls`, running in mode `research`. Do exactly this.
+>
+> 1. POST `$RECOS_URL/run-agent/run-start` with headers `X-Agent-Name: a6_calls`, `X-Agent-Key: $RECOS_KEY_A6_CRM`, `Content-Type: application/json` and body `{"trigger":"schedule","mode":"research"}`. The reply has `run_id`, `enabled` and `prompt` (with `body` and `blocks`).
+> 2. If `enabled` is false, or the reply is an error, stop. Do nothing else.
+> 3. Follow the section "## Mode: research" of `prompt.body`, exactly, and no other section. It starts with GET `$RECOS_URL/run-agent/context?want=search_jobs` with the same two key headers. If that returns no jobs, go straight to step 5 with status `ok` and summary "No research waiting".
+> 4. Where it says write, POST `$RECOS_URL/agent-write` with the same headers and body `{"run_id":"<run_id>","records":[{"kind":"search_result","data":{...}}]}`, one record per POST. Read each result's `outcome`; on `rejected`, do what the prompt says.
+> 5. Finish with POST `$RECOS_URL/run-agent/run-finish`, same headers, body `{"run_id":"<run_id>","status":"ok|partial|failed","errors":[{"source":"...","message":"..."}],"summary":"<line 1>\n<line 2>"}`.
+> 6. Outlook, Granola and Spott are for reading only: never send, draft, create or change anything in them. Web search and web fetch are allowed for the lowdown and the map. Never store, print or send an email address, phone number or key anywhere but these calls.
+
 ## Agent keys
 
 Made in Settings, Agents, Create new key. The plain key is shown once and stored only as a hash. Put it in the agent's own task settings as `X-Agent-Key`. Rotate every 90 days (34.3).
