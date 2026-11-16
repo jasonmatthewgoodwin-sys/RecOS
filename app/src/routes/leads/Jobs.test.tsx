@@ -67,12 +67,13 @@ describe('Jobs', () => {
     expect(main.querySelectorAll('ul')).toHaveLength(1)
     expect(main.querySelectorAll('svg:not([data-icon]), canvas, img')).toHaveLength(0)
     expect(main.querySelectorAll('[data-kind="primary"]')).toHaveLength(0)
-    // Highest fit first. The row carries the role, the company, the city and the days since first seen.
-    expect(rows()[0]).toHaveTextContent('Senior PMM')
-    expect(rows()[0]).toHaveTextContent('Northwind Sample Co')
+    // Newest posting first within the fit group (Jason, 16 November). The row carries the role,
+    // the company, the city and the days since it was posted (or first seen, when the post date is unknown).
+    expect(rows()[0]).toHaveTextContent('Director of PMM')
+    expect(row('Senior PMM')).toHaveTextContent('Northwind Sample Co')
     expect(line('Senior PMM')).toHaveTextContent('New York 2d')
-    expect(rows()[0].querySelector('[data-dot]')).toHaveAttribute('data-dot', 'solid')
-    expect(rows()[2]).toHaveTextContent('Existing client')
+    expect(row('Senior PMM').querySelector('[data-dot]')).toHaveAttribute('data-dot', 'solid')
+    expect(row('Head of Product Marketing')).toHaveTextContent('Existing client')
   })
 
   it('T-LEAD-2 marks a lead Chased from the row: hollow dot, hero up by one, meter gains a tick', async () => {
@@ -80,6 +81,7 @@ describe('Jobs', () => {
     open()
     await waitFor(() => expect(values()).toEqual(['12/20', '09']))
     expect(screen.getByRole('img', { name: '12 of 20' })).toBeInTheDocument()
+    const at = Array.from(rows()).findIndex((r) => r.textContent?.includes('Senior PMM'))
     await userEvent.hover(row('Senior PMM'))
     await userEvent.click(action('Senior PMM', 'Chased'))
     expect(row('Senior PMM').querySelector('[data-dot]')).toHaveAttribute('data-dot', 'hollow')
@@ -87,7 +89,7 @@ describe('Jobs', () => {
     await waitFor(() => expect(values()[0]).toBe('13/20'))
     expect(screen.getByRole('img', { name: '13 of 20' }).querySelectorAll('[data-filled="true"]')).toHaveLength(13)
     // The row stays where it was, so nothing shifts under the cursor. New is one fewer.
-    expect(rows()[0]).toHaveTextContent('Senior PMM')
+    expect(rows()[at]).toHaveTextContent('Senior PMM')
     expect(values()[1]).toBe('08')
   })
 
@@ -306,7 +308,7 @@ describe('Jobs', () => {
     await userEvent.keyboard('k')
     expect(rows()[0]).toHaveFocus()
     await userEvent.keyboard('x')
-    const card = screen.getByRole('dialog', { name: 'Senior PMM' })
+    const card = screen.getByRole('dialog', { name: 'Director of PMM' })
     expect(within(card).getByRole('combobox', { name: 'Reason' })).toBeInTheDocument()
   })
 })

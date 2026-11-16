@@ -278,7 +278,7 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onCam
           </>
         ) : undefined
       }
-      foot={`First seen ${longDate(lead.firstSeenOn)}`}
+      foot={lead.postedOn ? `Posted ${longDate(lead.postedOn)}. First seen ${longDate(lead.firstSeenOn)}` : `First seen ${longDate(lead.firstSeenOn)}`}
       onClose={onClose}
     />
   )

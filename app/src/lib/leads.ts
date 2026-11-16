@@ -82,6 +82,24 @@ export function byFit(a: JobLead, b: JobLead): number {
 
 export const LOWER_FIT = 40
 
+/** The day a lead was posted, or the day it was first seen when that is unknown (0047). */
+export function postedDay(lead: JobLead): string {
+  return lead.postedOn ?? lead.firstSeenOn
+}
+
+/**
+ * The Jobs list order (Jason, 16 November): the lower-fit group stays below the
+ * line, and within each group the newest posting comes first.
+ */
+export function byPosted(a: JobLead, b: JobLead): number {
+  const la = isLowerFit(a) ? 1 : 0
+  const lb = isLowerFit(b) ? 1 : 0
+  if (la !== lb) return la - lb
+  const d = postedDay(b).localeCompare(postedDay(a))
+  if (d !== 0) return d
+  return (b.fitScore ?? -1) - (a.fitScore ?? -1)
+}
+
 export function isLowerFit(lead: JobLead): boolean {
   return lead.fitScore === null || lead.fitScore < LOWER_FIT
 }

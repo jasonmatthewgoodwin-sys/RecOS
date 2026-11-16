@@ -10,7 +10,8 @@ import { data, type JobLead, type JobStage, type OutreachPatch } from '../../lib
 import { twoDigits } from '../../lib/format'
 import { isTyping } from '../../lib/keyboard'
 import {
-  byFit,
+  byPosted,
+  postedDay,
   cityName,
   daysSince,
   filters,
@@ -166,7 +167,7 @@ export function Jobs() {
   useRowKeys(cardId === null, (id) => openCard(id, 'bin'))
 
   const all = leads.data ?? []
-  const visible = all.filter((l) => matchesFilter(l, filter) || kept.has(l.id)).sort(byFit)
+  const visible = all.filter((l) => matchesFilter(l, filter) || kept.has(l.id)).sort(byPosted)
   const newCount = leads.data === undefined ? undefined : twoDigits(all.filter((l) => l.stage === 'new').length)
   const card = cardId ? all.find((l) => l.id === cardId) : undefined
 
@@ -221,7 +222,7 @@ export function Jobs() {
       title: l.role,
       detail: l.company,
       detailWord: l.existingClient ? 'Existing client' : undefined,
-      meta: `${cityName(l.city)} ${daysSince(l.firstSeenOn, today)}d`.trim(),
+      meta: `${cityName(l.city)} ${daysSince(postedDay(l), today)}d`.trim(),
       done: !open,
       section: isLowerFit(l) ? 'Lower fit' : undefined,
       actions,

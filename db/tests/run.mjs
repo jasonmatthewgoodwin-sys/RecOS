@@ -820,6 +820,20 @@ test('nightly league and signal sweeps count cycles and expire signals, and the 
   })
 })
 
+test('li_post_date reads the posting day from a LinkedIn post id (0047)', async () => {
+  const [r] = await rows(
+    `select li_post_date(array['https://www.linkedin.com/feed/update/urn:li:share:7525703447967408129/'])::text as urn,
+            li_post_date(array['https://www.linkedin.com/posts/someone_hiring-pmm-share-7525703447967408129-AbCd'])::text as posts,
+            li_post_date(array['https://example.com/job'])::text as none,
+            li_post_date(null)::text as empty`,
+  )
+  // Id 7525703447967408129 >> 22 is 9 November 2026, 23:38 UTC, which is the 9th in London.
+  assert.equal(r.urn, '2026-11-09')
+  assert.equal(r.posts, '2026-11-09')
+  assert.equal(r.none, null)
+  assert.equal(r.empty, null)
+})
+
 test('add_working_days skips weekends', async () => {
   const [r] = await rows(
     `select add_working_days('2026-11-12', 2)::text as thu, add_working_days('2026-11-13', 2)::text as fri,

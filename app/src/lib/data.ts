@@ -64,6 +64,8 @@ export type JobLead = {
   draft: string | null
   /** Plain dates, 2026-11-14. */
   firstSeenOn: string
+  /** The day the post was published (from the LinkedIn post id, 0047); null when unknown. */
+  postedOn?: string | null
   chasedOn: string | null
   repliedOn: string | null
   meetingOn: string | null
@@ -1079,7 +1081,7 @@ const live: DataSource = {
       .from('job_leads')
       .select(
         'id, company, role, city, country, level, sources, source_urls, poster_name, poster_title, poster_profile_url, outreach_stage, outreach_connection_on, outreach_connected_on, outreach_messaged_on, outreach_replied_on, reply_outcome, connection_note, first_message, outreach_note, uk_to_us, ' +
-          'fit_score, fit_reason, existing_client, stage, dead_reason, matched, first_seen_on, chased_on, replied_on, ' +
+          'fit_score, fit_reason, existing_client, stage, dead_reason, matched, first_seen_on, posted_on, chased_on, replied_on, ' +
           'meeting_on, won_on, spec_message:messages!spec_message_id (body)',
       )
       .order('fit_score', { ascending: false, nullsFirst: false })
@@ -1103,6 +1105,7 @@ const live: DataSource = {
       dead_reason: string | null
       matched: { person_id?: string | null; name?: string; reason?: string }[]
       first_seen_on: string
+      posted_on: string | null
       chased_on: string | null
       replied_on: string | null
       meeting_on: string | null
@@ -1151,6 +1154,7 @@ const live: DataSource = {
         .map((m) => ({ personId: m.person_id ?? null, name: m.name!, reason: m.reason ?? '' })),
       draft: r.spec_message?.body ?? null,
       firstSeenOn: r.first_seen_on,
+      postedOn: r.posted_on,
       chasedOn: r.chased_on,
       repliedOn: r.replied_on,
       meetingOn: r.meeting_on,
