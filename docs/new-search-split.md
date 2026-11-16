@@ -85,3 +85,10 @@ The standard question bank shows at once. Tailored questions, the lowdown and th
 - Jason's half: migrations applied to the test project, db tests pass, a live request for each of the three kinds comes back `ready` with the shapes above.
 - Mia's half: the four steps work on sample data and on the test project, app tests pass, nothing scrolls the page at laptop width.
 - Together: one real new search run end to end with Jason watching.
+
+## Added 16 November, after the first live runs
+
+- **Order.** Questions and the lowdown come before the brief call. The market map comes after it and is built from the Granola notes of that call, so the Map action should only be offered once the brief call has happened (a call with the client in the last 60 days, or the owner saying so).
+- **Map size.** The map aims for about 200 companies in three tiers; the first live run reached 122. Tier lists are long, so the Map tab should scroll inside its own pane and let the owner filter by tier. Deep-checked companies carry hq, size and movability; light-checked ones carry only name, why and `confidence: "Probable"`.
+- **Boolean.** `boolean` now starts with company strings in batches of 25 per tier ("Tier 1 companies, 1 of 2"), then the general strings. Each needs a copy button.
+- **A job can come back `ready` with a note** (for example "Reached 122 companies, not 200"). Show the note under the result.
