@@ -18,6 +18,7 @@ import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { bulletLines, candidateNeedsDesk, closeChecks, feedbackWord, healthOf, healthWord, inPlay, isLive, numberLine, offerWord, priorityOrder, priorityWord, searchTone, stageOrder, stageWord, statusWord } from '../../lib/searches'
 import { sections } from '../../lib/sections'
 import { BriefTab, CallsTab, PipelineHeader, PreBriefTab } from './WorkspaceTabs'
+import { InterviewPrep } from './InterviewPrep'
 import { ukClock } from '../../lib/time'
 
 // Searches (30.1 to 30.8): one short list grouped by priority, two numbers
@@ -305,7 +306,7 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
     body = <BriefTab search={s} note={brief} loading={notes.status === 'loading' && !notes.data} onNote={onNote} />
   } else if (tab === 'pipeline') {
     body = cand ? (
-      <CandidateView c={cand} today={today} onBack={() => setCand(null)} onPatch={(change) => void patchCand(cand, change)} />
+      <CandidateView c={cand} search={s} today={today} onBack={() => setCand(null)} onPatch={(change) => void patchCand(cand, change)} />
     ) : (
       <div className="flex flex-col gap-6">
         <PipelineHeader search={s} onNote={onNote} />
@@ -356,6 +357,7 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
 
 function PipelineTab({ search: s, candidates, today, onOpen, onAdded, onNote }: { search: Search; candidates: SearchCandidate[]; today: string; onOpen: (id: string) => void; onAdded: () => void; onNote: (t: string) => void }) {
   const [adding, setAdding] = useState(false)
+  const [prep, setPrep] = useState(false)
   const members = useQuery('people.members', data.members)
   const play = candidates.filter((c) => inPlay.includes(c.stage))
   const waiting = candidates.filter((c) => c.stage === 'submitted' && !c.feedbackReceivedOn).length
@@ -388,7 +390,10 @@ function PipelineTab({ search: s, candidates, today, onOpen, onAdded, onNote }: 
       ))}
       <div className="flex flex-wrap gap-6">
         <TextLink label={adding ? 'Hide people' : 'Add from People'} icon="plus" onClick={() => setAdding((a) => !a)} />
+        {/* Works with nobody in the pipeline here, since the CRM holds it (Jason, 16 November 2026). */}
+        {!prep && <TextLink label="Interview prep" icon="mail" onClick={() => setPrep(true)} />}
       </div>
+      {prep && <InterviewPrep client={s.client} role={s.role} confidential={s.confidential} onClose={() => setPrep(false)} />}
       {adding && (
         <ul className="flex flex-col" aria-label="People to add">
           {(members.data ?? [])
@@ -404,9 +409,10 @@ function PipelineTab({ search: s, candidates, today, onOpen, onAdded, onNote }: 
 }
 
 /** The candidate-on-search card (30.4), inside the workspace. */
-function CandidateView({ c, today, onBack, onPatch }: { c: SearchCandidate; today: string; onBack: () => void; onPatch: (change: CandidatePatch) => void }) {
+function CandidateView({ c, search: s, today, onBack, onPatch }: { c: SearchCandidate; search: Search; today: string; onBack: () => void; onPatch: (change: CandidatePatch) => void }) {
   const [reason, setReason] = useState('')
   const [asking, setAsking] = useState<'rejected' | 'withdrew' | null>(null)
+  const [prep, setPrep] = useState(false)
   const [interview, setInterview] = useState(c.nextInterviewAt ? c.nextInterviewAt.slice(0, 16) : '')
   const primaryWord = c.stage === 'spoken' || c.stage === 'sourced' ? 'Send confirmation' : c.stage === 'submitted' ? 'Nudge client' : c.stage === 'first_stage' || c.stage === 'later_stage' ? (c.prepSent ? 'Call after interview' : 'Send prep') : null
   const choosable: CandidateStage[] = ['sourced', 'spoken', 'submitted', 'first_stage', 'later_stage', 'offer']
@@ -444,7 +450,8 @@ function CandidateView({ c, today, onBack, onPatch }: { c: SearchCandidate; toda
         <Switch on={c.prepSent} label="Prep sent" onChange={(on) => onPatch({ prepSent: on })} />
       </div>
       <div className="flex flex-wrap items-center gap-6">
-        {primaryWord && <PillButton label={primaryWord} kind="primary" onClick={() => onPatch({ lastCandidateContactOn: today, ...(primaryWord === 'Send prep' ? { prepSent: true } : {}) })} />}
+        {primaryWord && <PillButton label={primaryWord} kind="primary" onClick={() => (primaryWord === 'Send prep' ? setPrep(true) : onPatch({ lastCandidateContactOn: today }))} />}
+        {primaryWord !== 'Send prep' && inPlay.includes(c.stage) && !prep && <TextLink label="Interview prep" icon="mail" onClick={() => setPrep(true)} />}
         {inPlay.includes(c.stage) && asking === null && (
           <>
             <TextLink label="Rejected" onClick={() => setAsking('rejected')} />
@@ -452,6 +459,7 @@ function CandidateView({ c, today, onBack, onPatch }: { c: SearchCandidate; toda
           </>
         )}
       </div>
+      {prep && <InterviewPrep client={s.client} role={s.role} confidential={s.confidential} name={c.name} interviewAt={c.nextInterviewAt} onUsed={() => onPatch({ lastCandidateContactOn: today, prepSent: true })} onClose={() => setPrep(false)} />}
       {asking && (
         <form
           className="flex flex-wrap items-end gap-4"
