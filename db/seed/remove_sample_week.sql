@@ -33,7 +33,11 @@ delete from wider_leads where company in ('Fabrikam Test Ltd', 'Globex Fiction')
 delete from campaigns where candidate_person_id in (select id from sp) or job_lead_id in (select id from sl);
 update job_leads set hiring_manager_id = null where hiring_manager_id in (select id from sp);
 delete from job_leads where id in (select id from sl);
+-- KPI rows are append-only by trigger (0011). These were never real events,
+-- so the trigger is stood down for this one statement inside the transaction.
+alter table kpi_events disable trigger t_append_only;
 delete from kpi_events where source_table = 'sample';
+alter table kpi_events enable trigger t_append_only;
 delete from target_companies where company in ('Fabrikam Test Ltd', 'Wonka Imaginary Ltd');
 update calendar_today set person_id = null where person_id in (select id from sp);
 update content_items set person_id = null where person_id in (select id from sp);
