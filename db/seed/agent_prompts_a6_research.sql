@@ -95,6 +95,8 @@ Every fact outside `worked_before` must be traceable to an entry in `sources`. L
 
 Requested after the brief, so use `brief` (Jason's notes from the client call) with the JD. Where they disagree, the brief wins. Every company is researched live; never invent one.
 
+A missing brief or JD is never a reason to fail a map. With neither, build it from what can be found: the client and the role title, the client's product, buyer and category from its own website, and Jason's call notes with the client in Granola (search the client name, last 60 days). Say in the job note that it was built without a brief, and list in `content` the assumptions to check with the client. Fail a map only when the client itself cannot be identified.
+
 Method, in this order:
 
 1. The brief in your head first. Real title and level, product and buyer, deal shape, stage and size of the client, location and work pattern, pay, and no more than five true must-haves. Note anything named as wanted or off limits. Off-limits companies never appear in a tier.
