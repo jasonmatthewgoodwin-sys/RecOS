@@ -1139,7 +1139,7 @@ test('0054 LinkedIn outreach: a fresh lead queues its own connection request thr
     assert.equal((await rows(`select connect_message_id from job_leads where id = $1`, [old.id]))[0].connect_message_id, null, 'an old post waits for the owner')
     const [m] = await rows(`select type, channel, state, hold_reason, body, created_by, to_profile_url from messages where id = $1`, [fl.connect_message_id])
     assert.deepEqual([m.type, m.channel, m.state, m.hold_reason, m.created_by], ['linkedin_connect', 'linkedin', 'draft', 'Template needs approval', 'a3_jobs'])
-    assert.match(m.body, /^Hi Gail,/)
+    assert.equal(m.body, "Gail, I'm one of the leading PMM headhunters in the US. Would love to connect.")
     assert.ok(m.body.length <= 300)
     assert.equal(m.to_profile_url, 'https://example.com/in/gail')
 
@@ -1168,7 +1168,7 @@ test('0054 LinkedIn outreach: a fresh lead queues its own connection request thr
     const [a] = await rows(`select outreach_stage, outreach_connection_on, connection_note from job_leads where id = $1`, [fresh.id])
     assert.equal(a.outreach_stage, 'connection_sent')
     assert.ok(a.outreach_connection_on)
-    assert.match(a.connection_note, /^Hi Gail,/)
+    assert.match(a.connection_note, /^Gail, I'm one of the leading PMM headhunters in the US\./)
     const [b] = await rows(`select outreach_stage, li_message_id from job_leads where id = $1`, [old.id])
     assert.equal(b.outreach_stage, 'connected', 'already a first connection skips to connected')
     assert.ok(b.li_message_id)
@@ -1934,7 +1934,7 @@ test('0034: templates carry versions and approval; the engine decides, fills, qu
     assert.deepEqual(states.map((x) => x.state), ['queued', 'queued', 'held'])
     assert.equal(states[2].note, 'Cap reached')
     assert.equal((await rows(`select caps_snapshot ->> 'run' as r from send_log where outcome = 'held' and type = 'linkedin_connect' order by logged_at desc limit 1`))[0].r, '2')
-    assert.match((await rows(`select body from messages where type = 'linkedin_connect' and state = 'queued' limit 1`))[0].body, /^Hi Uma,|^Hi Vic,/)
+    assert.match((await rows(`select body from messages where type = 'linkedin_connect' and state = 'queued' limit 1`))[0].body, /^(Uma|Vic), I'm one of the leading PMM headhunters in the US\. Would love to connect\.$/)
 
     // The tick hands a due email to the sender and marks it sending. The report marks it sent and tells the rest of RecOS.
     await db.query(`insert into follow_ups (owner_id, person_id, person_name, kind, reason, source, due_on, dedup_key, message_id) values ($1, $2, 'Tess Example', 'after_candidate_call', 'Thank her for the call', 'call', current_date, 'fu-tess-0034', $3)`, [ownerId, tess, m1])

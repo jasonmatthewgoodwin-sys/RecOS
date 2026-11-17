@@ -112,3 +112,4 @@ Departures from the design, and choices the design left open. Newest last. Anyth
 | 2026-11-17 | A task with no date of its own falls due three days after it surfaced; tiles show source, action and surfaced day | Mia, 17 November: anything older than three days is overdue | Pending Jason |
 | 2026-11-17 | The send engine's queue shows on Settings, Send rules, linked from Sent for you and from leads | Mia, 17 November: the send engine must be visible in the platform | Pending Jason |
 | 2026-11-17 | Task titles read as the action to take, worded from where the task stands | Mia, 17 November: change the task title to the action, such as connect with new lead or message | Pending Jason |
+| 2026-11-17 | The approved connection note is "<first name>, I'm one of the leading PMM headhunters in the US. Would love to connect.", no greeting, no sign-off. Replaces the version Jason approved at 10:55 | Jason, through Mia, 17 November | Agreed |
