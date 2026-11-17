@@ -6,6 +6,7 @@ import { Draft } from '../../components/Draft'
 import { HeroStat } from '../../components/HeroStat'
 import { Note } from '../../components/Note'
 import { PageHeader } from '../../components/PageHeader'
+import { SentForYou } from '../../components/SentForYou'
 import { Dots, EmptyLine } from '../../components/Quiet'
 import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
@@ -314,7 +315,7 @@ export function FollowUps() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-start justify-between gap-4">
-        <PageHeader title={leadsTab.label} tabs={tabs} />
+        <PageHeader title={leadsTab.label} tabs={tabs} aside={<SentForYou area="email" />} />
         {focus && (
           <p className="label-caps shrink-0 pt-2 text-ink-2" data-testid="focus-timer">
             {timeUp ? 'Time' : `Monday block ${clockText(seconds)}`}

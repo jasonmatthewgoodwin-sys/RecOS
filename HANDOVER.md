@@ -297,3 +297,17 @@ What must still be done by hand:
 
 1. In RecOS, Settings, Agents: Task assistant, Create key. Then make the four claude.ai routines in `agents/prompts/a9_tasks.md`. Until they exist, an ask in a task's chat waits.
 
+## LinkedIn outreach and Sent for you (17 November, cloud session)
+
+What was found and why it matters is in `docs/for-jason/agents-and-laptop.md`. In short: nothing had ever sent a LinkedIn request, the jobs agent had never run on its schedule, the campaign runner and signals agent had never run, and the agents stop when Jason's laptop sleeps.
+
+What changed: LinkedIn requests now go through the send engine like email, with its caps, window, do-not-contact list, stop switch and log. A fresh lead with a poster queues its own request. The LinkedIn sender, on Jason's laptop, sends them and checks who accepted. An acceptance drafts a first message for Jason to send himself. Job lead tasks show the lead's dates and outreach status and act on LinkedIn. Every tab where an agent reaches people has a Sent for you log.
+
+Applied to the project on 17 November: migrations 0054 and 0055, the tasks and log views, the jobs agent prompt update, and the send function. 32 requests are prepared and waiting.
+
+What Jason must do, in order:
+
+1. Approve the connection note in RecOS, Settings, Templates, LinkedIn connection note. Nothing goes until he does.
+2. Set up the LinkedIn sender on his laptop from `agents/prompts/linkedin_sender.md`.
+3. Paste the prompt at the end of `docs/for-jason/agents-and-laptop.md` into Claude on his laptop. It moves the other agents to the cloud, checks the campaign runner and signals agent, and makes his hiring report post leads to RecOS without sending anything itself.
+

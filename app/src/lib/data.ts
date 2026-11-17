@@ -7,7 +7,7 @@ import { supabase } from './supabase'
 import { splitCopy, topicFrom, topicKey } from './calendar'
 import type { CaptureKind, SearchHit } from './capture'
 import { mondayOf, shiftDate, ukClock, weekdayOf } from './time'
-import { band, type Task, type TaskChat, type TaskChatLine, type TaskEdits, type TaskJob, type TaskJobKind, type TaskKind, type TaskLink, type TaskSource } from './tasks'
+import { band, type LeadOutreach, type Task, type TaskChat, type TaskLead, type TaskChatLine, type TaskEdits, type TaskJob, type TaskJobKind, type TaskKind, type TaskLink, type TaskSource } from './tasks'
 import type { Tone } from '../theme/tokens'
 
 export type CalendarCall = {
@@ -653,6 +653,40 @@ export type Call = {
   /** The agent's own few lines on the call (0051). Never the note text. */
   summary: string | null
 }
+export type BehalfArea = 'linkedin' | 'email' | 'campaign'
+
+/** One thing that reached a person on the owner's behalf (0054). */
+export type BehalfRow = {
+  key: string
+  at: string
+  area: BehalfArea
+  what: string
+  toName: string
+  /** queued, sent, held, failed, cancelled, accepted, gone, added, enrolled */
+  outcome: string
+  /** auto: the engine or an agent did it; you: the owner pressed or marked it. */
+  how: 'auto' | 'you'
+  by: string
+  detail: string | null
+  link: string | null
+}
+
+type LeadRow = {
+  id: string; posted_on: string | null; found_on: string | null; poster_name: string | null; poster_title: string | null; profile_url: string | null
+  stage: LeadOutreach; connection_on: string | null; connected_on: string | null; messaged_on: string | null; replied_on: string | null; reply_outcome: string | null
+  connect_state: string | null; connect_hold: string | null; connect_after: string | null
+  campaign: { name: string; added_on: string | null; enrolled_on: string | null } | null
+}
+
+function leadFromRow(r: LeadRow): TaskLead {
+  return {
+    id: r.id, postedOn: r.posted_on, foundOn: r.found_on, posterName: r.poster_name, posterTitle: r.poster_title, profileUrl: r.profile_url,
+    stage: r.stage ?? 'found', connectionOn: r.connection_on, connectedOn: r.connected_on, messagedOn: r.messaged_on, repliedOn: r.replied_on, replyOutcome: r.reply_outcome,
+    connectState: r.connect_state, connectHold: r.connect_hold, connectAfter: r.connect_after,
+    campaign: r.campaign ? { name: r.campaign.name, addedOn: r.campaign.added_on, enrolledOn: r.campaign.enrolled_on } : null,
+  }
+}
+
 export type CallPatch = Partial<Pick<Call, 'searchId' | 'matchConfidence' | 'wRecord' | 'wCv' | 'wNote' | 'wOnSearch' | 'wFollowUp' | 'cvRequested' | 'skipReason'>>
 
 export type AStarSuggestion = { id: string; name: string; title: string | null; company: string | null; city: string | null; linkedinUrl: string | null; why: string | null; week: string; verdict: 'pending' | 'good' | 'not_good' }
@@ -974,6 +1008,14 @@ export interface DataSource {
   openInOutlook(task: Task): Promise<string>
   /** A task with no agent draft gets its own message row, so Open in Outlook and Copy work. Returns the message id. */
   createTaskDraft(task: Task, subject: string, body: string): Promise<string>
+  /** Ask the send engine for a LinkedIn connection request to the lead's poster (0054). Returns the engine's one line. */
+  connectLead(task: Task): Promise<string>
+  /** The owner sent the LinkedIn message by hand: mark it, which moves the lead to messaged. */
+  markLinkedInSent(task: Task): Promise<string>
+  /** Put the lead's poster in a Spott campaign (0040). */
+  addLeadToCampaign(task: Task): Promise<void>
+  /** Everything that reached a person on the owner's behalf, newest first (0054). Area leads is LinkedIn and campaigns. */
+  onYourBehalf(area: BehalfArea | 'leads' | null): Promise<BehalfRow[]>
   /** The chat on a task (0052): every line so far and the open or last job. */
   taskChat(taskKey: string): Promise<TaskChat>
   /** Ask the task assistant: is it still relevant, change what it is for, or do it. Returns the job id. */
@@ -2154,6 +2196,7 @@ const live: DataSource = {
       o_notes: string | null
       o_due_on: string | null
       o_sort_order: number | null
+      lead: LeadRow | null
     }
     return ((data ?? []) as Row[]).map((r) => ({
       key: r.task_key,
@@ -2182,7 +2225,45 @@ const live: DataSource = {
       stale: r.stale,
       sourceUrl: r.source_url,
       edits: { title: r.o_title, notes: r.o_notes, dueOn: r.o_due_on, sortOrder: r.o_sort_order },
+      lead: r.lead ? leadFromRow(r.lead) : null,
     }))
+  },
+
+  async connectLead(task) {
+    if (!task.lead) throw new Error('No lead on this task')
+    const { data, error } = await supabase!.rpc('lead_connect', { p_lead: task.lead.id })
+    fail(error)
+    const out = data as { state: string; note?: string }
+    return out.note ?? (out.state === 'queued' ? 'Queued' : out.state)
+  },
+
+  async markLinkedInSent(task) {
+    if (!task.messageId) throw new Error('Nothing to mark')
+    const out = await live.sendAction(task.messageId, 'mark_sent')
+    return out.note ?? 'Marked as sent'
+  },
+
+  async addLeadToCampaign(task) {
+    const who = task.lead?.posterName ?? task.personName ?? 'The poster'
+    const role = task.title.replace(/\s+at\s+.+$/, '')
+    await live.addCampaign({
+      name: `${who} at ${task.company ?? 'the company'}`,
+      tool: 'email',
+      jobLeadId: task.lead?.id ?? task.refId,
+      candidatePersonId: null,
+      steps: [
+        { channel: 'email', note: `Spec email about the ${role} role` },
+        { channel: 'phone', note: 'Call if no reply in three working days' },
+        { channel: 'linkedin', note: 'Message if the call does not land' },
+      ],
+    })
+  },
+
+  async onYourBehalf(area) {
+    const { data, error } = await supabase!.rpc('on_your_behalf', { p_area: area, p_limit: 200 })
+    fail(error)
+    type Row = { key: string; at: string; area: BehalfArea; what: string; type: string; to_name: string; outcome: string; how: 'auto' | 'you'; by: string; detail: string | null; link: string | null }
+    return ((data ?? []) as Row[]).map((r) => ({ key: r.key, at: r.at, area: r.area, what: r.what, toName: r.to_name, outcome: r.outcome, how: r.how, by: r.by, detail: r.detail, link: r.link }))
   },
 
   async completeTask(task, detail) {

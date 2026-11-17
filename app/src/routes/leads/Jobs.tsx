@@ -4,6 +4,7 @@ import { HeroStat } from '../../components/HeroStat'
 import { Note } from '../../components/Note'
 import { NumberLine } from '../../components/NumberLine'
 import { PageHeader } from '../../components/PageHeader'
+import { SentForYou } from '../../components/SentForYou'
 import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
 import { data, type JobLead, type JobStage, type OutreachPatch } from '../../lib/data'
@@ -237,7 +238,7 @@ export function Jobs() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title={leadsTab.label} tabs={tabs} />
+      <PageHeader title={leadsTab.label} tabs={tabs} aside={<SentForYou area="leads" />} />
 
       <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:flex md:gap-x-16">
         <HeroStat label="Chased this week" value={chasedText} meter={meter} onClick={() => setFilter('chased')} />

@@ -16,20 +16,48 @@ with base as (
   -- 1. What the agents and rules raised (8.1), while it is open.
   select
     'inbox_items:' || i.id as task_key, 'inbox_items' as source, i.id as source_id,
-    i.type as kind, i.title, i.why, p.display_name as person_name, i.company,
+    i.type as kind, i.title,
+    -- A job lead's why is the post's own words; the agent's bookkeeping goes.
+    case when i.type = 'job_lead'
+      then nullif(btrim(regexp_replace(coalesce(i.why, ''), '^Reported in the LinkedIn PMM hiring report of [0-9-]+\.\s*(Post:\s*)?', '')), '')
+      else i.why end as why,
+    coalesce(p.display_name, jl.poster_name) as person_name, i.company,
     -- A lead or a chase is this week's work, not someday's (Jason, 16 Nov
-    -- 2026): with no date from the agent it falls due three days after it
-    -- was found, and ranks at least as a week item.
-    case when i.type in ('job_lead', 'wider_lead', 'ad_chase', 'referral', 'signal') and i.due_on is null
+    -- 2026). Job leads go by how recently the role was posted instead
+    -- (17 Nov): the newest first, and a fresh one or one that has just
+    -- connected is Now.
+    case when i.type = 'job_lead' then i.due_on
+      when i.type in ('wider_lead', 'ad_chase', 'referral', 'signal') and i.due_on is null
       then (i.created_at at time zone 'Europe/London')::date + 3 else i.due_on end as due_on,
-    case when i.type in ('job_lead', 'wider_lead', 'ad_chase') then greatest(i.rank, 30) else i.rank end
-      + least(extract(day from now() - i.created_at), 10) as rank,
-    null::text as waiting_on,
-    i.draft, i.draft_original, null::text as subject, null::text as channel, null::uuid as message_id, null::text as message_state,
+    case
+      when i.type = 'job_lead' and jl.id is not null then
+        30 + greatest(0, 30 - (current_date - coalesce(jl.posted_on, jl.first_seen_on, (i.created_at at time zone 'Europe/London')::date)))
+          + case jl.outreach_stage when 'connected' then 25 when 'replied' then 30 else 0 end
+      when i.type in ('job_lead', 'wider_lead', 'ad_chase') then greatest(i.rank, 30) + least(extract(day from now() - i.created_at), 10)
+      else i.rank + least(extract(day from now() - i.created_at), 10) end as rank,
+    case when i.type = 'job_lead' then
+      case jl.outreach_stage
+        when 'connection_sent' then coalesce(split_part(jl.poster_name, ' ', 1), 'The poster') || ' to accept'
+        when 'messaged' then coalesce(split_part(jl.poster_name, ' ', 1), 'The poster') || ' to reply'
+        else case when cm.state in ('queued', 'sending') then 'The LinkedIn sender' end
+      end end as waiting_on,
+    case when i.type = 'job_lead' and jl.outreach_stage = 'connected' then lm.body
+         when i.type = 'job_lead' and cm.id is not null then cm.body
+         else i.draft end as draft,
+    case when i.type = 'job_lead' and jl.outreach_stage = 'connected' then lm.body
+         when i.type = 'job_lead' and cm.id is not null then cm.body
+         else i.draft_original end as draft_original,
+    null::text as subject,
+    case when i.type = 'job_lead' and coalesce(i.source_url, '') ilike '%linkedin.com%' then 'linkedin' end as channel,
+    case when i.type = 'job_lead' and jl.outreach_stage = 'connected' then lm.id when i.type = 'job_lead' then cm.id end as message_id,
+    case when i.type = 'job_lead' and jl.outreach_stage = 'connected' then lm.state when i.type = 'job_lead' then cm.state end as message_state,
     i.links, i.ref_table, i.ref_id, i.agent, null::uuid as search_id, i.created_at,
     i.status = 'stale' as stale, i.source_url
   from inbox_items i
   left join people p on p.id = i.person_id
+  left join job_leads jl on i.ref_table = 'job_leads' and jl.id = i.ref_id
+  left join messages cm on cm.id = jl.connect_message_id
+  left join messages lm on lm.id = jl.li_message_id
   where i.status in ('new', 'stale') and i.type <> 'auto_sent'
 
   union all
@@ -202,6 +230,17 @@ with base as (
 )
 select
   b.*,
+  -- The lead behind a job task: dates, the poster, where the outreach stands.
+  (select jsonb_build_object(
+      'id', jl.id, 'posted_on', jl.posted_on, 'found_on', jl.first_seen_on,
+      'poster_name', jl.poster_name, 'poster_title', jl.poster_title, 'profile_url', jl.poster_profile_url,
+      'stage', jl.outreach_stage, 'connection_on', jl.outreach_connection_on, 'connected_on', jl.outreach_connected_on,
+      'messaged_on', jl.outreach_messaged_on, 'replied_on', jl.outreach_replied_on, 'reply_outcome', jl.reply_outcome,
+      'connect_state', cm.state, 'connect_hold', cm.hold_reason, 'connect_after', cm.send_after,
+      'campaign', (select jsonb_build_object('name', c.name, 'added_on', c.created_at::date, 'enrolled_on', c.started_on)
+                   from campaigns c where c.job_lead_id = jl.id order by c.created_at desc limit 1))
+    from job_leads jl left join messages cm on cm.id = jl.connect_message_id
+    where b.kind = 'job_lead' and b.ref_table = 'job_leads' and jl.id = b.ref_id) as lead,
   o.title as o_title, o.notes as o_notes, o.due_on as o_due_on, o.sort_order as o_sort_order,
   o.status as o_status, o.snoozed_until as o_snoozed_until
 from base b

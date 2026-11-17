@@ -4,7 +4,7 @@
 import { composeLink } from './send'
 import type { Task, TaskChat, TaskEdits } from './tasks'
 import type {
-  SpokenPerson, SpecRequest,
+  SpokenPerson, SpecRequest, BehalfRow,
   SendLogRow, Template,
   Account,
   AStarSuggestion,
@@ -593,6 +593,15 @@ export function freshSampleAStar(): AStarSuggestion[] {
 }
 let sampleAStar = freshSampleAStar()
 let sampleWarm = new Set<string>(['p-ada'])
+/** What went out on the owner's behalf, newest first (0054). */
+const sampleBehalf: BehalfRow[] = [
+  { key: 'b1', at: `${daysAgo(0)}T14:05:00Z`, area: 'linkedin', what: 'LinkedIn connection note', toName: 'Ivy Placeholder', outcome: 'queued', how: 'auto', by: 'a3_jobs', detail: 'Sends at 09:20 on Wed 18 Nov America/New_York', link: 'https://example.com/in/ivy' },
+  { key: 'b2', at: `${daysAgo(1)}T15:10:00Z`, area: 'linkedin', what: 'Accepted your request', toName: 'Hal Sample', outcome: 'accepted', how: 'auto', by: 'sender', detail: 'Contoso Demo Inc', link: 'https://example.com/in/hal' },
+  { key: 'b3', at: `${daysAgo(3)}T14:20:00Z`, area: 'linkedin', what: 'LinkedIn connection note', toName: 'Hal Sample', outcome: 'sent', how: 'auto', by: 'a3_jobs', detail: 'Auto', link: 'https://example.com/in/hal' },
+  { key: 'b4', at: `${daysAgo(3)}T09:00:00Z`, area: 'campaign', what: 'Added to a campaign', toName: 'Ada to the New York PMM leads', outcome: 'added', how: 'you', by: 'owner', detail: 'email', link: null },
+  { key: 'b5', at: `${daysAgo(4)}T10:17:00Z`, area: 'email', what: 'Thank you after a call', toName: 'Finn Fictional', outcome: 'sent', how: 'auto', by: 'a6_calls', detail: 'Auto', link: null },
+]
+
 /** The chat on each task, by task key. Ada's follow-up has one exchange so the screen can be seen. */
 const sampleChat = new Map<string, TaskChat>([
   [
@@ -1142,13 +1151,22 @@ export function freshSampleTasks(): Task[] {
       why: 'B2B SaaS, about 400 people, New York. Posted two days ago.',
       company: 'Northwind Sample Co',
       rank: 32,
-      draft: 'Hi, I saw the Senior PMM role. I work only on product marketing hires into the US and have two people worth a look. Would a short call this week suit?',
-      draftOriginal: 'Hi, I saw the Senior PMM role. I work only on product marketing hires into the US and have two people worth a look. Would a short call this week suit?',
+      personName: 'Gail Example',
+      draft: "Hi Gail, I'm a product marketing headhunter working with US tech teams. Saw you're hiring and thought it would be worth us connecting. Thanks, Jason",
+      draftOriginal: "Hi Gail, I'm a product marketing headhunter working with US tech teams. Saw you're hiring and thought it would be worth us connecting. Thanks, Jason",
       channel: 'linkedin',
-      links: [{ label: 'LinkedIn post', url: 'https://example.com/post/northwind' }],
+      links: [{ label: 'LinkedIn post', url: 'https://example.com/linkedin.com/post/northwind' }],
+      sourceUrl: 'https://www.linkedin.com/posts/northwind-sample',
       refTable: 'job_leads',
       refId: 'job-northwind',
       agent: 'a3_jobs',
+      messageId: 'm-connect-north',
+      messageState: 'draft',
+      lead: {
+        id: 'job-northwind', postedOn: daysAgo(2), foundOn: daysAgo(1), posterName: 'Gail Example', posterTitle: 'VP Marketing', profileUrl: 'https://example.com/in/gail',
+        stage: 'found', connectionOn: null, connectedOn: null, messagedOn: null, repliedOn: null, replyOutcome: null,
+        connectState: null, connectHold: null, connectAfter: null, campaign: null,
+      },
     }),
     task({
       key: 'inbox_items:i-contoso',
@@ -1157,11 +1175,23 @@ export function freshSampleTasks(): Task[] {
       title: 'Director of PMM at Contoso Demo Inc',
       why: 'Fits the ICP. The hiring leader is on the league.',
       company: 'Contoso Demo Inc',
+      personName: 'Hal Sample',
       rank: 31,
+      channel: 'linkedin',
+      draft: 'Thanks for connecting, Hal. I saw Contoso Demo Inc is hiring for a Director of PMM. I only recruit product marketers, mostly for US tech teams, so I speak to people who fit that kind of brief most weeks.',
+      draftOriginal: 'Thanks for connecting, Hal. I saw Contoso Demo Inc is hiring for a Director of PMM. I only recruit product marketers, mostly for US tech teams, so I speak to people who fit that kind of brief most weeks.',
       links: [{ label: 'LinkedIn advert', url: 'https://example.com/advert/contoso' }],
+      sourceUrl: 'https://www.linkedin.com/jobs/view/contoso-sample',
       refTable: 'job_leads',
       refId: 'job-contoso',
       agent: 'a3_jobs',
+      messageId: 'm-li-contoso',
+      messageState: 'draft',
+      lead: {
+        id: 'job-contoso', postedOn: daysAgo(5), foundOn: daysAgo(4), posterName: 'Hal Sample', posterTitle: 'CMO', profileUrl: 'https://example.com/in/hal',
+        stage: 'connected', connectionOn: daysAgo(3), connectedOn: daysAgo(1), messagedOn: null, repliedOn: null, replyOutcome: null,
+        connectState: 'sent', connectHold: null, connectAfter: null, campaign: null,
+      },
     }),
     task({
       key: 'inbox_items:i-signal',
@@ -2041,6 +2071,29 @@ export const sampleSource: DataSource = {
   async specRequests() {
     return sampleSpecs.map((r) => ({ ...r }))
   },
+  async connectLead(task) {
+    const t = sampleTasks.find((x) => x.key === task.key)
+    if (t?.lead) {
+      t.lead = { ...t.lead, connectState: 'draft', connectHold: 'Template needs approval' }
+    }
+    return 'Template needs approval'
+  },
+
+  async markLinkedInSent(task) {
+    const t = sampleTasks.find((x) => x.key === task.key)
+    if (t?.lead) t.lead = { ...t.lead, stage: 'messaged', messagedOn: new Date().toISOString().slice(0, 10) }
+    return 'Marked as sent by hand'
+  },
+
+  async addLeadToCampaign(task) {
+    const t = sampleTasks.find((x) => x.key === task.key)
+    if (t?.lead) t.lead = { ...t.lead, campaign: { name: `${t.lead.posterName} at ${t.company}`, addedOn: new Date().toISOString().slice(0, 10), enrolledOn: null } }
+  },
+
+  async onYourBehalf(area) {
+    return sampleBehalf.filter((r) => area === null || r.area === area || (area === 'leads' && (r.area === 'linkedin' || r.area === 'campaign'))).map((r) => ({ ...r }))
+  },
+
   async taskChat(taskKey) {
     const held = sampleChat.get(taskKey) ?? { lines: [], job: null }
     return { lines: held.lines.map((l) => ({ ...l })), job: held.job ? { ...held.job } : null }

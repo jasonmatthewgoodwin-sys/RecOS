@@ -1110,6 +1110,128 @@ test('0053 search status follows the evidence: the agent may set intake, open, o
   assert.equal((await write({ health: 'warm' })).code, 'wrong_state')
 })
 
+test('0054 LinkedIn outreach: a fresh lead queues its own connection request through the engine, the note waits for approval, the sender sends and reports, acceptance makes a draft message, marking it sent moves the lead, and the log shows each step to the owner only', async () => {
+  await service(async () => {
+    const asOwner = async (fn) => {
+      await db.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: ownerId, email: OWNER_EMAIL, role: 'authenticated', app_role: 'owner' })])
+      await db.exec('set local role authenticated')
+      try {
+        return await fn()
+      } finally {
+        await db.exec('set local role service_role')
+      }
+    }
+    const person = async (name) =>
+      (await rows(`insert into people (owner_id, display_name, name_key, display_company, company_key, kind, linkedin_url) values ($1, $2, lower($2), 'Initech Mock', 'initech mock', 'client_contact', $3) returning id`, [ownerId, name, 'https://example.com/in/' + name.split(' ')[0].toLowerCase()]))[0].id
+    const lead = async (company, poster, days) => {
+      const pid = await person(poster)
+      return (await rows(
+        `insert into job_leads (owner_id, company, company_key, role, role_key, poster_name, poster_profile_url, hiring_manager_id, posted_on, first_seen_on, sources, source_urls)
+         values ($1, $2, lower($2), 'Senior PMM', 'senior product marketing manager', $3, $4, $5, current_date - $6::int, current_date - $6::int, array['linkedin_post'], array['https://example.com/linkedin/posts/1'])
+         returning id, connect_message_id`,
+        [ownerId, company, poster, 'https://example.com/in/' + poster.split(' ')[0].toLowerCase(), pid, days]))[0]
+    }
+    // A fresh lead asks for its own request; an old one does not.
+    const fresh = await lead('Initech Mock', 'Gail Example', 2)
+    const old = await lead('Globex Fiction', 'Hal Sample', 40)
+    const [fl] = await rows(`select connect_message_id from job_leads where id = $1`, [fresh.id])
+    assert.ok(fl.connect_message_id, 'a fresh lead queues a request')
+    assert.equal((await rows(`select connect_message_id from job_leads where id = $1`, [old.id]))[0].connect_message_id, null, 'an old post waits for the owner')
+    const [m] = await rows(`select type, channel, state, hold_reason, body, created_by, to_profile_url from messages where id = $1`, [fl.connect_message_id])
+    assert.deepEqual([m.type, m.channel, m.state, m.hold_reason, m.created_by], ['linkedin_connect', 'linkedin', 'draft', 'Template needs approval', 'a3_jobs'])
+    assert.match(m.body, /^Hi Gail,/)
+    assert.ok(m.body.length <= 300)
+    assert.equal(m.to_profile_url, 'https://example.com/in/gail')
+
+    // The owner connects the old one by hand; a second press returns the same request.
+    const one = await asOwner(async () => (await rows(`select lead_connect($1) as r`, [old.id]))[0].r)
+    const two = await asOwner(async () => (await rows(`select lead_connect($1) as r`, [old.id]))[0].r)
+    assert.equal(two.message_id, one.message_id)
+    assert.equal(two.note, 'Already asked for')
+
+    // Approving the note releases both into the queue.
+    const [{ tpl }] = await rows(`select id as tpl from templates where type = 'linkedin_connect' and active order by version desc limit 1`)
+    await asOwner(async () => rows(`select template_approve($1)`, [tpl]))
+    const queued = await rows(`select id, state from messages where id in ($1, $2)`, [fl.connect_message_id, one.message_id])
+    assert.ok(queued.every((q) => q.state === 'queued'), JSON.stringify(queued))
+
+    // The LinkedIn sender takes them and reports: one sent, one already a first connection.
+    await db.exec(`select set_config('recos.engine', 'engine', true)`)
+    await db.exec(`update messages set send_after = now() - interval '1 minute' where type = 'linkedin_connect' and state = 'queued'`)
+    await db.exec(`select set_config('recos.engine', '', true)`)
+    const [{ t }] = await rows(`select send_tick('linkedin', 20) as t`)
+    const handed = t.messages.filter((x) => [fl.connect_message_id, one.message_id].includes(x.message_id))
+    assert.equal(handed.length, 2)
+    assert.ok(handed.every((x) => x.to_profile_url && x.body))
+    await rows(`select send_report($1, true, 'invite sent')`, [fl.connect_message_id])
+    await rows(`select send_report($1, true, 'already_connected')`, [one.message_id])
+    const [a] = await rows(`select outreach_stage, outreach_connection_on, connection_note from job_leads where id = $1`, [fresh.id])
+    assert.equal(a.outreach_stage, 'connection_sent')
+    assert.ok(a.outreach_connection_on)
+    assert.match(a.connection_note, /^Hi Gail,/)
+    const [b] = await rows(`select outreach_stage, li_message_id from job_leads where id = $1`, [old.id])
+    assert.equal(b.outreach_stage, 'connected', 'already a first connection skips to connected')
+    assert.ok(b.li_message_id)
+
+    // The sweep: who is waiting, then who accepted.
+    const [{ p }] = await rows(`select send_linkedin_pending(20) as p`)
+    assert.ok(p.pending.some((x) => x.lead_id === fresh.id && x.profile_url))
+    const [{ p2 }] = await rows(`select send_linkedin_pending(20) as p2`)
+    assert.ok(!p2.pending.some((x) => x.lead_id === fresh.id), 'each lead is looked at once in twelve hours')
+    await rows(`select send_linkedin_status($1, 'connected')`, [fresh.id])
+    const [c] = await rows(`select l.outreach_stage, m.type, m.state, m.level_at_creation, m.body from job_leads l join messages m on m.id = l.li_message_id where l.id = $1`, [fresh.id])
+    assert.deepEqual([c.outreach_stage, c.type, c.state, c.level_at_creation], ['connected', 'linkedin_message', 'draft', 'draft_only'])
+    assert.match(c.body, /^Thanks for connecting, Gail\. I saw Initech Mock is hiring for a Senior PMM\./)
+    assert.ok(!/@/.test(c.body))
+    await db.exec('savepoint bad_status')
+    await assert.rejects(db.query(`select send_linkedin_status($1, 'maybe')`, [fresh.id]), /connected, pending or withdrawn/)
+    await db.exec('rollback to savepoint bad_status')
+
+    // The task carries the lead: connected rises, the draft is the message.
+    const inbox = (await rows(
+      `insert into inbox_items (owner_id, type, agent, title, why, dedup_key, ref_table, ref_id, source_url, status)
+       values ($1, 'job_lead', 'a3_jobs', 'Senior PMM at Initech Mock', 'Reported in the LinkedIn PMM hiring report of 2026-11-10. Post: "We are hiring a Senior PMM"', 'test:li', 'job_leads', $2, 'https://www.linkedin.com/posts/x', 'new') returning id`,
+      [ownerId, fresh.id]))[0].id
+    const [task] = await asOwner(async () => rows(`select why, rank, channel, draft, message_id, lead from tasks_view where task_key = $1`, ['inbox_items:' + inbox]))
+    assert.equal(task.why, '"We are hiring a Senior PMM"', 'the agent bookkeeping is gone')
+    assert.equal(task.channel, 'linkedin')
+    assert.ok(Number(task.rank) >= 75, 'fresh and connected is Now')
+    assert.match(task.draft, /^Thanks for connecting/)
+    assert.equal(task.lead.stage, 'connected')
+    assert.equal(task.lead.poster_name, 'Gail Example')
+
+    // Marked Connected by hand in Leads, a lead gets its first message too (0055).
+    const byHand = await lead('Umbrella Sample', 'Ivy Placeholder', 50)
+    await asOwner(async () => rows(`update job_leads set outreach_stage = 'connected' where id = $1`, [byHand.id]))
+    const [h] = await rows(`select m.type, m.state, m.body from job_leads l join messages m on m.id = l.li_message_id where l.id = $1`, [byHand.id])
+    assert.deepEqual([h.type, h.state], ['linkedin_message', 'draft'])
+    assert.match(h.body, /^Thanks for connecting, Ivy\./)
+    assert.equal(await count(`messages where type = 'linkedin_message' and person_id = (select hiring_manager_id from job_leads where id = '${fresh.id}')`), 1, 'one draft per lead, never two')
+
+    // With no display name, the owner's first name comes from the sign-in email.
+    await db.exec(`update app_users set display_name = null where role = 'owner'`)
+    await rows(`update messages set variables = '{}' where id = $1`, [fl.connect_message_id])
+    const [{ v }] = await rows(`select message_variables(m) as v from messages m where id = $1`, [fl.connect_message_id])
+    assert.equal(v.my_first_name, OWNER_EMAIL.split('@')[0].split('.')[0].replace(/^./, (c) => c.toUpperCase()))
+
+    // The owner sends it in LinkedIn and marks it: the lead moves to messaged.
+    await asOwner(async () => rows(`select send_action($1, 'mark_sent')`, [c.li_message_id ?? (await rows(`select li_message_id from job_leads where id = $1`, [fresh.id]))[0].li_message_id]))
+    assert.equal((await rows(`select outreach_stage from job_leads where id = $1`, [fresh.id]))[0].outreach_stage, 'messaged')
+
+    // The log: the owner sees each step, automatic or by hand; nobody else sees anything.
+    const log = await asOwner(async () => rows(`select area, what, to_name, outcome, how from on_your_behalf('leads', 100)`))
+    assert.ok(log.some((r) => r.area === 'linkedin' && r.outcome === 'sent' && r.how === 'auto' && r.to_name === 'Gail Example'))
+    assert.ok(log.some((r) => r.outcome === 'accepted' && r.to_name === 'Gail Example'))
+    assert.ok(log.some((r) => r.what === 'LinkedIn message' && r.how === 'you'))
+    await asOwner(async () => assert.match(String(await refused(`select count(*) from on_your_behalf_view`)), /permission denied/))
+  })
+  await reviewer(async () => assert.equal((await rows(`select count(*)::int n from on_your_behalf(null, 100)`))[0].n, 0))
+  await anon(async () => assert.match(String(await refused(`select * from on_your_behalf(null, 10)`)), /permission denied/))
+  await reviewer(async () => assert.match(String(await refused(`select lead_connect(gen_random_uuid())`)), /Only the owner/))
+  await reviewer(async () => assert.match(String(await refused(`select send_linkedin_pending(5)`)), /not_allowed|permission denied/))
+  await reviewer(async () => assert.match(String(await refused(`select send_linkedin_status(gen_random_uuid(), 'connected')`)), /not_allowed|permission denied/))
+})
+
 async function refusedPlain(sql) {
   await db.exec('begin')
   try {

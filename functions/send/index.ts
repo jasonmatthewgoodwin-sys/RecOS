@@ -148,10 +148,32 @@ Deno.serve(async (req) => {
     const { data, error } = await db.rpc('send_report', {
       p_message: messageId,
       p_ok: body.ok,
-      p_ref: typeof body.external_ref === 'string' ? body.external_ref : null,
+      // sender.md says provider_ref; older callers say external_ref. Either is kept.
+      p_ref: typeof body.provider_ref === 'string' ? body.provider_ref : typeof body.external_ref === 'string' ? body.external_ref : null,
       p_error: typeof body.error === 'string' ? body.error : null,
       p_to_address: typeof body.to_address === 'string' ? body.to_address : null,
     })
+    if (error) return fromDbError(error.message)
+    return ok(data)
+  }
+
+  // The LinkedIn sender's sweep (0054): who is still waiting to accept, and
+  // what the sender saw on each profile. Only the sender may ask or report.
+  if (path === 'linkedin-pending' || path === 'linkedin-status') {
+    if (agent !== 'sender') return fail('not_allowed', 'Only the sender sweeps LinkedIn.')
+    const body = await readJson(req)
+    if (body instanceof Response) return body
+    if (path === 'linkedin-pending') {
+      const limit = typeof body.limit === 'number' && body.limit > 0 && body.limit <= 40 ? Math.floor(body.limit) : 20
+      const { data, error } = await db.rpc('send_linkedin_pending', { p_limit: limit })
+      if (error) return fromDbError(error.message)
+      return ok(data)
+    }
+    const leadId = typeof body.lead_id === 'string' ? body.lead_id : ''
+    if (!leadId) return fail('invalid', 'lead_id is needed.', 'lead_id')
+    const status = typeof body.status === 'string' ? body.status : ''
+    if (!['connected', 'pending', 'withdrawn'].includes(status)) return fail('invalid', 'status is connected, pending or withdrawn.', 'status')
+    const { data, error } = await db.rpc('send_linkedin_status', { p_lead: leadId, p_status: status })
     if (error) return fromDbError(error.message)
     return ok(data)
   }
@@ -164,5 +186,5 @@ Deno.serve(async (req) => {
     return ok({ held: data, note: 'Every LinkedIn type is paused until the owner resumes it in Settings, Send rules.' })
   }
 
-  return fail('not_found', 'No such path. Use /send, /send/tick, /send/report or /send/linkedin-warning.')
+  return fail('not_found', 'No such path. Use /send, /send/tick, /send/report, /send/linkedin-pending, /send/linkedin-status or /send/linkedin-warning.')
 })

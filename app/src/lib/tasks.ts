@@ -71,6 +71,30 @@ export type Task = {
   /** Where the task came from: the post, the email, the call notes, the CRM record. */
   sourceUrl: string | null
   edits: TaskEdits
+  /** The lead behind a job task (0054): dates, the poster, where the LinkedIn outreach stands. */
+  lead?: TaskLead | null
+}
+
+export type LeadOutreach = 'found' | 'connection_sent' | 'connected' | 'messaged' | 'replied'
+
+export type TaskLead = {
+  id: string
+  postedOn: string | null
+  foundOn: string | null
+  posterName: string | null
+  posterTitle: string | null
+  profileUrl: string | null
+  stage: LeadOutreach
+  connectionOn: string | null
+  connectedOn: string | null
+  messagedOn: string | null
+  repliedOn: string | null
+  replyOutcome: string | null
+  /** The connection request in the send engine: draft, held, queued, sending, sent, cancelled. */
+  connectState: string | null
+  connectHold: string | null
+  connectAfter: string | null
+  campaign: { name: string; addedOn: string | null; enrolledOn: string | null } | null
 }
 
 export type Band = 'now' | 'week' | 'later'
@@ -97,10 +121,85 @@ export const typeWord: Record<TaskKind, string> = {
   content_post: 'Post',
 }
 
+/**
+ * Where a task's message goes (Jason, 17 November 2026): LinkedIn when the
+ * task came from LinkedIn or its message is a LinkedIn one, email otherwise.
+ * The buttons follow it: Open in LinkedIn or Open in Outlook, never both.
+ */
+export function channelOf(task: Task): 'linkedin' | 'email' {
+  if (task.channel) return task.channel
+  if (task.lead && /linkedin\.com/i.test(task.sourceUrl ?? '')) return 'linkedin'
+  if (task.kind === 'signal' || task.kind === 'content_post' || task.kind === 'content_approve') return 'linkedin'
+  return 'email'
+}
+
+/** The LinkedIn page a task opens: the person's profile, else the post. */
+export function linkedinUrl(task: Task): string {
+  const profile = task.lead?.profileUrl ?? task.links.find((l) => /profile/i.test(l.label))?.url
+  if (profile) return profile
+  if (task.kind === 'content_post' || task.kind === 'content_approve') return 'https://www.linkedin.com/feed/?shareActive=true'
+  return task.sourceUrl && /linkedin\.com/i.test(task.sourceUrl) ? task.sourceUrl : 'https://www.linkedin.com/messaging/'
+}
+
+/** The next move on a LinkedIn lead, from where the outreach stands. */
+export type LeadMove = 'connect' | 'waiting' | 'message' | 'chase'
+
+export function leadMove(lead: TaskLead): LeadMove {
+  if (lead.stage === 'connected') return 'message'
+  if (lead.stage === 'messaged' || lead.stage === 'replied') return 'chase'
+  if (lead.stage === 'connection_sent') return 'waiting'
+  return lead.connectState && lead.connectState !== 'cancelled' ? 'waiting' : 'connect'
+}
+
+const shortDate = (d: string | null) =>
+  d ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d.slice(0, 10)}T12:00:00Z`)) : null
+
+/** LinkedIn job lead. Posted 9 Nov. Found 14 Nov. */
+export function leadLine(task: Task): string {
+  const l = task.lead
+  const where = /linkedin\.com/i.test(task.sourceUrl ?? '') ? 'LinkedIn job lead' : 'Job lead'
+  if (!l) return where
+  return [where, l.postedOn ? `Posted ${shortDate(l.postedOn)}` : null, l.foundOn ? `Found ${shortDate(l.foundOn)}` : null].filter(Boolean).join('. ')
+}
+
+/** Where the outreach stands, in words: Not connected, Request sent 16 Nov, Connected, In a campaign. */
+export function leadStatus(l: TaskLead): string {
+  const who = l.posterName?.split(' ')[0] ?? 'They'
+  let line: string
+  switch (l.stage) {
+    case 'replied':
+      line = `${who} replied ${shortDate(l.repliedOn) ?? ''}`.trim() + (l.replyOutcome ? `, ${l.replyOutcome.replace(/_/g, ' ')}` : '')
+      break
+    case 'messaged':
+      line = `Messaged ${shortDate(l.messagedOn) ?? ''}. Waiting for a reply`
+      break
+    case 'connected':
+      line = `Connected ${shortDate(l.connectedOn) ?? ''}. Message not sent yet`
+      break
+    case 'connection_sent':
+      line = `Request sent ${shortDate(l.connectionOn) ?? ''}. Waiting for ${who} to accept`
+      break
+    default:
+      if (l.connectState === 'draft' && l.connectHold === 'Template needs approval') line = 'Request ready. It goes once you approve the connection note in Settings, Templates'
+      else if (l.connectState === 'queued' || l.connectState === 'sending') line = `Request queued${l.connectAfter ? `, goes ${shortDate(l.connectAfter)}` : ''} from your laptop`
+      else if (l.connectState === 'held') line = `Request held: ${(l.connectHold ?? 'by the send engine').toLowerCase()}`
+      else if (l.connectState === 'draft') line = `Request waiting: ${(l.connectHold ?? 'not approved yet').toLowerCase()}`
+      else line = 'Not connected'
+  }
+  const campaign = l.campaign ? `. In a campaign since ${shortDate(l.campaign.addedOn)}${l.campaign.enrolledOn ? ', enrolled in Spott' : ''}` : ''
+  return line.replace(/\s+\./g, '.') + campaign
+}
+
 /** The primary button for each kind (27.2, extended for the derived kinds). */
 export function primaryLabel(task: Task): string {
   switch (task.kind) {
     case 'job_lead':
+      if (task.lead) {
+        const move = leadMove(task.lead)
+        if (move === 'connect') return 'Connect on LinkedIn'
+        if (move === 'message') return 'Copy and open LinkedIn'
+        if (move === 'waiting') return 'Open profile'
+      }
       return 'Chased'
     case 'signal':
       return 'Get in touch'
@@ -281,6 +380,7 @@ export const refreshLine = 'Write-ups after each call. Mail sweep Monday and Thu
  * nobody to write to.
  */
 export function starterDraft(task: Task, myFirstName = 'Jason'): { subject: string; body: string } | null {
+  if (task.kind === 'job_lead') return leadEmail(task, myFirstName)
   if (!task.personName) return null
   const first = task.personName.split(' ')[0]
   const reason = (task.why ?? task.title).replace(/\.$/, '')
@@ -404,4 +504,19 @@ export function jobWord(job: TaskJob | null): string | null {
   if (job.status === 'working') return 'The task assistant has it.'
   if (job.status === 'failed') return job.note ?? 'It could not be done this time.'
   return null
+}
+
+/**
+ * The email to copy on a job lead (Jason, 17 November 2026): about their
+ * hiring, never about the agent's report. Wording still to be agreed; it is a
+ * start to polish, kept for when the campaign tools are not to hand.
+ */
+export function leadEmail(task: Task, myFirstName = 'Jason'): { subject: string; body: string } {
+  const first = task.lead?.posterName?.split(' ')[0] ?? task.personName?.split(' ')[0] ?? null
+  const role = task.title.replace(/\s+at\s+.+$/, '')
+  const company = task.company ?? 'your team'
+  return {
+    subject: 'Hiring product marketers?',
+    body: `Hi${first ? ` ${first}` : ''},\n\nI saw ${company} is hiring for a ${role}. I only recruit product marketers, mostly for US tech teams, so I speak to people who fit that kind of brief most weeks.\n\nIf it would help, I can send over two or three profiles worth a look, or share what we are seeing on pay and time to hire right now.\n\nBest,\n${myFirstName}`,
+  }
 }

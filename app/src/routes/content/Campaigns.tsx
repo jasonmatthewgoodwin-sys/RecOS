@@ -5,6 +5,7 @@ import { Field } from '../../components/Field'
 import { HeroStat } from '../../components/HeroStat'
 import { Note } from '../../components/Note'
 import { PageHeader } from '../../components/PageHeader'
+import { SentForYou } from '../../components/SentForYou'
 import { PillButton } from '../../components/PillButton'
 import { Dots, EmptyLine } from '../../components/Quiet'
 import { RowList, type ListItem } from '../../components/RowList'
@@ -69,7 +70,13 @@ export function Campaigns() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader title="Content" tabs={tabs} aside={<TextLink label="New campaign" icon="plus" onClick={() => setCard('campaign:new')} />} />
+      <PageHeader title="Content" tabs={tabs} aside={
+          <span className="flex flex-wrap items-center gap-x-6">
+            <SentForYou area="campaign" />
+            <TextLink label="New campaign" icon="plus" onClick={() => setCard('campaign:new')} />
+          </span>
+        }
+      />
       <div className="grid grid-cols-2 gap-x-8 gap-y-8">
         <HeroStat label="Replies" value={latest ? `${latest.replies} of ${latest.contacted}` : campaigns.data ? '0 of 0' : undefined} tone={latest && latest.replies > 0 ? 'new' : undefined} icon="mail" />
       </div>

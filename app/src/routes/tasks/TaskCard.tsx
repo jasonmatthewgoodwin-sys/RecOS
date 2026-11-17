@@ -5,9 +5,10 @@ import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
 import { TextLink } from '../../components/TextLink'
 import type { Search } from '../../lib/data'
-import { binReasons, dueWord, primaryLabel, shownTitle, snoozeChoices, sourceWords, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
+import { binReasons, channelOf, dueWord, leadMove, linkedinUrl, primaryLabel, shownTitle, snoozeChoices, sourceWords, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
 import { agentWord as inboxAgentWord } from '../../lib/inbox'
 import { sourceLabel } from '../../lib/links'
+import { LeadBlock } from './LeadBlock'
 import { TaskChat } from './TaskChat'
 
 export type CardMode = 'view' | 'edit' | 'bin' | 'snooze'
@@ -27,6 +28,8 @@ type Props = {
   onOutlook: (body: string, subject: string) => void
   onClose: () => void
   busy?: boolean
+  /** The LinkedIn ladder on a job lead (0054): connect, mark the message sent, or add the poster to a campaign. */
+  onLead?: (action: 'connect' | 'messaged' | 'campaign') => void
   /** The assistant answered in the chat: read the board again. */
   onAnswered?: () => void
   onNote?: (words: string) => void
@@ -65,7 +68,8 @@ export function TaskBody({
   notes?: ReactNode
 }) {
   const needsSearch = task.kind === 'call_confirm' || task.kind === 'call_writeup'
-  const hasDraft = task.draft !== null || starterDraft(task) !== null
+  const lead = task.kind === 'job_lead' ? task.lead ?? null : null
+  const hasDraft = !lead && (task.draft !== null || starterDraft(task) !== null)
   const starter = task.draft === null
   return (
     <div className="flex flex-col gap-6">
@@ -101,11 +105,12 @@ export function TaskBody({
           choices={searches.map((s) => ({ value: s.id, label: `${s.client}, ${s.role}` }))}
         />
       )}
+      {lead && <LeadBlock task={task} lead={lead} text={draft} onText={(t) => onDraft(t, subject)} />}
       {hasDraft && (
         <div className="flex flex-col gap-4">
           {(task.channel === 'email' || starter) && <Field label="Subject" value={subject} onChange={(v) => onDraft(draft, v)} />}
           <Draft
-            label={starter ? 'Email, a start' : task.channel === 'email' ? 'Email' : task.channel === 'linkedin' ? 'Message' : 'Draft'}
+            label={starter ? (channelOf(task) === 'linkedin' ? 'Message, a start' : 'Email, a start') : task.channel === 'email' ? 'Email' : task.channel === 'linkedin' ? 'Message' : 'Draft'}
             text={draft}
             original={task.draftOriginal ?? undefined}
             onChange={(t) => onDraft(t, subject)}
@@ -119,11 +124,12 @@ export function TaskBody({
 // The task card (right half of the sheet): the agent's words, the owner's
 // edits beside them, the context links, the draft with its two ways out,
 // one primary action and the quiet links.
-export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBin, onSnooze, onEdits, onDraft, onSend, onOutlook, onClose, busy, onAnswered, onNote }: Props) {
+export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBin, onSnooze, onEdits, onDraft, onSend, onOutlook, onClose, busy, onLead, onAnswered, onNote }: Props) {
   const [title, setTitle] = useState(task.edits.title ?? task.title)
   const [notes, setNotes] = useState(task.edits.notes ?? '')
   const [due, setDue] = useState(task.edits.dueOn ?? task.dueOn ?? '')
-  const start = task.draft === null ? starterDraft(task) : null
+  const lead = task.kind === 'job_lead' ? task.lead ?? null : null
+  const start = task.draft === null && !lead ? starterDraft(task) : null
   const [draft, setDraft] = useState(task.draft ?? start?.body ?? '')
   const [subject, setSubject] = useState(task.subject ?? start?.subject ?? '')
   const [searchId, setSearchId] = useState('')
@@ -132,8 +138,11 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
 
   const st = status(task, today)
   const needsSearch = task.kind === 'call_confirm' || task.kind === 'call_writeup'
-  const email = (task.channel === 'email' && task.messageId !== null) || start !== null
-  const canCopy = task.draft !== null || start !== null
+  // Where the message goes decides the way out: LinkedIn or Outlook, never both.
+  const toLinkedIn = channelOf(task) === 'linkedin'
+  const email = !lead && !toLinkedIn && ((task.channel === 'email' && task.messageId !== null) || start !== null)
+  const canCopy = (task.draft !== null || start !== null) && (!lead || leadMove(lead) === 'message')
+  const openLinkedIn = toLinkedIn && !lead && canCopy
   const primary = primaryLabel(task)
 
   function complete() {
@@ -143,6 +152,19 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
     }
     if (primary === 'Send') {
       onSend()
+      return
+    }
+    if (primary === 'Connect on LinkedIn') {
+      onLead?.('connect')
+      return
+    }
+    if (primary === 'Copy and open LinkedIn') {
+      void copyDraft()
+      window.open(linkedinUrl(task), '_blank', 'noopener')
+      return
+    }
+    if (primary === 'Open profile') {
+      window.open(linkedinUrl(task), '_blank', 'noopener')
       return
     }
     onComplete(needsSearch ? { searchId } : undefined)
@@ -271,7 +293,18 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
       links={
         <>
           {email && <TextLink label="Open in Outlook" onClick={() => onOutlook(draft, subject)} />}
+          {openLinkedIn && (
+            <TextLink
+              label="Open in LinkedIn"
+              onClick={() => {
+                void copyDraft()
+                window.open(linkedinUrl(task), '_blank', 'noopener')
+              }}
+            />
+          )}
           {canCopy && <TextLink label={copied ? 'Copied' : 'Copy'} onClick={copyDraft} />}
+          {lead && leadMove(lead) === 'message' && <TextLink label="Mark messaged" onClick={() => onLead?.('messaged')} />}
+          {lead && !lead.campaign && <TextLink label="Add to campaign" icon="plus" onClick={() => onLead?.('campaign')} />}
           {mode !== 'edit' && <TextLink label="Edit" onClick={() => onMode('edit')} />}
           {mode !== 'snooze' && <TextLink label="Snooze" onClick={() => onMode('snooze')} />}
           {mode !== 'bin' && <TextLink label="Bin" onClick={() => onMode('bin')} />}

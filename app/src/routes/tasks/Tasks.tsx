@@ -5,6 +5,7 @@ import { Deck } from '../../components/Deck'
 import { HeroStat } from '../../components/HeroStat'
 import { Note } from '../../components/Note'
 import { PageHeader } from '../../components/PageHeader'
+import { SentForYou } from '../../components/SentForYou'
 import { PillButton } from '../../components/PillButton'
 import { TextLink } from '../../components/TextLink'
 import { data, type Search } from '../../lib/data'
@@ -177,6 +178,32 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
     }
   }
 
+  // The LinkedIn ladder on a job lead (0054). Connect goes to the send
+  // engine, which queues the request for the LinkedIn sender on the owner's
+  // laptop; Mark messaged records a message he sent by hand; Add to campaign
+  // hands the poster to the campaign runner.
+  async function leadAction(task: Task, action: 'connect' | 'messaged' | 'campaign') {
+    setBusy(true)
+    try {
+      if (action === 'connect') {
+        const answer = await data.connectLead(task)
+        setNote(answer === 'Template needs approval' ? 'Request ready. It goes once you approve the connection note in Settings, Templates.' : `Connection request: ${answer}`)
+      } else if (action === 'messaged') {
+        await data.markLinkedInSent(task)
+        setNote('Marked as messaged')
+      } else {
+        await data.addLeadToCampaign(task)
+        invalidate('content.campaigns')
+        setNote(`${task.lead?.posterName ?? 'The poster'} is in a campaign. The campaign runner enrols them in Spott on its next run.`)
+      }
+      invalidate(TASKS_KEY)
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'That did not save. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Enter on a focused card opens it; x bins it; s snoozes until tomorrow.
   useEffect(() => {
     if (view === 'deck' || cardKey) return
@@ -287,6 +314,7 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
       {tasks.status === 'ready' && (
         <div className="flex flex-wrap items-center gap-x-6">
           <p className="font-mono text-label text-ink-3">{refreshLine}</p>
+          <SentForYou area={null} />
           {!only && (
             <TextLink
               label="Write up now"
@@ -326,6 +354,7 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
           onDraft={(body, subject) => saveDraft(card, body, subject)}
           onSend={() => send(card)}
           onOutlook={(body, subject) => outlook(card, body, subject)}
+          onLead={(action) => void leadAction(card, action)}
           onAnswered={() => {
             invalidate(TASKS_KEY)
             invalidate('home.')

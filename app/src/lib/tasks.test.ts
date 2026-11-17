@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { band, binReasons, byOrder, columns, dueWord, primaryLabel, snoozeChoices, status, type Task } from './tasks'
+import { band, binReasons, byOrder, channelOf, columns, dueWord, leadEmail, leadMove, leadStatus, linkedinUrl, primaryLabel, snoozeChoices, status, type Task } from './tasks'
 import { freshSampleTasks, resetSampleTasks, sampleSource } from './sample'
 
 // The Tasks rules: band, status, order, words. Today is a Monday.
@@ -101,5 +101,37 @@ describe('sample tasks', () => {
     await sampleSource.completeTask(call, { searchId: 's-grail' })
     const text = JSON.stringify(await sampleSource.tasks())
     expect(text).not.toMatch(/@|\+?\d{3}[\s-]?\d{3}[\s-]?\d{4}/)
+  })
+})
+
+describe('LinkedIn leads (0054)', () => {
+  const base = freshSampleTasks().find((t) => t.key === 'inbox_items:i-north')!
+  const lead = base.lead!
+  it('the next move follows the outreach', () => {
+    expect(leadMove(lead)).toBe('connect')
+    expect(leadMove({ ...lead, connectState: 'queued' })).toBe('waiting')
+    expect(leadMove({ ...lead, stage: 'connection_sent' })).toBe('waiting')
+    expect(leadMove({ ...lead, stage: 'connected' })).toBe('message')
+    expect(leadMove({ ...lead, stage: 'messaged' })).toBe('chase')
+  })
+  it('says where it stands in plain words, with the campaign', () => {
+    expect(leadStatus(lead)).toBe('Not connected')
+    expect(leadStatus({ ...lead, connectState: 'draft', connectHold: 'Template needs approval' })).toMatch(/approve the connection note/)
+    expect(leadStatus({ ...lead, stage: 'connection_sent', connectionOn: '2026-11-16' })).toBe('Request sent 16 Nov. Waiting for Gail to accept')
+    expect(leadStatus({ ...lead, stage: 'replied', repliedOn: '2026-11-16', replyOutcome: 'interested', campaign: { name: 'x', addedOn: '2026-11-17', enrolledOn: '2026-11-17' } }))
+      .toBe('Gail replied 16 Nov, interested. In a campaign since 17 Nov, enrolled in Spott')
+  })
+  it('a LinkedIn task goes to LinkedIn, an email task to Outlook', () => {
+    expect(channelOf(base)).toBe('linkedin')
+    expect(linkedinUrl(base)).toBe('https://example.com/in/gail')
+    const fu = freshSampleTasks().find((t) => t.kind === 'follow_up' && t.channel === 'email')!
+    expect(channelOf(fu)).toBe('email')
+  })
+  it('the email to copy is about their hiring, not the report', () => {
+    const e = leadEmail(base)
+    expect(e.subject).toBe('Hiring product marketers?')
+    expect(e.body).toMatch(/^Hi Gail,\n\nI saw Northwind Sample Co is hiring for a Senior PMM\./)
+    expect(e.body).not.toMatch(/report/i)
+    expect(primaryLabel(base)).toBe('Connect on LinkedIn')
   })
 })
