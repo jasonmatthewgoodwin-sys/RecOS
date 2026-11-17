@@ -155,6 +155,134 @@ export function approveChoices(clock: UkClock): Choice[] {
   ]
 }
 
+// ------------------------------------------------ two panes and folders
+// The two-pane Inbox and the owner's folders (Jason, 2026-11-14).
+
+/**
+ * Which box the left side has chosen: Inbox (unfiled), one of the owner's
+ * folders, or one of the three looking-back views.
+ */
+export type InboxBox = 'inbox' | 'sent' | 'done' | 'binned' | `folder:${string}` | `auto:${AutoFolder}`
+
+/**
+ * The automatic folders (Jason, 17 November 2026): every waiting item that is
+ * not in one of his own folders also shows in one of these four, worked out
+ * from what the item is. Nothing is stored; filing it in his own folder takes
+ * it out of them.
+ */
+export type AutoFolder = 'clients' | 'candidates' | 'leads' | 'other'
+
+export const autoFolders: { key: AutoFolder; label: string }[] = [
+  { key: 'clients', label: 'Clients' },
+  { key: 'candidates', label: 'Candidates' },
+  { key: 'leads', label: 'Job leads' },
+  { key: 'other', label: 'Other' },
+]
+
+export function autoBox(key: AutoFolder): InboxBox {
+  return `auto:${key}`
+}
+
+export function autoOf(box: InboxBox): AutoFolder | null {
+  const k = box.startsWith('auto:') ? box.slice(5) : null
+  return autoFolders.some((f) => f.key === k) ? (k as AutoFolder) : null
+}
+
+/** A company name as a key: lower case, single spaces. */
+export function companyKey(name: string | null | undefined): string {
+  return (name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Which automatic folder an item belongs in. Clients: a client nudge, or
+ * anything about a company that has a live search (clientKeys). Job leads:
+ * job and wider leads. Candidates: follow-ups, call write-ups, referrals and
+ * signals about people. Other: drafts, event ideas, notices, sent for you.
+ */
+export function autoFolderOf(item: Pick<InboxItem, 'type' | 'company'>, clientKeys: ReadonlySet<string> = new Set()): AutoFolder {
+  if (item.type === 'client_nudge') return 'clients'
+  if (item.type === 'job_lead' || item.type === 'wider_lead') return 'leads'
+  if (item.company && clientKeys.has(companyKey(item.company))) return 'clients'
+  if (item.type === 'follow_up' || item.type === 'call_writeup' || item.type === 'referral' || item.type === 'signal') return 'candidates'
+  return 'other'
+}
+
+export function folderBox(id: string): InboxBox {
+  return `folder:${id}`
+}
+
+export function folderIdOf(box: InboxBox): string | null {
+  return box.startsWith('folder:') ? box.slice(7) : null
+}
+
+/** Waiting items in a box: Inbox holds the unfiled ones, a folder its own. */
+export function inBox(items: InboxItem[], box: InboxBox, clientKeys: ReadonlySet<string> = new Set()): InboxItem[] {
+  const folder = folderIdOf(box)
+  const auto = autoOf(box)
+  if (auto) return waiting(items).filter((i) => !i.folderId && autoFolderOf(i, clientKeys) === auto)
+  if (box === 'inbox') return waiting(items).filter((i) => !i.folderId)
+  if (folder) return waiting(items).filter((i) => i.folderId === folder)
+  return []
+}
+
+/** How many wait in Inbox and in each folder, for the left side. */
+export type BoxCounts = { inbox: number; folders: Record<string, number>; auto: Record<AutoFolder, number> }
+
+export function boxCounts(items: InboxItem[], clientKeys: ReadonlySet<string> = new Set()): BoxCounts {
+  const folders: Record<string, number> = {}
+  const auto: Record<AutoFolder, number> = { clients: 0, candidates: 0, leads: 0, other: 0 }
+  let inbox = 0
+  for (const i of waiting(items)) {
+    if (i.folderId) folders[i.folderId] = (folders[i.folderId] ?? 0) + 1
+    else {
+      inbox++
+      auto[autoFolderOf(i, clientKeys)]++
+    }
+  }
+  return { inbox, folders, auto }
+}
+
+const typeName: Record<InboxType, string> = {
+  job_lead: 'Job lead',
+  signal: 'Signal',
+  content_draft: 'Draft',
+  event_idea: 'Event idea',
+  call_writeup: 'Call',
+  follow_up: 'Follow-up',
+  referral: 'Referral',
+  client_nudge: 'Nudge',
+  wider_lead: 'Wider lead',
+  auto_sent: 'Sent for you',
+  system_notice: 'RecOS',
+}
+
+/** Who or which company, for the first line of a row. */
+export function whoOf(item: InboxItem): string {
+  return item.company ?? typeName[item.type]
+}
+
+/** A short age for a row: now, 40m, 3h, 2d, 5w. */
+export function ageWord(createdAt: string, now: Date): string {
+  const mins = Math.max(0, Math.floor((now.getTime() - Date.parse(createdAt)) / 60_000))
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 14) return `${days}d`
+  return `${Math.floor(days / 7)}w`
+}
+
+/** A folder name is 1 to 40 characters and not taken, whatever the case. */
+export function folderNameProblem(name: string, taken: string[]): string | undefined {
+  const t = name.trim()
+  if (t.length === 0) return 'Give it a name'
+  if (t.length > 40) return 'Keep it to 40 characters'
+  if (['inbox', 'sent for you', 'done', 'binned', ...autoFolders.map((f) => f.label.toLowerCase())].includes(t.toLowerCase())) return 'That name is already a folder here'
+  if (taken.some((n) => n.trim().toLowerCase() === t.toLowerCase())) return 'That name is taken'
+  return undefined
+}
+
 /** Count by type, in words, for the Clear old items confirmation (INBX-5). */
 export function countByType(items: InboxItem[]): string {
   const counts = new Map<InboxType, number>()

@@ -7,6 +7,7 @@ import { Field } from '../../components/Field'
 import { FileTab } from '../../components/FileTab'
 import { HeroStat } from '../../components/HeroStat'
 import { IndexTabs } from '../../components/IndexTab'
+import { MessageRow } from '../../components/MessageRow'
 import { Note } from '../../components/Note'
 import { NumberLine } from '../../components/NumberLine'
 import { PillButton } from '../../components/PillButton'
@@ -179,6 +180,24 @@ function DraftSample() {
   )
 }
 
+function MessageRowSample() {
+  const [chosen, setChosen] = useState('m2')
+  const rows = [
+    { id: 'm1', dot: 'solid' as const, who: 'Northwind Sample Co', title: 'Senior PMM at Northwind Sample Co', type: 'JOB', age: '20h' },
+    { id: 'm2', dot: 'solid' as const, who: 'Contoso Demo Inc', title: 'Ben Sample was promoted', type: 'SIGNAL', age: '8h' },
+    { id: 'm3', dot: 'solid' as const, who: 'Fabrikam Test Ltd', title: 'Cara Placeholder owes feedback on two CVs', type: 'NUDGE', age: '2d', word: 'Late' },
+    { id: 'm4', dot: 'hollow' as const, who: 'Globex Fiction', title: 'Dev Madeup is waiting on feedback', type: 'FOLLOW-UP', age: '2w' },
+    { id: 'm5', dot: 'hollow' as const, who: 'Sent for you', title: 'Thank-you sent to Dev Madeup', type: 'AUTO', age: '08:02', word: 'Auto' },
+  ]
+  return (
+    <ul className="max-w-sm border-t border-rule">
+      {rows.map((r) => (
+        <MessageRow key={r.id} {...r} selected={chosen === r.id} onSelect={() => setChosen(r.id)} />
+      ))}
+    </ul>
+  )
+}
+
 export function Gallery() {
   return (
     <div className="flex flex-col">
@@ -244,6 +263,10 @@ export function Gallery() {
         <RowList state="loading" />
         <RowList rows={[]} emptyText="All clear" />
         <RowList state="error" />
+      </Block>
+
+      <Block name="MessageRow: the Inbox list. New, chosen, older, Late, Auto">
+        <MessageRowSample />
       </Block>
 
       <Block name="PillButton: primary, plain, busy, disabled, current (a row of stage pills)">

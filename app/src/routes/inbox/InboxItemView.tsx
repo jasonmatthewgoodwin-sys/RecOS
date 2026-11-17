@@ -34,7 +34,40 @@ export function InboxItemView({ item, draft, onDraft, heading = true }: ViewProp
   )
 }
 
-type PassProps = { onConfirm: (colleague: string, split: string) => void; onCancel: () => void }
+type BinProps = { reasons: string[]; onBin: (reason: string) => void; onCancel: () => void }
+
+/** Bin asks one thing: why, with three quick reasons for the type and Other (27.2). */
+export function BinStep({ reasons, onBin, onCancel }: BinProps) {
+  const [other, setOther] = useState<string | null>(null)
+  return (
+    <div className="flex flex-col gap-2" role="group" aria-label="Why">
+      <p className="label-caps text-ink-2">Why</p>
+      <div className="flex flex-wrap items-center gap-x-6">
+        {reasons.map((r) => (
+          <TextLink key={r} label={r} onClick={() => onBin(r)} />
+        ))}
+        <TextLink label="Other" onClick={() => setOther((o) => (o === null ? '' : o))} active={other !== null} />
+        <TextLink label="Keep it" onClick={onCancel} />
+      </div>
+      {other !== null && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (other.trim()) onBin(other.trim())
+          }}
+          className="flex max-w-sm flex-col gap-4"
+        >
+          <Field label="Reason" value={other} onChange={setOther} autoFocus placeholder="In a few words" />
+          <div>
+            <PillButton label="Bin" type="submit" />
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
+
+type PassProps ={ onConfirm: (colleague: string, split: string) => void; onCancel: () => void }
 
 /** Pass on asks two things, the colleague and the split, before the draft (27.2, WID-2). */
 export function PassStep({ onConfirm, onCancel }: PassProps) {
