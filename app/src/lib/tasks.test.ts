@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { band, binReasons, byOrder, channelOf, columns, dueWord, leadEmail, leadMove, leadStatus, linkedinUrl, primaryLabel, snoozeChoices, status, type Task } from './tasks'
+import { actionTitle, band, binReasons, byOrder, channelOf, shownTitle, columns, dueWord, leadEmail, leadMove, leadStatus, linkedinUrl, primaryLabel, snoozeChoices, status, type Task } from './tasks'
 import { freshSampleTasks, resetSampleTasks, sampleSource } from './sample'
 
 // The Tasks rules: band, status, order, words. Today is a Monday.
@@ -138,5 +138,23 @@ describe('LinkedIn leads (0054)', () => {
     expect(e.body).toMatch(/^Hi Gail,\n\nI saw Northwind Sample Co is hiring for a Senior PMM\./)
     expect(e.body).not.toMatch(/report/i)
     expect(primaryLabel(base)).toBe('Connect on LinkedIn')
+  })
+})
+
+describe('titles are the action (17 Nov)', () => {
+  const all = freshSampleTasks()
+  const titleOf = (key: string) => actionTitle(all.find((x) => x.key === key)!)
+  it('a lead reads by where the outreach stands', () => {
+    const north = all.find((x) => x.key === 'inbox_items:i-north')!
+    expect(actionTitle(north)).toBe('Connect with Gail Example at Northwind Sample Co')
+    expect(actionTitle({ ...north, lead: { ...north.lead!, stage: 'connection_sent' } })).toBe('Wait for Gail Example at Northwind Sample Co to accept')
+    expect(actionTitle({ ...north, lead: { ...north.lead!, stage: 'connected' } })).toBe('Message Gail Example at Northwind Sample Co')
+    expect(actionTitle({ ...north, lead: { ...north.lead!, stage: 'messaged' } })).toBe('Chase Gail Example at Northwind Sample Co for a reply')
+  })
+  it('people tasks name the person and the verb; the owner own title wins', () => {
+    expect(titleOf('inbox_items:i-signal')).toBe('Get in touch with Ben Sample, who was promoted to VP')
+    const t = all.find((x) => x.kind === 'follow_up' && x.waitingOn === 'Their reply')!
+    expect(actionTitle(t)).toMatch(/^Chase /)
+    expect(shownTitle({ ...t, edits: { ...t.edits, title: 'Ring Ben on Thursday' } })).toBe('Ring Ben on Thursday')
   })
 })

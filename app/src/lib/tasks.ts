@@ -233,7 +233,77 @@ export function primaryLabel(task: Task): string {
 }
 
 export function shownTitle(task: Task): string {
-  return task.edits.title?.trim() || task.title
+  return task.edits.title?.trim() || actionTitle(task)
+}
+
+/**
+ * The title as the thing to do (Mia, 17 November 2026): Connect with Gail
+ * Example at Northwind, Message Hal Sample, Chase Cara Placeholder. Worded
+ * from where the task stands; the agent's own title is the fallback, and the
+ * owner's own words win over both.
+ */
+export function actionTitle(task: Task): string {
+  const who = task.personName?.trim() || null
+  const at = task.company ? ` at ${task.company}` : ''
+  const after = (prefix: RegExp) => task.title.replace(prefix, '').trim()
+  switch (task.kind) {
+    case 'job_lead': {
+      const lead = task.lead
+      const poster = lead?.posterName?.trim() || who
+      if (!poster) return `Chase the ${task.title.replace(/\s+at\s+.+$/, '')} role${at}`
+      if (!lead) return `Get in touch with ${poster}${at}`
+      switch (lead.stage) {
+        case 'connection_sent':
+          return `Wait for ${poster}${at} to accept`
+        case 'connected':
+          return `Message ${poster}${at}`
+        case 'messaged':
+          return `Chase ${poster}${at} for a reply`
+        case 'replied':
+          return `Follow up with ${poster}${at}`
+        default:
+          return `Connect with ${poster}${at}`
+      }
+    }
+    case 'follow_up':
+      if (!who) return task.title
+      if (task.waitingOn === 'Their reply') return `Chase ${who}${at}`
+      if (task.messageId || task.draft) return `${task.channel === 'linkedin' ? 'Message' : 'Email'} ${who}${at}`
+      return `Follow up with ${who}${at}`
+    case 'cv_chase':
+      return who ? `Get the CV from ${who}` : task.title
+    case 'call_confirm':
+      return who ? `Confirm the search for your call with ${who}` : task.title
+    case 'call_writeup':
+      return who ? `Write up your call with ${who}` : task.title
+    case 'prepare_call':
+      return who ? `Prepare for your call with ${who}` : task.title
+    case 'search_health': {
+      const [client, role] = task.title.split(': ')
+      return role ? `Update ${client} on the ${role} search` : task.title
+    }
+    case 'signal':
+      if (!who) return task.title
+      return task.title.startsWith(who) && task.title.length > who.length
+        ? `Get in touch with ${who}, who ${task.title.slice(who.length).trim()}`
+        : `Get in touch with ${who}`
+    case 'content_approve':
+      return `Approve the post: ${after(/^Approve:\s*/)}`
+    case 'content_draft':
+      return `Approve the post: ${task.title}`
+    case 'content_post':
+      return `Post on LinkedIn: ${after(/^Post:\s*/)}`
+    case 'referral':
+      return `Contact ${task.title}`
+    case 'wider_lead':
+      return `Pass on: ${task.title}`
+    case 'event_idea':
+      return `Decide on the event: ${task.title}`
+    case 'client_nudge':
+      return who ? `Nudge ${who}${at}` : task.title
+    default:
+      return task.title
+  }
 }
 
 /** The day the task surfaced: the day a lead was found, else the day the task was raised. */

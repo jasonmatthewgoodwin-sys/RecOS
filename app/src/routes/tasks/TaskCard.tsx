@@ -5,7 +5,7 @@ import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
 import { TextLink } from '../../components/TextLink'
 import type { Search } from '../../lib/data'
-import { binReasons, channelOf, dueWord, leadMove, linkedinUrl, primaryLabel, shownTitle, snoozeChoices, sourceWords, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
+import { actionTitle, binReasons, channelOf, dueWord, leadMove, linkedinUrl, primaryLabel, shownTitle, snoozeChoices, sourceWords, starterDraft, status, statusWord, typeWord, type Task, type TaskEdits } from '../../lib/tasks'
 import { agentWord as inboxAgentWord } from '../../lib/inbox'
 import { sourceLabel } from '../../lib/links'
 import { LeadBlock } from './LeadBlock'
@@ -125,7 +125,7 @@ export function TaskBody({
 // edits beside them, the context links, the draft with its two ways out,
 // one primary action and the quiet links.
 export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBin, onSnooze, onEdits, onDraft, onSend, onOutlook, onClose, busy, onLead, onAnswered, onNote }: Props) {
-  const [title, setTitle] = useState(task.edits.title ?? task.title)
+  const [title, setTitle] = useState(shownTitle(task))
   const [notes, setNotes] = useState(task.edits.notes ?? '')
   const [due, setDue] = useState(task.edits.dueOn ?? task.dueOn ?? '')
   const lead = task.kind === 'job_lead' ? task.lead ?? null : null
@@ -172,7 +172,7 @@ export function TaskCard({ task, today, searches, mode, onMode, onComplete, onBi
 
   function saveEdits() {
     onEdits({
-      title: title.trim() === task.title || title.trim() === '' ? null : title.trim(),
+      title: title.trim() === actionTitle(task) || title.trim() === task.title || title.trim() === '' ? null : title.trim(),
       notes: notes.trim() === '' ? null : notes.trim(),
       dueOn: due === '' || due === task.dueOn ? null : due,
     })
