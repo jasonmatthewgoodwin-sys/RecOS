@@ -131,7 +131,15 @@ export type InboxItem = {
   dueOn: string | null
   /** ISO timestamp */
   createdAt: string
+  /** The owner's folder it sits in, or none for Inbox (migration 0056). */
+  folderId?: string | null
 }
+
+/** One of the owner's own Inbox folders (migration 0056). */
+export type InboxFolder = { id: string; name: string; position: number }
+
+/** The closed views on the Inbox's left side: what was done and what was binned. */
+export type InboxClosedView = 'done' | 'binned'
 
 /** What the primary button did, so Undo can put it back (INBX-2). */
 export type InboxAction = 'done' | 'approve' | 'bin' | 'snooze' | 'pass'
@@ -917,6 +925,18 @@ export interface DataSource {
   /** INBX-5: bin every stale item in one go. */
   binStale(ids: string[]): Promise<void>
 
+  /** The owner's own Inbox folders, in his order (migration 0056). */
+  inboxFolders(): Promise<InboxFolder[]>
+  /** A new folder at the end. Names are unique, whatever the case. */
+  createInboxFolder(name: string): Promise<InboxFolder>
+  renameInboxFolder(id: string, name: string): Promise<void>
+  /** Removes the folder. Its items go back to Inbox. */
+  deleteInboxFolder(id: string): Promise<void>
+  /** File an item in a folder, or back to Inbox with null. */
+  moveInboxItem(id: string, folderId: string | null): Promise<void>
+  /** Items closed in the last 30 days, newest first: Done or Binned. */
+  inboxClosed(view: InboxClosedView): Promise<InboxItem[]>
+
   /** Every open or snoozed follow-up. The page orders them (21.4). */
   followUps(): Promise<FollowUp[]>
   /**
@@ -1474,6 +1494,51 @@ const live: DataSource = {
     if (ids.length === 0) return
     const { error } = await supabase!.from('inbox_items').update({ status: 'binned', bin_reason: 'Old' }).in('id', ids)
     fail(error)
+  },
+
+  async inboxFolders() {
+    const { data, error } = await supabase!.from('inbox_folders').select('id, name, position').order('position').order('created_at')
+    fail(error)
+    return (data ?? []) as InboxFolder[]
+  },
+
+  async createInboxFolder(name) {
+    const { data: last } = await supabase!.from('inbox_folders').select('position').order('position', { ascending: false }).limit(1)
+    const position = ((last?.[0] as { position?: number } | undefined)?.position ?? -1) + 1
+    const { data, error } = await supabase!.from('inbox_folders').insert({ name: name.trim(), position }).select('id, name, position').single()
+    if (error && /duplicate/i.test(error.message)) throw new Error('That name is taken')
+    fail(error)
+    return data as InboxFolder
+  },
+
+  async renameInboxFolder(id, name) {
+    const { error } = await supabase!.from('inbox_folders').update({ name: name.trim() }).eq('id', id)
+    if (error && /duplicate/i.test(error.message)) throw new Error('That name is taken')
+    fail(error)
+  },
+
+  async deleteInboxFolder(id) {
+    const { error } = await supabase!.rpc('delete_inbox_folder', { p_id: id })
+    fail(error)
+  },
+
+  async moveInboxItem(id, folderId) {
+    const { error } = await supabase!.from('inbox_items').update({ folder_id: folderId }).eq('id', id)
+    fail(error)
+  },
+
+  async inboxClosed(view) {
+    const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
+    const { data, error } = await supabase!
+      .from('inbox_items')
+      .select(INBOX_COLUMNS)
+      .eq('status', view)
+      .neq('type', 'auto_sent')
+      .gte('updated_at', since)
+      .order('updated_at', { ascending: false })
+      .limit(100)
+    fail(error)
+    return ((data ?? []) as unknown as InboxRow[]).map(toInboxItem)
   },
 
   async followUps() {
@@ -3331,7 +3396,7 @@ const live: DataSource = {
 
 const INBOX_COLUMNS =
   'id, type, agent, title, person_id, company, role, location, why, suggested_action, draft, draft_original, ' +
-  'source, source_url, links, ref_table, ref_id, rank, status, bin_reason, snoozed_until, due_on, created_at'
+  'source, source_url, links, ref_table, ref_id, rank, status, bin_reason, snoozed_until, due_on, created_at, folder_id'
 
 type InboxRow = {
   id: string
@@ -3357,6 +3422,7 @@ type InboxRow = {
   snoozed_until: string | null
   due_on: string | null
   created_at: string
+  folder_id?: string | null
 }
 
 function toInboxItem(r: InboxRow): InboxItem {
@@ -3386,6 +3452,7 @@ function toInboxItem(r: InboxRow): InboxItem {
     snoozedUntil: r.snoozed_until,
     dueOn: r.due_on,
     createdAt: r.created_at,
+    folderId: r.folder_id ?? null,
   }
 }
 

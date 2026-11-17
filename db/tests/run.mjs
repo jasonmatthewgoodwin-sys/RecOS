@@ -2436,6 +2436,62 @@ test('0048 research prompt: the seed puts the research mode in front of the acti
   }
 })
 
+// ---------------------------------------------------------------- inbox folders (0056)
+
+test('inbox folders: the owner creates, renames and lists his own folders; names are unique per owner', async () => {
+  await owner(async () => {
+    await db.query(`insert into inbox_folders (name, position) values ('Hot leads', 0), ('Later', 1)`)
+    const made = await rows(`select name, owner_id from inbox_folders order by position`)
+    assert.deepEqual(made.map((r) => r.name), ['Hot leads', 'Later'])
+    assert.ok(made.every((r) => r.owner_id === ownerId), 'owner_id defaults to the signed-in user')
+    assert.match(String(await refused(`insert into inbox_folders (name) values (' hot LEADS ')`)), /duplicate key/)
+    assert.match(String(await refused(`insert into inbox_folders (name) values ('   ')`)), /check constraint/)
+    await db.query(`update inbox_folders set name = 'Hot ones' where name = 'Hot leads'`)
+    assert.equal(await count(`inbox_folders where name = 'Hot ones'`), 1)
+    assert.match(String(await refused(`delete from inbox_folders`)), /permission denied/)
+  })
+})
+
+test('inbox folders: anon, the reviewer and a user with no role cannot read, add or delete one', async () => {
+  await db.query(`insert into inbox_folders (owner_id, name) values ($1, 'Planted')`, [ownerId])
+  try {
+    await anon(async () => {
+      assert.match(String(await refused(`select * from inbox_folders`)), /permission denied/)
+      assert.match(String(await refused(`insert into inbox_folders (name) values ('x')`)), /permission denied/)
+      assert.match(String(await refused(`select delete_inbox_folder(gen_random_uuid())`)), /permission denied/)
+    })
+    for (const who of [reviewer, noRole]) {
+      await who(async () => {
+        assert.equal(await count('inbox_folders'), 0)
+        assert.ok(await refused(`insert into inbox_folders (name) values ('x')`))
+        assert.match(String(await refused(`select delete_inbox_folder(gen_random_uuid())`)), /Only the owner/)
+      })
+    }
+    const [{ id }] = await rows(`select id from inbox_folders where name = 'Planted'`)
+    await reviewer(async () => assert.match(String(await refused(`select delete_inbox_folder($1)`, [id])), /Only the owner/))
+    assert.equal(await count(`inbox_folders where name = 'Planted'`), 1)
+  } finally {
+    await db.query(`delete from inbox_folders where name = 'Planted'`)
+  }
+})
+
+test('inbox folders: moving an item into a folder works, and deleting the folder returns it to Inbox', async () => {
+  await owner(async () => {
+    const [{ id: folder }] = await rows(`insert into inbox_folders (name) values ('Hot') returning id`)
+    const [{ id: item }] = await rows(`select id from inbox_items where status = 'new' order by created_at limit 1`)
+    await db.query(`update inbox_items set folder_id = $1 where id = $2`, [folder, item])
+    assert.deepEqual(await rows(`select folder_id from inbox_items where id = $1`, [item]), [{ folder_id: folder }])
+    assert.equal(await count(`inbox_items where folder_id = '${folder}'`), 1)
+    // Back to Inbox by hand.
+    await db.query(`update inbox_items set folder_id = null where id = $1`, [item])
+    await db.query(`update inbox_items set folder_id = $1 where id = $2`, [folder, item])
+    await db.query(`select delete_inbox_folder($1)`, [folder])
+    assert.equal(await count(`inbox_folders where id = '${folder}'`), 0)
+    assert.deepEqual(await rows(`select folder_id, status from inbox_items where id = $1`, [item]), [{ folder_id: null, status: 'new' }])
+    assert.match(String(await refused(`select delete_inbox_folder($1)`, [folder])), /No such folder/)
+  })
+})
+
 // ---------------------------------------------------------------- run
 
 let failed = 0

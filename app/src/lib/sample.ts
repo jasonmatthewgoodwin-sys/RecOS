@@ -16,7 +16,7 @@ import type {
   SearchNote,
   Problem,
   ProblemNote,
-  ProblemScreenshot, Agent, Connection, ConnectionProvider, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
+  ProblemScreenshot, Agent, Connection, ConnectionProvider, AgentPrompt, AgentRun, AppSettings, AuditEntry, CoachingSession, DataSource, DoNotContact, FoundPerson, SharedBlock, FollowUp, InboxAction, InboxFolder, InboxItem, JobLead, KpiEvent, KpiOutputWeek, KpiQuarter, KpiWeek, KpiWeekRow, Member, PeopleList, Referral, ReviewFields, SendPolicy, Signal, Target, Touch, WeeklyReview, WiderLead } from './data'
 import { inboxStatusAfter } from './data'
 import { splitCopy, topicFrom } from './calendar'
 import type { SearchHit } from './capture'
@@ -321,6 +321,26 @@ let sampleInbox = freshSampleInbox()
 
 export function resetSampleInbox() {
   sampleInbox = freshSampleInbox()
+  sampleFolders = freshSampleFolders()
+}
+
+// The owner's own Inbox folders (migration 0056). One to start, empty.
+export function freshSampleFolders(): InboxFolder[] {
+  return [{ id: 'folder-1', name: 'Clients', position: 0 }]
+}
+
+let sampleFolders = freshSampleFolders()
+let sampleFolderSeq = 1
+
+function folderNameTaken(name: string, except?: string): boolean {
+  const key = name.trim().toLowerCase()
+  return sampleFolders.some((f) => f.id !== except && f.name.trim().toLowerCase() === key)
+}
+
+function checkFolderName(name: string, except?: string) {
+  const trimmed = name.trim()
+  if (trimmed.length === 0 || trimmed.length > 40) throw new Error('A name is 1 to 40 characters')
+  if (folderNameTaken(trimmed, except)) throw new Error('That name is taken')
 }
 
 type SampleMessage = Omit<NonNullable<FollowUp['message']>, 'state'> & { state?: string }
@@ -1463,6 +1483,38 @@ export const sampleSource: DataSource = {
         i.binReason = 'Old'
       }
     }
+  },
+
+  async inboxFolders() {
+    return [...sampleFolders].sort((a, b) => a.position - b.position).map((f) => ({ ...f }))
+  },
+  async createInboxFolder(name) {
+    checkFolderName(name)
+    const position = sampleFolders.reduce((m, f) => Math.max(m, f.position), -1) + 1
+    const folder = { id: `folder-new-${++sampleFolderSeq}`, name: name.trim(), position }
+    sampleFolders.push(folder)
+    return { ...folder }
+  },
+  async renameInboxFolder(id, name) {
+    const found = sampleFolders.find((f) => f.id === id)
+    if (!found) throw new Error('No such folder')
+    checkFolderName(name, id)
+    found.name = name.trim()
+  },
+  async deleteInboxFolder(id) {
+    if (!sampleFolders.some((f) => f.id === id)) throw new Error('No such folder')
+    sampleFolders = sampleFolders.filter((f) => f.id !== id)
+    // On delete set null: its items go back to Inbox.
+    for (const i of sampleInbox) if (i.folderId === id) i.folderId = null
+  },
+  async moveInboxItem(id, folderId) {
+    const found = sampleInbox.find((i) => i.id === id)
+    if (!found) throw new Error('No such item')
+    if (folderId !== null && !sampleFolders.some((f) => f.id === folderId)) throw new Error('No such folder')
+    found.folderId = folderId
+  },
+  async inboxClosed(view) {
+    return sampleInbox.filter((i) => i.status === view && i.type !== 'auto_sent').map((i) => ({ ...i }))
   },
 
   async followUps() {
