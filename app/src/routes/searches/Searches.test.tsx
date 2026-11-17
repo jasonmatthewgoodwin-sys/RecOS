@@ -144,6 +144,22 @@ describe('Searches, Open', () => {
     expect((await sampleSource.searchCandidates()).find((c) => c.id === 'sc-5')?.stage).toBe('submitted')
   })
 
+  it('interview prep on the pipeline writes a draft with the booking link, or the email alone', async () => {
+    mock()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    open('/searches/open?card=search:s-contoso&tab=pipeline')
+    const dialog = await screen.findByRole('dialog')
+    await user.click(await within(dialog).findByRole('button', { name: 'Interview prep' }))
+    const panel = within(dialog).getByRole('region', { name: 'Interview prep' })
+    await user.type(within(panel).getByLabelText('Candidate'), 'Finn Fictional')
+    const draft = within(panel).getByLabelText('Draft') as HTMLTextAreaElement
+    expect(draft.value).toContain('Hi Finn,')
+    expect(draft.value).toContain('calendly.com/jason3search/interview-prep-feedback')
+    await user.click(within(panel).getByRole('button', { name: 'Prep email' }))
+    expect((within(panel).getByLabelText('Draft') as HTMLTextAreaElement).value).not.toContain('calendly.com')
+    expect(within(panel).getByRole('button', { name: 'Open in Outlook' })).toBeInTheDocument()
+  })
+
   it('the offer tab moves a search to placed when the offer is accepted', async () => {
     const m = mock()
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
