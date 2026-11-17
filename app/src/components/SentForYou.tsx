@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card } from './Card'
 import { Dots } from './Quiet'
 import { TextLink } from './TextLink'
@@ -44,12 +45,14 @@ export function SentForYou({ area }: { area: Area }) {
 
 function SentForYouCard({ area, onClose }: { area: Area; onClose: () => void }) {
   const log = useQuery(`behalf.${area ?? 'all'}`, () => data.onYourBehalf(area))
+  const navigate = useNavigate()
   const rows = log.data ?? []
   return (
     <Card
       label={areaWord[area ?? 'all']}
       title="Sent for you"
       onClose={onClose}
+      links={<TextLink label="The send engine: rules, queue and stop switch" onClick={() => navigate('/settings/send-rules')} />}
       sections={[
         {
           body:

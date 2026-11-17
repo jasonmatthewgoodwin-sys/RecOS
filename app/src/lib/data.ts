@@ -653,6 +653,25 @@ export type Call = {
   /** The agent's own few lines on the call (0051). Never the note text. */
   summary: string | null
 }
+/** One line of the send engine's queue: how many of a type wait, in what state, why, and when the next goes. */
+export type SendQueueLine = { type: string; state: 'queued' | 'held' | 'waiting'; reason: string | null; count: number; nextAt: string | null }
+
+/** Group messages into queue lines: queued and sending together, held by reason, drafts the engine parked by reason. */
+export function queueLines(rows: { type: string; state: string; reason: string | null; at: string | null }[]): SendQueueLine[] {
+  const out = new Map<string, SendQueueLine>()
+  for (const r of rows) {
+    const state: SendQueueLine['state'] = r.state === 'queued' || r.state === 'sending' ? 'queued' : r.state === 'held' ? 'held' : 'waiting'
+    const reason = state === 'queued' ? null : r.reason
+    const key = `${r.type}|${state}|${reason ?? ''}`
+    const line = out.get(key) ?? { type: r.type, state, reason, count: 0, nextAt: null }
+    line.count += 1
+    if (r.at && (!line.nextAt || r.at < line.nextAt)) line.nextAt = r.at
+    out.set(key, line)
+  }
+  const order = { queued: 0, held: 1, waiting: 2 }
+  return [...out.values()].sort((a, b) => order[a.state] - order[b.state] || b.count - a.count)
+}
+
 export type BehalfArea = 'linkedin' | 'email' | 'campaign'
 
 /** One thing that reached a person on the owner's behalf (0054). */
@@ -1032,6 +1051,8 @@ export interface DataSource {
   setSendingPaused(paused: boolean): Promise<void>
   /** Messages held because sending was off. */
   heldMessages(): Promise<number>
+  /** What the send engine is holding or will send next, by type and reason (Send rules, Waiting to send). */
+  sendQueue(): Promise<SendQueueLine[]>
   releaseHeld(to: 'send' | 'draft'): Promise<void>
   sendPolicies(): Promise<SendPolicy[]>
   updateSendPolicy(type: string, patch: SendPolicyPatch): Promise<void>
@@ -2486,6 +2507,17 @@ const live: DataSource = {
   async setSendingPaused(paused) {
     const { error } = await supabase!.from('app_settings').update({ all_sending_paused: paused }).eq('id', true)
     fail(error)
+  },
+
+  async sendQueue() {
+    const { data, error } = await supabase!
+      .from('messages')
+      .select('type, state, hold_reason, send_after, level_at_creation')
+      .or('state.in.(queued,held,sending),and(state.eq.draft,hold_reason.not.is.null)')
+      .limit(1000)
+    fail(error)
+    type Row = { type: string; state: string; hold_reason: string | null; send_after: string | null; level_at_creation: string }
+    return queueLines(((data ?? []) as Row[]).filter((r) => r.level_at_creation !== 'draft_only').map((r) => ({ type: r.type, state: r.state, reason: r.hold_reason, at: r.send_after })))
   },
 
   async heldMessages() {

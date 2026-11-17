@@ -6,7 +6,7 @@ import { freshSampleTasks, resetSampleTasks, sampleSource } from './sample'
 const today = '2026-11-16'
 
 function t(over: Partial<Task>): Task {
-  return { ...freshSampleTasks()[0], edits: { title: null, notes: null, dueOn: null, sortOrder: null }, waitingOn: null, dueOn: null, rank: 0, ...over }
+  return { ...freshSampleTasks()[0], edits: { title: null, notes: null, dueOn: null, sortOrder: null }, waitingOn: null, dueOn: null, rank: 0, lead: null, createdAt: `${today}T09:00:00Z`, ...over }
 }
 
 afterEach(() => resetSampleTasks())
@@ -19,7 +19,9 @@ describe('task rules', () => {
     expect(band(t({ dueOn: '2026-11-23' }), today)).toBe('later')
     expect(band(t({ rank: 50 }), today)).toBe('now')
     expect(band(t({ rank: 30 }), today)).toBe('week')
-    expect(band(t({ rank: 5 }), today)).toBe('later')
+    // With no date of its own, a task falls due three days after it surfaced (17 Nov).
+    expect(band(t({ rank: 5 }), today)).toBe('week')
+    expect(band(t({ rank: 5, createdAt: '2026-11-12T09:00:00Z' }), today)).toBe('now')
     expect(band(t({ kind: 'system_notice' }), today)).toBe('now')
     // The owner's own due date wins.
     expect(band(t({ dueOn: '2026-12-01', edits: { title: null, notes: null, dueOn: today, sortOrder: null } }), today)).toBe('now')
@@ -31,6 +33,9 @@ describe('task rules', () => {
     expect(status(t({ dueOn: today }), today)).toBe('today')
     expect(status(t({ dueOn: '2026-11-20' }), today)).toBe('on_track')
     expect(status(t({}), today)).toBe('on_track')
+    // Older than three days with no date of its own is overdue.
+    expect(status(t({ createdAt: '2026-11-13T09:00:00Z' }), today)).toBe('today')
+    expect(status(t({ createdAt: '2026-11-12T09:00:00Z' }), today)).toBe('late')
   })
 
   it('due words: Today, a weekday within the week, otherwise a short date', () => {
@@ -38,7 +43,7 @@ describe('task rules', () => {
     expect(dueWord(t({ dueOn: '2026-11-19' }), today)).toBe('Thu')
     expect(dueWord(t({ dueOn: '2026-11-13' }), today)).toBe('Fri')
     expect(dueWord(t({ dueOn: '2026-12-03' }), today)).toBe('3 Dec')
-    expect(dueWord(t({}), today)).toBe('')
+    expect(dueWord(t({}), today)).toBe('Thu')
   })
 
   it('orders by the owner first, then rank, then the nearer date', () => {
@@ -57,8 +62,8 @@ describe('task rules', () => {
     )
     expect(cols.map((c) => [c.key, c.tasks.map((x) => x.key)])).toEqual([
       ['now', ['n']],
-      ['week', []],
-      ['later', ['l']],
+      ['week', ['l']],
+      ['later', []],
       ['waiting', ['w']],
     ])
   })

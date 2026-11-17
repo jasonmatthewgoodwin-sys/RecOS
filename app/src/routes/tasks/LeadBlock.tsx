@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Draft } from '../../components/Draft'
 import { Field } from '../../components/Field'
 import { TextLink } from '../../components/TextLink'
@@ -22,6 +23,7 @@ export function LeadBlock({ task, lead, text, onText }: Props) {
   const [subject, setSubject] = useState(start.subject)
   const [body, setBody] = useState(start.body)
   const [copied, setCopied] = useState(false)
+  const navigate = useNavigate()
 
   async function copyEmail() {
     try {
@@ -43,6 +45,8 @@ export function LeadBlock({ task, lead, text, onText }: Props) {
         </p>
         <p className="flex flex-wrap gap-x-6">
           {lead.profileUrl && <TextLink label={`${lead.posterName?.split(' ')[0] ?? 'Poster'} on LinkedIn`} href={lead.profileUrl} icon="open" />}
+          {lead.connectHold === 'Template needs approval' && <TextLink label="Approve the note" onClick={() => navigate('/settings/templates')} />}
+          {lead.connectState && <TextLink label="Send engine" onClick={() => navigate('/settings/send-rules')} />}
         </p>
       </div>
 

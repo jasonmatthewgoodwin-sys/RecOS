@@ -109,4 +109,6 @@ Departures from the design, and choices the design left open. Newest last. Anyth
 | 2026-11-17 | Every task opens its message where it goes: LinkedIn for LinkedIn tasks, Outlook for email tasks, never both | Jason, 17 November | Pending Jason |
 | 2026-11-17 | Sent for you: a quiet link on Tasks, Leads, Follow-ups and Campaigns opening the log of every send, request, acceptance and campaign on Jason's behalf, automatic or by him | Jason, 17 November: an audit log on each tab where an agent contacts people for him | Pending Jason |
 | 2026-11-17 | Every agent but the LinkedIn sender should run as a claude.ai cloud routine, so nothing stops when the laptop is shut | The run times show the agents stop when the laptop sleeps | Jason to do, steps in docs/for-jason/agents-and-laptop.md |
+| 2026-11-17 | A task with no date of its own falls due three days after it surfaced; tiles show source, action and surfaced day | Mia, 17 November: anything older than three days is overdue | Pending Jason |
+| 2026-11-17 | The send engine's queue shows on Settings, Send rules, linked from Sent for you and from leads | Mia, 17 November: the send engine must be visible in the platform | Pending Jason |
 

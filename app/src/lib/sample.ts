@@ -2071,6 +2071,13 @@ export const sampleSource: DataSource = {
   async specRequests() {
     return sampleSpecs.map((r) => ({ ...r }))
   },
+  async sendQueue() {
+    return [
+      { type: 'linkedin_connect', state: 'waiting' as const, reason: 'Template needs approval', count: 32, nextAt: null },
+      { type: 'thanks_after_call', state: 'queued' as const, reason: null, count: 1, nextAt: `${daysAgo(-1)}T14:05:00Z` },
+    ]
+  },
+
   async connectLead(task) {
     const t = sampleTasks.find((x) => x.key === task.key)
     if (t?.lead) {

@@ -236,8 +236,64 @@ export function shownTitle(task: Task): string {
   return task.edits.title?.trim() || task.title
 }
 
+/** The day the task surfaced: the day a lead was found, else the day the task was raised. */
+export function surfacedOn(task: Task): string {
+  return task.lead?.foundOn ?? task.createdAt.slice(0, 10)
+}
+
+/**
+ * The due date: the owner's, else the agent's, else three days after it
+ * surfaced (Jason, 17 November 2026: anything older than three days is
+ * overdue).
+ */
 export function effectiveDue(task: Task): string | null {
-  return task.edits.dueOn ?? task.dueOn
+  return task.edits.dueOn ?? task.dueOn ?? addDays(surfacedOn(task), 3)
+}
+
+/** Where the task came from, in two or three words for the tile. */
+export function sourceShort(task: Task): string {
+  const url = task.sourceUrl ?? ''
+  if (/linkedin\.com\/jobs/i.test(url)) return 'LinkedIn advert'
+  if (/linkedin\.com/i.test(url)) return 'LinkedIn post'
+  if (/granola/i.test(url)) return 'Call'
+  if (/outlook|office|live\.com|microsoft/i.test(url)) return 'Email'
+  switch (task.kind) {
+    case 'job_lead':
+      return url ? 'Job advert' : 'Jobs agent'
+    case 'wider_lead':
+      return 'Jobs agent'
+    case 'signal':
+      return 'LinkedIn signal'
+    case 'call_writeup':
+    case 'call_confirm':
+    case 'cv_chase':
+    case 'referral':
+      return 'Call'
+    case 'follow_up':
+      return task.agent === 'a6_calls' ? 'Call' : task.agent === 'a5_followups' ? 'Email' : task.agent === 'manual' ? 'You' : 'Rule'
+    case 'prepare_call':
+      return 'Calendar'
+    case 'feedback_chase':
+    case 'search_health':
+      return 'Spott'
+    case 'content_draft':
+    case 'content_approve':
+    case 'content_post':
+      return 'Content agent'
+    case 'event_idea':
+      return 'Events agent'
+    case 'suggestion':
+      return 'Rule'
+    case 'system_notice':
+      return 'RecOS'
+    default:
+      return task.agent === 'manual' ? 'You' : 'Agent'
+  }
+}
+
+/** 14 Nov, for the tile's surfaced line. */
+export function shortDay(date: string): string {
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`))
 }
 
 /** The Monday of the week holding a plain date, as a plain date. */

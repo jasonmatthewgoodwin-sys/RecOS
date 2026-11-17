@@ -81,7 +81,7 @@ describe('Tasks', () => {
     open()
     expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
     await waitFor(() => expect(board()).toBeInTheDocument())
-    expect(values()).toEqual(['06', '02'])
+    expect(values()).toEqual(['07', '02'])
     expect(screen.getByRole('main').querySelectorAll('[data-hero-stat]')).toHaveLength(2)
     expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
@@ -284,6 +284,9 @@ describe('Tasks', () => {
     const { complete } = mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
+    // Now holds more than the column shows at first: open the rest.
+    const more = within(column('Now')).queryByRole('button', { name: /Show more/ })
+    if (more) await userEvent.click(more)
     await userEvent.click(tile('Which search was Finn Fictional for'))
     const card = screen.getByRole('dialog', { name: /Which search was Finn Fictional for/ })
     await userEvent.click(card.querySelector<HTMLButtonElement>('[data-kind="primary"]')!)
@@ -310,7 +313,7 @@ describe('Tasks', () => {
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'Start' }))
-    expect(await screen.findByTestId('deck-counter')).toHaveTextContent('01 of 06')
+    expect(await screen.findByTestId('deck-counter')).toHaveTextContent('01 of 07')
     expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('Cara Placeholder, Fabrikam Test Ltd')
     expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
     await userEvent.keyboard('j')
@@ -319,7 +322,7 @@ describe('Tasks', () => {
     if (primary.textContent !== 'Send') {
       await userEvent.click(primary)
       await waitFor(() => expect(complete).toHaveBeenCalled())
-      expect(screen.getByTestId('deck-counter')).toHaveTextContent('02 of 06')
+      expect(screen.getByTestId('deck-counter')).toHaveTextContent('02 of 07')
     }
     await userEvent.click(screen.getByRole('button', { name: 'List' }))
     await waitFor(() => expect(board()).toBeInTheDocument())
@@ -347,6 +350,17 @@ describe('Tasks', () => {
     expect(within(chat).getByRole('button', { name: 'Look again' })).toBeInTheDocument()
     // One primary on the screen still.
     expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
+  })
+
+  it('every tile says where the task came from, what to do and the day it surfaced; past three days with no date of its own it is late', async () => {
+    mock()
+    open()
+    await waitFor(() => expect(board()).toBeInTheDocument())
+    const north = tile('Senior PMM at Northwind Sample Co')
+    expect(within(north).getByTestId('tile-action')).toHaveTextContent('LinkedIn post·Connect on LinkedIn')
+    expect(within(north).getByTestId('tile-surfaced')).toHaveTextContent(/^Surfaced \d+ \w+$/)
+    const late = document.querySelectorAll('[data-task-tile][data-status="late"]')
+    expect(late.length).toBeGreaterThan(0)
   })
 
   it('a LinkedIn job lead says where it came from and where the outreach stands, connects through the engine, and keeps an email about their hiring to copy', async () => {

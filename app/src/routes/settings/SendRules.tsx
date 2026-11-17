@@ -166,6 +166,7 @@ export function SendRules() {
   const [note, setNote] = useState<string | null>(null)
   const [showLog, setShowLog] = useState(false)
   const log = useQuery('settings.sendLog', () => data.sendLog(30))
+  const queue = useQuery('settings.sendQueue', data.sendQueue)
   const tabs = settings.pages.map((p) => ({ label: p.label, route: `${settings.path}/${p.slug}` }))
   const cardType = params.get('card')?.startsWith('type:') ? params.get('card')!.slice(5) : null
   const chosen = cardType ? policies.data?.find((p) => p.type === cardType) : undefined
@@ -258,6 +259,39 @@ export function SendRules() {
           <p className="text-body text-ink-2">
             {held.data} {held.data === 1 ? 'message is' : 'messages are'} held until sending is on.
           </p>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2" aria-label="Waiting to send">
+        <h3 className="label-caps text-ink-2">Waiting to send</h3>
+        {queue.status === 'loading' && !queue.data ? (
+          <EmptyLine text="Loading" />
+        ) : (queue.data ?? []).length === 0 ? (
+          <p className="text-body text-ink-3">Nothing waiting. Everything decided has gone.</p>
+        ) : (
+          <ul className="flex flex-col" data-testid="send-queue">
+            {(queue.data ?? []).map((q) => {
+              const label = policies.data?.find((p) => p.type === q.type)?.label ?? q.type.replace(/_/g, ' ')
+              const needsNote = q.reason === 'Template needs approval'
+              return (
+                <li key={`${q.type}|${q.state}|${q.reason ?? ''}`} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-rule py-2">
+                  <span className="w-10 font-mono text-label text-ink">{q.count}</span>
+                  <span className="min-w-0 flex-1 text-body text-ink">
+                    {label}
+                    <span className="ml-3 text-ink-2">
+                      {q.state === 'queued'
+                        ? `queued${q.nextAt ? `, next ${new Intl.DateTimeFormat('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }).format(new Date(q.nextAt))}` : ''}`
+                        : needsNote
+                          ? 'waiting for you to approve the template'
+                          : `${q.state === 'held' ? 'held' : 'waiting'}: ${(q.reason ?? 'no reason given').toLowerCase()}`}
+                    </span>
+                  </span>
+                  {needsNote && <TextLink label="Open the template" onClick={() => navigate('/settings/templates')} />}
+                  <TextLink label="The rule" onClick={() => openCard(q.type)} />
+                </li>
+              )
+            })}
+          </ul>
         )}
       </section>
 

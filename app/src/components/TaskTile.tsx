@@ -1,5 +1,5 @@
 import type { Task, TaskStatus } from '../lib/tasks'
-import { dueWord, shownTitle, status, statusWord, typeWord } from '../lib/tasks'
+import { dueWord, primaryLabel, shortDay, shownTitle, sourceShort, status, statusWord, surfacedOn, typeWord } from '../lib/tasks'
 
 type Props = {
   task: Task
@@ -23,7 +23,8 @@ const mark: Record<TaskStatus, string> = {
 }
 
 // A small index card on the Tasks board: a type word, a title, one line of
-// why and the due day. Status is a dot, a word and one thin colour mark on
+// why, where it came from and what to do (Jason, 17 November 2026), the day
+// it surfaced and the due day. Status is a dot, a word and one thin colour mark on
 // the left edge, so it still reads in greyscale. Added for the Tasks tab
 // (docs/decisions.md, Pending for Jason).
 export function TaskTile({ task, today, onOpen, draggable, onDragStart, onDragOver, onDrop, dragging }: Props) {
@@ -59,10 +60,20 @@ export function TaskTile({ task, today, onOpen, draggable, onDragStart, onDragOv
           </span>
         </span>
         <span className="line-clamp-2 text-body text-ink">{shownTitle(task)}</span>
-        {task.why && <span className="line-clamp-2 text-label text-ink-2">{task.why}</span>}
-        <span className="label-caps mt-auto text-ink-2">
-          {statusWord[st]}
-          {task.waitingOn ? ` on ${task.waitingOn.toLowerCase()}` : ''}
+        {task.why && <span className="line-clamp-1 text-label text-ink-2">{task.why}</span>}
+        <span className="truncate text-label text-ink" data-testid="tile-action">
+          <span className="text-ink-2">{sourceShort(task)}</span>
+          <span className="mx-2 text-ink-3">·</span>
+          {primaryLabel(task)}
+        </span>
+        <span className="mt-auto flex items-baseline justify-between gap-2">
+          <span className="label-caps truncate text-ink-2">
+            {statusWord[st]}
+            {task.waitingOn ? ` on ${task.waitingOn.toLowerCase()}` : ''}
+          </span>
+          <span className="shrink-0 font-mono text-label text-ink-3" data-testid="tile-surfaced">
+            Surfaced {shortDay(surfacedOn(task))}
+          </span>
         </span>
       </button>
     </li>
