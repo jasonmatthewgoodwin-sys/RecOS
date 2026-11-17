@@ -2,6 +2,7 @@
 //   POST /run-agent/run-start    { agent, trigger, mode }        agent key
 //   POST /run-agent/run-finish   { run_id, status, errors, summary, cost }   agent key
 //   GET  /run-agent/context?want=pool,job_keys                   agent key
+//   GET  /run-agent/peek?mode=research                          agent key (0059)
 //   POST /run-agent/request-run  { agent }                       the owner's session
 //
 // Deploy: supabase functions deploy run-agent --no-verify-jwt
@@ -66,6 +67,15 @@ Deno.serve(async (req) => {
     return ok(data)
   }
 
+  // E10 (0059): is there anything for me? Counts only, claims nothing, so a
+  // polling routine stops before it loads the agent's prompt (17 November 2026).
+  if (path === 'peek') {
+    if (req.method !== 'GET') return fail('invalid', 'GET only.')
+    const { data, error } = await db.rpc('agent_peek', { p_agent: agent, p_mode: url.searchParams.get('mode') })
+    if (error) return fromDbError(error.message)
+    return ok(data)
+  }
+
   if (path === 'context') {
     if (req.method !== 'GET') return fail('invalid', 'GET only.')
     const want = (url.searchParams.get('want') ?? '').split(',').map((w) => w.trim()).filter(Boolean)
@@ -75,5 +85,5 @@ Deno.serve(async (req) => {
     return ok(data)
   }
 
-  return fail('not_found', 'No such path. Use run-start, run-finish, context or request-run.')
+  return fail('not_found', 'No such path. Use run-start, run-finish, context, peek or request-run.')
 })

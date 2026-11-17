@@ -2508,6 +2508,28 @@ test('0054 map top-up: a map job carries the newest map on the search as previou
   await db.query(`update search_jobs set status = 'failed', finished_at = now() where id in ($1, $2)`, [mapJob, qJob])
 })
 
+test('0059 peek: nothing waiting says no work and claims nothing; a waiting job or a run request says work', async () => {
+  await db.query(`update search_jobs set status = 'failed', finished_at = now() where status in ('waiting', 'working')`)
+  await db.query(`update spec_requests set status = 'failed', finished_at = now() where status in ('waiting', 'working')`)
+  await db.query(`update task_jobs set status = 'failed', finished_at = now() where status in ('waiting', 'working')`)
+  await db.query(`update run_requests set taken_at = now() where taken_at is null`)
+  const peek = async (a, m) => (await rows(`select agent_peek($1, $2) as p`, [a, m]))[0].p
+  assert.equal((await peek('a6_calls', 'research')).work, false)
+  assert.equal((await peek('a9_tasks', null)).work, false)
+  const [s] = await rows(`select id from searches order by opened_on limit 1`)
+  const jid = (await rows(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'questions') returning id`, [ownerId, s.id]))[0].id
+  const p1 = await peek('a6_calls', 'research')
+  assert.equal(p1.work, true)
+  assert.equal(p1.waiting, 1)
+  assert.equal((await rows(`select status from search_jobs where id = $1`, [jid]))[0].status, 'waiting', 'peek claims nothing')
+  await db.query(`update search_jobs set status = 'failed', finished_at = now() where id = $1`, [jid])
+  await db.query(`insert into run_requests (agent, requested_by) values ('a9_tasks', 'owner')`)
+  assert.equal((await peek('a9_tasks', null)).work, true)
+  await db.query(`update run_requests set taken_at = now() where taken_at is null`)
+  assert.equal((await peek('a1_review', null)).work, true)
+  await assert.rejects(db.query(`set local role authenticated; select agent_peek('a9_tasks', null)`))
+})
+
 for (const { name, fn } of tests) {
   try {
     await fn()
