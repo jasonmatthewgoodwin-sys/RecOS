@@ -1,4 +1,4 @@
--- Row-level security for inbox_folders (migration 0056). Pattern P-OWNER.
+-- Row-level security for inbox_folders (migration 0058). Pattern P-OWNER.
 -- Owner may select, insert and update. No delete policy: a folder is removed
 -- through delete_inbox_folder(), which checks for the owner.
 -- Safe to run again: each policy is dropped and recreated.

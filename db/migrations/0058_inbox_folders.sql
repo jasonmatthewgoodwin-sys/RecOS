@@ -1,4 +1,4 @@
--- 0056 Inbox folders (Jason asked 14 November, said yes to building them 17 November 2026; first written as 0030 on a branch that was never merged).
+-- 0058 Inbox folders (Jason asked 14 November, said yes to building them 17 November 2026; first written as 0030 on a branch that was never merged, then 0056, which Mia took the same day).
 --
 -- The owner makes his own folders to sort the Inbox. An item sits in at most
 -- one folder; with none it shows under Inbox. Deleting a folder returns its

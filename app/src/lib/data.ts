@@ -131,11 +131,11 @@ export type InboxItem = {
   dueOn: string | null
   /** ISO timestamp */
   createdAt: string
-  /** The owner's folder it sits in, or none for Inbox (migration 0056). */
+  /** The owner's folder it sits in, or none for Inbox (migration 0058). */
   folderId?: string | null
 }
 
-/** One of the owner's own Inbox folders (migration 0056). */
+/** One of the owner's own Inbox folders (migration 0058). */
 export type InboxFolder = { id: string; name: string; position: number }
 
 /** The closed views on the Inbox's left side: what was done and what was binned. */
@@ -925,7 +925,7 @@ export interface DataSource {
   /** INBX-5: bin every stale item in one go. */
   binStale(ids: string[]): Promise<void>
 
-  /** The owner's own Inbox folders, in his order (migration 0056). */
+  /** The owner's own Inbox folders, in his order (migration 0058). */
   inboxFolders(): Promise<InboxFolder[]>
   /** A new folder at the end. Names are unique, whatever the case. */
   createInboxFolder(name: string): Promise<InboxFolder>

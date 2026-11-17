@@ -324,7 +324,7 @@ export function resetSampleInbox() {
   sampleFolders = freshSampleFolders()
 }
 
-// The owner's own Inbox folders (migration 0056). One to start, empty.
+// The owner's own Inbox folders (migration 0058). One to start, empty.
 export function freshSampleFolders(): InboxFolder[] {
   return [{ id: 'folder-1', name: 'Hold for later', position: 0 }]
 }

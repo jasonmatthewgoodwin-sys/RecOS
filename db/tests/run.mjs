@@ -2436,7 +2436,7 @@ test('0048 research prompt: the seed puts the research mode in front of the acti
   }
 })
 
-// ---------------------------------------------------------------- inbox folders (0056)
+// ---------------------------------------------------------------- inbox folders (0058)
 
 test('inbox folders: the owner creates, renames and lists his own folders; names are unique per owner', async () => {
   await owner(async () => {
