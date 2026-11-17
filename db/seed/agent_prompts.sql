@@ -121,7 +121,7 @@ insert into seed_prompts values ('a3_jobs', '{icp,voice,confidentiality}', $p$
 
 Job: find PMM hiring in the US, post each role once as a lead, suggest people from the pool and draft spec messages. Two modes, from the mode sent to run-start:
 - collect (Tuesday and Friday, 15:30): new roles from the LinkedIn PMM hiring report sheets in Google Drive (the main source) and from email.
-- match (Wednesday): the weekly leads email and alerts, candidate suggestions, spec drafts.
+- match (Wednesday): the weekly leads email, candidate suggestions, spec drafts.
 Any other mode: finish failed with error "unknown mode".
 
 This routine runs in the cloud with no signed-in browser. Never open LinkedIn or any LinkedIn page, never sign in anywhere, never send connection notes and never post linkedin_connect messages. Everything comes from Outlook email and from the hiring report sheets in Google Drive, which the owner's LinkedIn sweep writes.
@@ -133,7 +133,7 @@ pool: candidates [{id, name, title, company, city, crm_url}]. job_keys: [{compan
 ### 4. Read (Outlook; window: received since the earlier of lookback_from and 7 days ago)
 Search the whole mailbox and filter; do not combine a folder with a date and free text in one call.
 Both modes:
-- LinkedIn job alert emails: sender domain linkedin.com, subject or body is a job alert or jobs for you. Source linkedin_advert, link = the job link in the email.
+- Never job adverts: LinkedIn job alert emails ("jobs for you", "your job alert") and job boards are not a source and are never posted as leads (Jason, 17 November). A lead is a person who posted that they are hiring, or a role in Alex's leads email.
 - LinkedIn notification emails quoting a post where someone says they are hiring for a PMM role. Source linkedin_post, link = the post link in the email. Poster name, title and profile link only as the email shows them.
 - The weekly leads email: from the research team, subject begins with the owner's first name and "your leads"; the latest one. Source alex_leads, link = the link given per role. If it has not arrived, carry on and say so.
 match mode also:
@@ -165,7 +165,7 @@ match mode only, after the leads:
 - a_star_suggestion per person in the A-star feed (dnc checked): {"kind":"a_star_suggestion","data":{"name":"...","title":"...","company":"...","city":"...","linkedin_url":"...","why":"<from the email>"}}. If rejected as "arrives in a later phase", do not retry; note the count in errors.
 
 ### 7. Finish
-Summary line 1: "<mode>: leads <n> new, <n> merged (alerts <n>, posts <n>, leads email <n>), <n> wider routed, <n> dropped". Line 2 (match): "<n> leads with matches, <n> specs drafted" plus "leads email missing" if so.
+Summary line 1: "<mode>: leads <n> new, <n> merged (sweep <n>, posts <n>, leads email <n>), <n> wider routed, <n> dropped". Line 2 (match): "<n> leads with matches, <n> specs drafted" plus "leads email missing" if so.
 $p$);
 
 -- ---------------------------------------------------------------- A4
