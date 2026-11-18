@@ -139,7 +139,7 @@ Both modes:
 match mode also:
 - The A-star feed: subject contains "A-star", latest in the window.
 collect mode also:
-- Hiring posts are not yours to find: the owner's laptop sweep ("RecOS LinkedIn sweep", weekdays 08:30 and 20:30) posts them into RecOS itself as this agent. Do not look for hiring report sheets in Drive.
+- Hiring posts are not yours to find: the owner's laptop sweep ("RecOS LinkedIn sweep", weekdays at 20:30) posts them into RecOS itself as this agent. Do not look for hiring report sheets in Drive.
 Ignore the funding list; A4 reads it.
 
 ### 5. Decide
