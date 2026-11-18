@@ -11,7 +11,7 @@ import { daysSince } from '../../lib/bd'
 import { data } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, useQuery } from '../../lib/query'
-import { candidateNeedsDesk, feedbackWord, stageWord } from '../../lib/searches'
+import { candidateNeedsDesk, feedbackWord, interviewStages, stageWord } from '../../lib/searches'
 import { sections } from '../../lib/sections'
 import { ukClock } from '../../lib/time'
 import { CANDIDATES_KEY, SEARCHES_KEY } from './Open'
@@ -30,7 +30,7 @@ export function InProcess() {
   const searches = useQuery(SEARCHES_KEY, data.searches)
   const today = ukClock(new Date()).date
   const tabs = useTabs()
-  const live = (candidates.data ?? []).filter((c) => c.stage === 'first_stage' || c.stage === 'later_stage' || c.stage === 'offer')
+  const live = (candidates.data ?? []).filter((c) => interviewStages.includes(c.stage) || c.stage === 'offer')
   const atInterview = live.filter((c) => c.stage !== 'offer').length
   const atOffer = live.filter((c) => c.stage === 'offer').length
   const search = (id: string) => (searches.data ?? []).find((s) => s.id === id)

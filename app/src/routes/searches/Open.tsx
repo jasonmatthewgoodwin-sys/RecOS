@@ -15,10 +15,12 @@ import { daysSince } from '../../lib/bd'
 import { data, type CandidatePatch, type CandidateStage, type Member, type NewSearch, type OfferStatus, type Search, type SearchCandidate, type SearchNote, type SearchPatch, type SearchPriority } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
-import { bulletLines, candidateNeedsDesk, closeChecks, feedbackWord, healthOf, healthWord, inPlay, isLive, numberLine, offerWord, priorityOrder, priorityWord, searchTone, stageOrder, stageWord, statusWord } from '../../lib/searches'
+import { boardStages, bulletLines, closeChecks, feedbackWord, healthOf, healthWord, inPlay, interviewStages, isLive, numberLine, offerWord, priorityOrder, priorityWord, searchTone, stageWord, statusWord } from '../../lib/searches'
 import { sections } from '../../lib/sections'
 import { BriefTab, CallsTab, PipelineHeader, PreBriefTab } from './WorkspaceTabs'
 import { InterviewPrep } from './InterviewPrep'
+import { PipelineBoard } from './PipelineBoard'
+import { Recommended } from './Recommended'
 import { ukClock } from '../../lib/time'
 
 // Searches (30.1 to 30.8): one short list grouped by priority, two numbers
@@ -118,7 +120,7 @@ export function Open({ role = 'owner' }: { role?: 'owner' | 'reviewer' }) {
         <EmptyLine text="Could not load. Try again." />
       ) : (
         <div className="flex flex-col gap-3">
-          <p className="font-mono text-label text-ink-3">spoken . submitted . interviewing . offer, then days open</p>
+          <p className="font-mono text-label text-ink-3">longlist . shortlist . interviewing . offer, then days open</p>
           <RowList rows={rows} emptyText="No live searches. New search starts one." limit={40} />
         </div>
       )}
@@ -254,15 +256,20 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
   const myCalls = (calls.data ?? []).filter((c) => c.searchId === s.id)
   const days = daysSince(s.openedOn, today)
 
+  // One header (Jason, 18 November 2026: calm and the same on every tab):
+  // where and how long, the status and health in words, the health line and
+  // the next step, then the tabs with the priority beside them.
   const header = (
     <div className="flex flex-col gap-3">
-      <p className="text-ink-2">
-        {s.confidential ? 'Confidential' : s.client}
-        {s.city ? `, ${s.city.replace(/_/g, ' ')}` : ''}, day {days}. {statusWord[s.status]}
-        {s.health !== 'warm' ? `, ${healthWord[s.health].toLowerCase()}` : ''}
+      <p className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-label text-ink-2" aria-label="Status">
+        <span>{s.confidential ? 'Confidential' : s.client}{s.city ? `, ${s.city.replace(/_/g, ' ')}` : ''}</span>
+        <span>Day {days}</span>
+        <span className="text-ink">{statusWord[s.status]}</span>
+        {s.health !== 'warm' && <span className="text-ink">{healthWord[s.health]}</span>}
+        {s.crmUrl && <TextLink label="Open in CRM" href={s.crmUrl} icon="open" />}
       </p>
       {(s.healthReason || s.nextStep) && (
-        <ul className="flex flex-col gap-1 text-body text-ink" aria-label="Where it stands">
+        <ul className="flex max-w-prose flex-col gap-1 text-body text-ink" aria-label="Where it stands">
           {bulletLines(s.healthReason).map((l) => (
             <li key={l} className="flex gap-3">
               <span className="text-ink-3">·</span>
@@ -280,21 +287,22 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
           ))}
         </ul>
       )}
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Priority">
-        {priorityOrder.map((p) => (
-          <button key={p} type="button" aria-current={s.priority === p || undefined} onClick={() => onPatch({ priority: p })} className={`inline-flex h-9 items-center rounded-pill border px-3 text-label ${s.priority === p ? 'border-ink bg-ink text-sheet' : 'border-rule text-ink-2 hover:border-ink hover:text-ink'}`}>
-            {priorityWord[p]}
-          </button>
-        ))}
-        {s.crmUrl && <TextLink label="Open in CRM" href={s.crmUrl} icon="open" />}
+      <div className="mt-1 flex flex-wrap items-end justify-between gap-x-8 gap-y-3 border-b border-rule">
+        <nav className="flex flex-wrap gap-x-6" aria-label="Workspace">
+          {(Object.keys(tabWord) as Tab[]).map((t) => (
+            <button key={t} type="button" aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)} className={`label-caps -mb-px min-h-10 border-b-2 ${tab === t ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink'}`}>
+              {tabWord[t]}
+            </button>
+          ))}
+        </nav>
+        <div className="flex flex-wrap gap-1 pb-2" role="group" aria-label="Priority">
+          {priorityOrder.map((p) => (
+            <button key={p} type="button" aria-current={s.priority === p || undefined} onClick={() => onPatch({ priority: p })} className={`inline-flex h-8 items-center rounded-pill border px-3 text-label ${s.priority === p ? 'border-ink bg-ink text-sheet' : 'border-transparent text-ink-3 hover:border-rule hover:text-ink'}`}>
+              {priorityWord[p]}
+            </button>
+          ))}
+        </div>
       </div>
-      <nav className="flex flex-wrap gap-x-5" aria-label="Workspace">
-        {(Object.keys(tabWord) as Tab[]).map((t) => (
-          <button key={t} type="button" aria-current={tab === t ? 'page' : undefined} onClick={() => setTab(t)} className={`label-caps min-h-8 border-b-2 ${tab === t ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink'}`}>
-            {tabWord[t]}
-          </button>
-        ))}
-      </nav>
     </div>
   )
 
@@ -308,9 +316,26 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
     body = cand ? (
       <CandidateView c={cand} search={s} today={today} onBack={() => setCand(null)} onPatch={(change) => void patchCand(cand, change)} />
     ) : (
-      <div className="flex flex-col gap-6">
-        <PipelineHeader search={s} onNote={onNote} />
-        <PipelineTab search={s} candidates={candidates} today={today} onOpen={(id) => setCand(id)} onAdded={() => invalidate(CANDIDATES_KEY)} onNote={onNote} />
+      <div className="flex flex-col gap-5">
+        <PipelineHeader search={s} candidates={candidates} onNote={onNote} />
+        <Recommended search={s} notes={notes.data ?? []} candidates={candidates} onAdded={() => invalidate(CANDIDATES_KEY)} onNote={onNote} />
+        <PipelineTab
+          search={s}
+          candidates={candidates}
+          today={today}
+          onOpen={(id) => setCand(id)}
+          onMove={(c, stage) => {
+            // Agreed to be put forward comes first (CAN-1): open them so the switch is to hand.
+            if (stage === 'shortlist' && !c.consentToSubmit) {
+              onNote(`Turn on Agreed to be put forward for ${c.name} first.`)
+              setCand(c.id)
+              return
+            }
+            void patchCand(c, { stage })
+          }}
+          onAdded={() => invalidate(CANDIDATES_KEY)}
+          onNote={onNote}
+        />
       </div>
     )
   } else if (tab === 'calls') {
@@ -355,13 +380,12 @@ export function Workspace({ search: s, candidates, today, onPatch, onNote, onClo
   )
 }
 
-function PipelineTab({ search: s, candidates, today, onOpen, onAdded, onNote }: { search: Search; candidates: SearchCandidate[]; today: string; onOpen: (id: string) => void; onAdded: () => void; onNote: (t: string) => void }) {
+function PipelineTab({ search: s, candidates, today, onOpen, onMove, onAdded, onNote }: { search: Search; candidates: SearchCandidate[]; today: string; onOpen: (id: string) => void; onMove: (c: SearchCandidate, stage: CandidateStage) => void; onAdded: () => void; onNote: (t: string) => void }) {
   const [adding, setAdding] = useState(false)
   const [prep, setPrep] = useState(false)
   const members = useQuery('people.members', data.members)
   const play = candidates.filter((c) => inPlay.includes(c.stage))
-  const waiting = candidates.filter((c) => c.stage === 'submitted' && !c.feedbackReceivedOn).length
-  const groups = [...stageOrder].reverse().map((st) => ({ stage: st, rows: candidates.filter((c) => c.stage === st) })).filter((g) => g.rows.length > 0)
+  const waiting = candidates.filter((c) => c.stage === 'shortlist' && !c.feedbackReceivedOn).length
   const inSearch = new Set(candidates.map((c) => c.personId))
   async function add(m: Member) {
     try {
@@ -373,29 +397,17 @@ function PipelineTab({ search: s, candidates, today, onOpen, onAdded, onNote }: 
     }
   }
   return (
-    <div className="flex flex-col gap-4">
-      <p className="font-mono text-label text-ink-2">
-        {play.length} in play, {waiting} waiting on feedback
-      </p>
-      {groups.length === 0 && <p className="text-ink-3">Nobody in play yet. Add someone from People.</p>}
-      {groups.map((g) => (
-        <section key={g.stage} className="flex flex-col gap-1" aria-label={stageWord[g.stage]}>
-          <h4 className="label-caps text-ink-2">{stageWord[g.stage]}</h4>
-          <ul className="flex flex-col">
-            {g.rows.map((c) => (
-              <Row key={c.id} dot={candidateNeedsDesk(c, today) ? 'solid' : 'hollow'} title={c.name} detail={[c.title, c.company].filter(Boolean).join(', ')} meta={`${daysSince(c.stageChangedOn, today)}d`} word={feedbackWord(c, today)} done={c.stage === 'rejected' || c.stage === 'withdrew'} onOpen={() => onOpen(c.id)} />
-            ))}
-          </ul>
-        </section>
-      ))}
-      <div className="flex flex-wrap gap-6">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+        <p className="font-mono text-label text-ink-2">
+          {play.length} in play, {waiting} waiting on feedback
+        </p>
         <TextLink label={adding ? 'Hide people' : 'Add from People'} icon="plus" onClick={() => setAdding((a) => !a)} />
         {/* Works with nobody in the pipeline here, since the CRM holds it (Jason, 16 November 2026). */}
         {!prep && <TextLink label="Interview prep" icon="mail" onClick={() => setPrep(true)} />}
       </div>
-      {prep && <InterviewPrep client={s.client} role={s.role} confidential={s.confidential} onClose={() => setPrep(false)} />}
       {adding && (
-        <ul className="flex flex-col" aria-label="People to add">
+        <ul className="flex max-h-64 max-w-3xl flex-col overflow-y-auto" aria-label="People to add">
           {(members.data ?? [])
             .filter((m) => !inSearch.has(m.personId))
             .slice(0, 12)
@@ -404,6 +416,8 @@ function PipelineTab({ search: s, candidates, today, onOpen, onAdded, onNote }: 
             ))}
         </ul>
       )}
+      {prep && <InterviewPrep client={s.client} role={s.role} confidential={s.confidential} onClose={() => setPrep(false)} />}
+      <PipelineBoard candidates={candidates} today={today} onOpen={onOpen} onMove={onMove} />
     </div>
   )
 }
@@ -414,8 +428,8 @@ function CandidateView({ c, search: s, today, onBack, onPatch }: { c: SearchCand
   const [asking, setAsking] = useState<'rejected' | 'withdrew' | null>(null)
   const [prep, setPrep] = useState(false)
   const [interview, setInterview] = useState(c.nextInterviewAt ? c.nextInterviewAt.slice(0, 16) : '')
-  const primaryWord = c.stage === 'spoken' || c.stage === 'sourced' ? 'Send confirmation' : c.stage === 'submitted' ? 'Nudge client' : c.stage === 'first_stage' || c.stage === 'later_stage' ? (c.prepSent ? 'Call after interview' : 'Send prep') : null
-  const choosable: CandidateStage[] = ['sourced', 'spoken', 'submitted', 'first_stage', 'later_stage', 'offer']
+  const primaryWord = c.stage === 'application' || c.stage === 'sourced' || c.stage === 'longlist' ? 'Send confirmation' : c.stage === 'shortlist' ? 'Nudge client' : interviewStages.includes(c.stage) ? (c.prepSent ? 'Call after interview' : 'Send prep') : null
+  const choosable: CandidateStage[] = boardStages.filter((st) => st !== 'placed')
   return (
     <div className="flex flex-col gap-4" data-candidate={c.id}>
       <TextLink label="Back to the pipeline" icon="arrow" onClick={onBack} />
@@ -437,14 +451,14 @@ function CandidateView({ c, search: s, today, onBack, onPatch }: { c: SearchCand
       </div>
       <Switch on={c.consentToSubmit} label="Agreed to be put forward" onChange={(on) => onPatch({ consentToSubmit: on })} />
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 font-mono text-label text-ink-2">
-        <dt>Submitted</dt>
+        <dt>Put forward</dt>
         <dd>{c.submittedOn ?? '–'}</dd>
         <dt>Feedback</dt>
         <dd>{c.feedbackReceivedOn ?? (c.submittedOn ? feedbackWord(c, today) ?? 'Waiting' : '–')}</dd>
         <dt>Last contact</dt>
         <dd>{c.lastCandidateContactOn ?? '–'}</dd>
       </dl>
-      {c.stage === 'submitted' && !c.feedbackReceivedOn && <TextLink label="Feedback came in" onClick={() => onPatch({ feedbackReceivedOn: today })} />}
+      {c.stage === 'shortlist' && !c.feedbackReceivedOn && <TextLink label="Feedback came in" onClick={() => onPatch({ feedbackReceivedOn: today })} />}
       <div className="flex flex-wrap items-end gap-4">
         <Field label="Next interview" value={interview} onChange={setInterview} placeholder="2026-11-20T15:00" onBlur={() => interview !== (c.nextInterviewAt?.slice(0, 16) ?? '') && onPatch({ nextInterviewAt: interview ? new Date(interview).toISOString() : null })} />
         <Switch on={c.prepSent} label="Prep sent" onChange={(on) => onPatch({ prepSent: on })} />

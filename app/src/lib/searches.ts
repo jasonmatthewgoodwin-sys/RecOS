@@ -7,19 +7,45 @@ import type { Tone } from '../theme/tokens'
 export const priorityWord: Record<SearchPriority, string> = { focus: 'Focus', active: 'Active', maintenance: 'Maintenance', dormant: 'Dormant' }
 export const priorityOrder: SearchPriority[] = ['focus', 'active', 'maintenance', 'dormant']
 
+// Jason's stages, as in Spott (0060, 18 November 2026). The board shows the
+// first ten as columns, left to right; Rejected and Withdrew sit behind a link.
 export const stageWord: Record<CandidateStage, string> = {
+  application: 'Application',
   sourced: 'Sourced',
-  spoken: 'Spoken',
-  submitted: 'Submitted',
-  first_stage: 'First stage',
-  later_stage: 'Later stage',
+  longlist: 'Longlist',
+  shortlist: 'Shortlist',
+  interview_1: 'Interview 1',
+  interview_2: 'Interview 2',
+  interview_3: 'Interview 3',
+  interview_4: 'Interview 4',
   offer: 'Offer',
   placed: 'Placed',
   rejected: 'Rejected',
   withdrew: 'Withdrew',
 }
-export const stageOrder: CandidateStage[] = ['sourced', 'spoken', 'submitted', 'first_stage', 'later_stage', 'offer', 'placed', 'rejected', 'withdrew']
-export const inPlay: CandidateStage[] = ['sourced', 'spoken', 'submitted', 'first_stage', 'later_stage', 'offer']
+export const boardStages: CandidateStage[] = ['application', 'sourced', 'longlist', 'shortlist', 'interview_1', 'interview_2', 'interview_3', 'interview_4', 'offer', 'placed']
+export const stageOrder: CandidateStage[] = [...boardStages, 'rejected', 'withdrew']
+export const inPlay: CandidateStage[] = ['application', 'sourced', 'longlist', 'shortlist', 'interview_1', 'interview_2', 'interview_3', 'interview_4', 'offer']
+export const interviewStages: CandidateStage[] = ['interview_1', 'interview_2', 'interview_3', 'interview_4']
+/** On the shortlist or past it: put forward to the client. */
+export const putForward: CandidateStage[] = ['shortlist', ...interviewStages, 'offer', 'placed']
+
+/**
+ * The board as the search's counters read it, with their old meaning kept:
+ * spoken is the longlist and beyond, submitted the shortlist and beyond,
+ * first stage interview 1, later stage interviews 2 to 4, offer offer.
+ */
+export function boardCounts(cands: SearchCandidate[]): Pick<Search, 'nSourced' | 'nSpoken' | 'nSubmitted' | 'nFirstStage' | 'nLaterStage' | 'nOffer'> {
+  const at = (stages: CandidateStage[]) => cands.filter((c) => stages.includes(c.stage)).length
+  return {
+    nSourced: at(['sourced', 'longlist', ...putForward]),
+    nSpoken: at(['longlist', ...putForward]),
+    nSubmitted: at(putForward),
+    nFirstStage: at(['interview_1']),
+    nLaterStage: at(['interview_2', 'interview_3', 'interview_4']),
+    nOffer: at(['offer']),
+  }
+}
 
 export const healthWord = { warm: 'Warm', cooling: 'Cooling', cold: 'Cold' } as const
 export const statusWord = { intake: 'Intake', open: 'Open', offer: 'At offer', placed: 'Placed', lost: 'Lost', on_hold: 'On hold', closed: 'Closed' } as const
@@ -30,7 +56,7 @@ export function isLive(s: Search): boolean {
   return s.status === 'intake' || s.status === 'open' || s.status === 'offer'
 }
 
-/** The four counts spoken . submitted . interviewing . offer, as one mono line (30.1). */
+/** The four counts longlist . shortlist . interviewing . offer, as one mono line (30.1). */
 export function numberLine(s: Search): string {
   return [s.nSpoken, s.nSubmitted, s.nFirstStage + s.nLaterStage, s.nOffer].join(' . ')
 }
@@ -58,14 +84,14 @@ export function workingDaysBetween(from: string, to: string): number {
 
 /** FEEDBACK 4D when a submission has waited that many working days (30.4). */
 export function feedbackWord(c: SearchCandidate, today: string): string | undefined {
-  if (c.stage !== 'submitted' || !c.submittedOn || c.feedbackReceivedOn) return undefined
+  if (c.stage !== 'shortlist' || !c.submittedOn || c.feedbackReceivedOn) return undefined
   const days = workingDaysBetween(c.submittedOn, today)
   return days >= 1 ? `Feedback ${days}d` : undefined
 }
 
 /** Waiting on the desk, or feedback late (30.4): the solid dot. */
 export function candidateNeedsDesk(c: SearchCandidate, today: string): boolean {
-  if (c.stage === 'submitted' && c.submittedOn && !c.feedbackReceivedOn) return workingDaysBetween(c.submittedOn, today) >= 3
+  if (c.stage === 'shortlist' && c.submittedOn && !c.feedbackReceivedOn) return workingDaysBetween(c.submittedOn, today) >= 3
   if (c.stage === 'offer') return true
   return false
 }

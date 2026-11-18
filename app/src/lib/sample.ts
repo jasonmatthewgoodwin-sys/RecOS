@@ -21,6 +21,7 @@ import { inboxStatusAfter } from './data'
 import { splitCopy, topicFrom } from './calendar'
 import type { SearchHit } from './capture'
 import { shiftDate, ukClock } from './time'
+import { putForward } from './searches'
 
 function todayAt(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 3_600_000).toISOString()
@@ -582,10 +583,10 @@ function candidate(over: Partial<SearchCandidate> & Pick<SearchCandidate, 'id' |
 export function freshSampleCandidates(): SearchCandidate[] {
   return [
     candidate({ id: 'sc-1', searchId: 's-northwind', personId: 'p-ada', name: 'Ada Example', title: 'Senior PMM', company: 'Northwind Sample Co', stage: 'offer', stageChangedOn: daysAgo(2), consentToSubmit: true, submittedOn: daysAgo(14), feedbackReceivedOn: daysAgo(12), offerStatus: 'verbal', decisionDueOn: daysAgo(-5), referencesTaken: 1, risks: 'Counter-offer likely', wouldSwing: 'Title and a clear first-year plan', profileUrl: 'https://example.com/in/ada' }),
-    candidate({ id: 'sc-2', searchId: 's-northwind', personId: 'p-dev', name: 'Dev Madeup', title: 'PMM Lead', company: 'Initech Mock', stage: 'later_stage', stageChangedOn: daysAgo(4), consentToSubmit: true, submittedOn: daysAgo(13), feedbackReceivedOn: daysAgo(11), nextInterviewAt: todayAt(26), prepSent: false }),
-    candidate({ id: 'sc-3', searchId: 's-northwind', personId: 'p-eve', name: 'Eve Invented', title: 'Group PMM', company: 'Stark Sample', stage: 'first_stage', stageChangedOn: daysAgo(3), consentToSubmit: true, submittedOn: daysAgo(10), feedbackReceivedOn: daysAgo(8) }),
-    candidate({ id: 'sc-4', searchId: 's-contoso', personId: 'p-ben', name: 'Ben Sample', title: 'VP Product Marketing', company: 'Contoso Demo Inc', stage: 'submitted', stageChangedOn: daysAgo(6), consentToSubmit: true, submittedOn: daysAgo(6) }),
-    candidate({ id: 'sc-5', searchId: 's-contoso', personId: 'p-finn', name: 'Finn Fictional', title: 'PMM', company: 'Globex Fiction', stage: 'spoken', stageChangedOn: daysAgo(1) }),
+    candidate({ id: 'sc-2', searchId: 's-northwind', personId: 'p-dev', name: 'Dev Madeup', title: 'PMM Lead', company: 'Initech Mock', stage: 'interview_2', stageChangedOn: daysAgo(4), consentToSubmit: true, submittedOn: daysAgo(13), feedbackReceivedOn: daysAgo(11), nextInterviewAt: todayAt(26), prepSent: false }),
+    candidate({ id: 'sc-3', searchId: 's-northwind', personId: 'p-eve', name: 'Eve Invented', title: 'Group PMM', company: 'Stark Sample', stage: 'interview_1', stageChangedOn: daysAgo(3), consentToSubmit: true, submittedOn: daysAgo(10), feedbackReceivedOn: daysAgo(8) }),
+    candidate({ id: 'sc-4', searchId: 's-contoso', personId: 'p-ben', name: 'Ben Sample', title: 'VP Product Marketing', company: 'Contoso Demo Inc', stage: 'shortlist', stageChangedOn: daysAgo(6), consentToSubmit: true, submittedOn: daysAgo(6) }),
+    candidate({ id: 'sc-5', searchId: 's-contoso', personId: 'p-finn', name: 'Finn Fictional', title: 'PMM', company: 'Globex Fiction', stage: 'longlist', stageChangedOn: daysAgo(1) }),
     candidate({ id: 'sc-6', searchId: 's-globex', personId: 'p-cara', name: 'Cara Placeholder', title: 'Director of PMM', company: 'Umbrella Sample', stage: 'sourced', stageChangedOn: daysAgo(2) }),
     candidate({ id: 'sc-7', searchId: 's-fabrikam', personId: 'p-hal', name: 'Hal Hypothetical', title: 'VP Product Marketing', company: 'Fabrikam Test Ltd', stage: 'placed', stageChangedOn: daysAgo(40), consentToSubmit: true, submittedOn: daysAgo(95), offerStatus: 'accepted', startOn: daysAgo(20), aftercareOn: daysAgo(-10) }),
   ]
@@ -1299,7 +1300,7 @@ export function freshSampleTasks(): Task[] {
       source: 'inbox_items',
       kind: 'suggestion',
       title: 'Decide on Dev Madeup for GrailPay Sample',
-      why: 'Spoken to over a week ago on the Director of Product Marketing search and still at spoken. Submit, or let them know.',
+      why: 'On the longlist for the Director of Product Marketing search for over a week. Shortlist them, or let them know.',
       personName: 'Dev Madeup',
       company: 'GrailPay Sample',
       dueOn: daysFromToday(2),
@@ -2088,11 +2089,16 @@ export const sampleSource: DataSource = {
   async updateCandidate(id, patch) {
     const found = sampleCandidates.find((x) => x.id === id)
     if (!found) throw new Error('No such candidate')
-    if (patch.stage === 'submitted' && !(patch.consentToSubmit ?? found.consentToSubmit)) throw new Error('Agreed to be put forward must be on first')
+    if (patch.stage === 'shortlist' && !(patch.consentToSubmit ?? found.consentToSubmit)) throw new Error('Agreed to be put forward must be on first')
     const today = daysAgo(0)
     if (patch.stage && patch.stage !== found.stage) found.stageChangedOn = today
     Object.assign(found, patch)
-    if (patch.stage === 'submitted' && !found.submittedOn) found.submittedOn = today
+    // What the database rules do (0060): on the shortlist or past it counts as put forward; at offer the search is offer.
+    if (patch.stage && putForward.includes(patch.stage) && !found.submittedOn) found.submittedOn = today
+    if (patch.stage === 'offer') {
+      const s = sampleSearches.find((x) => x.id === found.searchId)
+      if (s && (s.status === 'intake' || s.status === 'open')) s.status = 'offer'
+    }
     if (patch.offerStatus === 'accepted') found.stage = 'placed'
     if (found.stage === 'placed' && !found.aftercareOn) found.aftercareOn = plusDays(found.startOn ?? today, 30)
     if (found.stage === 'placed') {

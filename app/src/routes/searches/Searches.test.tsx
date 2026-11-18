@@ -1,9 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SignedIn } from '../../App'
-import { data } from '../../lib/data'
+import { data, research, searchIntake } from '../../lib/data'
+import { createSampleSearchResearch, type SearchResearch } from '../../lib/searchResearch'
+import { invalidate } from '../../lib/query'
 import { freshSampleSearches, resetSampleContent, resetSampleLeads, resetSampleMembers, resetSampleSearches, sampleSource } from '../../lib/sample'
 import { healthOf, numberLine } from '../../lib/searches'
 import { sections, settings } from '../../lib/sections'
@@ -12,9 +14,30 @@ import { sections, settings } from '../../lib/sections'
 // (28.7 under Content), built 15 November 2026 so that no tab says it is
 // coming in a later phase.
 
+// The file readers for a job description are stood in for (0060).
+vi.mock('mammoth', () => ({ default: { extractRawText: vi.fn(async () => ({ value: 'Head of Product Marketing\n\nOwn the launch calendar and the messaging house for two product lines.' })) } }))
+vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: { workerSrc: '' }, getDocument: vi.fn() }))
+vi.mock('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: '/pdf.worker.js' }))
+
 const session = { firstName: 'Jason', role: 'owner' as const }
 
+// The research jobs, the role type and the job description go to a stand-in, never a project.
+let stand: SearchResearch
+function mockResearch() {
+  stand = createSampleSearchResearch({
+    addSearch: async () => 's-new',
+    saveNote: (searchId, tab, content, structured) => sampleSource.saveSearchNote(searchId, tab, content, structured),
+    pool: async () => (await sampleSource.members()).map((m) => ({ personId: m.personId, name: m.name, title: m.title, company: m.company })),
+    onSearch: async (id) => (await sampleSource.searchCandidates()).filter((c) => c.searchId === id).map((c) => c.personId),
+    delayMs: 200,
+  })
+  for (const k of ['startSearch', 'requestSearchJob', 'searchJobs', 'searchIntake', 'saveRoleType', 'saveJd'] as const) {
+    vi.spyOn(research, k).mockImplementation(((...args: unknown[]) => (stand[k] as (...a: unknown[]) => unknown)(...args)) as never)
+  }
+}
+
 function mock() {
+  mockResearch()
   vi.spyOn(data, 'needsYou').mockResolvedValue(7)
   vi.spyOn(data, 'followUpsDue').mockResolvedValue({ due: 3, late: 3, lateFromDay: 'Monday' })
   vi.spyOn(data, 'callsToday').mockResolvedValue([])
@@ -26,6 +49,7 @@ function mock() {
     search: vi.spyOn(data, 'updateSearch').mockImplementation((id, patch) => sampleSource.updateSearch(id, patch)),
     add: vi.spyOn(data, 'addSearch').mockImplementation((input) => sampleSource.addSearch(input)),
     cand: vi.spyOn(data, 'updateCandidate').mockImplementation((id, patch) => sampleSource.updateCandidate(id, patch)),
+    addCand: vi.spyOn(data, 'addCandidate').mockImplementation((searchId, personId) => sampleSource.addCandidate(searchId, personId)),
     note: vi.spyOn(data, 'saveSearchNote').mockImplementation((a, b, c, d) => sampleSource.saveSearchNote(a, b, c, d)),
     call: vi.spyOn(data, 'updateCall').mockImplementation((id, patch) => sampleSource.updateCall(id, patch)),
     verdict: vi.spyOn(data, 'aStarVerdict').mockImplementation((id, v) => sampleSource.aStarVerdict(id, v)),
@@ -134,14 +158,154 @@ describe('Searches, Open', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     open('/searches/open?card=search:s-contoso&tab=pipeline')
     const dialog = await screen.findByRole('dialog')
-    await user.click(await within(dialog).findByText('Finn Fictional'))
-    await user.click(within(dialog).getByRole('button', { name: 'Submitted' }))
-    await waitFor(() => expect(m.cand).toHaveBeenCalledWith('sc-5', { stage: 'submitted' }))
+    await user.click(await within(dialog).findByRole('button', { name: /Finn Fictional/ }))
+    await user.click(within(dialog).getByRole('button', { name: 'Shortlist' }))
+    await waitFor(() => expect(m.cand).toHaveBeenCalledWith('sc-5', { stage: 'shortlist' }))
     expect(await screen.findByText('Agreed to be put forward must be on first.')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('switch', { name: 'Agreed to be put forward' }))
-    await user.click(within(dialog).getByRole('button', { name: 'Submitted' }))
-    await waitFor(() => expect(m.cand).toHaveBeenLastCalledWith('sc-5', { stage: 'submitted' }))
-    expect((await sampleSource.searchCandidates()).find((c) => c.id === 'sc-5')?.stage).toBe('submitted')
+    await user.click(within(dialog).getByRole('button', { name: 'Shortlist' }))
+    await waitFor(() => expect(m.cand).toHaveBeenLastCalledWith('sc-5', { stage: 'shortlist' }))
+    expect((await sampleSource.searchCandidates()).find((c) => c.id === 'sc-5')?.stage).toBe('shortlist')
+  })
+
+  it('the pipeline is a board: ten columns left to right, cards with days in stage and late feedback, Rejected and Withdrew behind a link', async () => {
+    mock()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    await sampleSource.updateCandidate('sc-3', { stage: 'withdrew', outcomeReason: 'Took another role' })
+    open('/searches/open?card=search:s-northwind&tab=pipeline')
+    const dialog = await screen.findByRole('dialog')
+    const board = await within(dialog).findByRole('list', { name: 'Pipeline board' })
+    const columns = within(board).getAllByRole('heading', { level: 4 }).map((h) => h.firstChild?.textContent)
+    expect(columns).toEqual(['Application', 'Sourced', 'Longlist', 'Shortlist', 'Interview 1', 'Interview 2', 'Interview 3', 'Interview 4', 'Offer', 'Placed'])
+    // The board scrolls sideways in its own pane.
+    expect(board.parentElement?.className).toMatch(/overflow-x-auto/)
+    const offer = within(board).getByRole('listitem', { name: 'Offer' })
+    expect(within(offer).getByText('Ada Example')).toBeInTheDocument()
+    expect(within(offer).getByText('Senior PMM, Northwind Sample Co')).toBeInTheDocument()
+    expect(within(offer).getByText('2d')).toBeInTheDocument()
+    expect(within(board).queryByText('Eve Invented')).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: 'Rejected and withdrew, 1' }))
+    expect(within(within(dialog).getByRole('list', { name: 'Rejected and withdrew' })).getByText('Eve Invented')).toBeInTheDocument()
+    // What good looks like starts from the brief.
+    const panel = within(dialog).getByRole('region', { name: 'Recommended candidates' })
+    await user.click(within(panel).getByRole('button', { name: 'Find candidates' }))
+    expect(within(panel).getByLabelText('Must-haves')).toHaveValue('B2B SaaS, launches at scale, has managed two or more')
+  })
+
+  it('a card moves by drag and drop or by its Move to menu, and the stage is saved; feedback late shows on the card', async () => {
+    const m = mock()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    open('/searches/open?card=search:s-contoso&tab=pipeline')
+    const dialog = await screen.findByRole('dialog')
+    const board = await within(dialog).findByRole('list', { name: 'Pipeline board' })
+    // Ben has waited on feedback for a week: the solid dot and the word.
+    const ben = board.querySelector('[data-candidate-card="sc-4"]') as HTMLElement
+    expect(within(ben).getByText(/Feedback \dd/)).toHaveAttribute('data-overdue')
+    // The keyboard way: Move to.
+    await user.selectOptions(within(board).getByLabelText('Move Ben Sample to'), 'Interview 1')
+    await waitFor(() => expect(m.cand).toHaveBeenCalledWith('sc-4', { stage: 'interview_1' }))
+    expect(within(within(board).getByRole('listitem', { name: 'Interview 1' })).getByText('Ben Sample')).toBeInTheDocument()
+    // Dragging Finn to Interview 2.
+    const finn = board.querySelector('[data-candidate-card="sc-5"]') as HTMLElement
+    const target = within(board).getByRole('listitem', { name: 'Interview 2' })
+    fireEvent.dragStart(finn)
+    fireEvent.dragOver(target)
+    fireEvent.drop(target)
+    await waitFor(() => expect(m.cand).toHaveBeenCalledWith('sc-5', { stage: 'interview_2' }))
+    expect((await sampleSource.searchCandidates()).find((c) => c.id === 'sc-5')?.stage).toBe('interview_2')
+  })
+
+  it('a card dropped on the shortlist without agreement opens the candidate instead of saving', async () => {
+    const m = mock()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    open('/searches/open?card=search:s-globex&tab=pipeline')
+    const dialog = await screen.findByRole('dialog')
+    const board = await within(dialog).findByRole('list', { name: 'Pipeline board' })
+    await user.selectOptions(within(board).getByLabelText('Move Cara Placeholder to'), 'Shortlist')
+    expect(await screen.findByText('Turn on Agreed to be put forward for Cara Placeholder first.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('switch', { name: 'Agreed to be put forward' })).toBeInTheDocument()
+    expect(m.cand).not.toHaveBeenCalled()
+  })
+
+  it('Pre-brief: the role type takes a choice or his own words, saves, and is not reset', async () => {
+    mock()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    open('/searches/open?card=search:s-contoso&tab=prebrief')
+    const dialog = await screen.findByRole('dialog')
+    const field = (await within(dialog).findByLabelText('Role type')) as HTMLInputElement
+    await user.click(field)
+    await user.type(field, 'Head of Product Marketing, EMEA and US')
+    await user.tab()
+    await waitFor(async () => expect((await searchIntake('s-contoso')).roleType).toBe('Head of Product Marketing, EMEA and US'))
+    // Clicking it again keeps what was saved.
+    await user.click(field)
+    expect(field.value).toBe('Head of Product Marketing, EMEA and US')
+    act(() => invalidate('searches.intake.s-contoso'))
+    await waitFor(() => expect((within(dialog).getByLabelText('Role type') as HTMLInputElement).value).toBe('Head of Product Marketing, EMEA and US'))
+    // One of the choices by its words is saved as its code, and its questions follow.
+    await user.clear(field)
+    await user.type(field, 'Technical PMM{Enter}')
+    await waitFor(async () => expect((await searchIntake('s-contoso')).roleType).toBe('technical_pmm'))
+    expect(await within(dialog).findByText('For a technical PMM')).toBeInTheDocument()
+  })
+
+  it('Pre-brief: a job description is pasted or read from a Word file, with the word count, Replace and Clear', async () => {
+    mock()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    open('/searches/open?card=search:s-fabrikam&tab=prebrief')
+    const dialog = await screen.findByRole('dialog')
+    const box = await within(dialog).findByLabelText('Job description')
+    await user.type(box, 'Own launches for two product lines.')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await within(dialog).findByTestId('jd-words')).toHaveTextContent('On file, 6 words')
+    expect((await searchIntake('s-fabrikam')).jdText).toBe('Own launches for two product lines.')
+    // Replace it from a file: only the text is kept.
+    const doc = new File(['zip'], 'Head of PMM.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+    await user.upload(within(dialog).getByLabelText('Job description file'), doc)
+    await waitFor(() => expect(within(dialog).getByTestId('jd-words')).toHaveTextContent('On file, 16 words, read from Head of PMM.docx'))
+    expect((await searchIntake('s-fabrikam')).jdText).toMatch(/^Head of Product Marketing\n\nOwn the launch calendar/)
+    await user.click(within(dialog).getByRole('button', { name: 'Clear' }))
+    await waitFor(async () => expect((await searchIntake('s-fabrikam')).jdText).toBeNull())
+    expect(await within(dialog).findByLabelText('Job description')).toBeInTheDocument()
+  })
+
+  it('Recommended candidates: Find candidates asks the agent with his answers, and each one can be added or hidden', async () => {
+    mock()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    open('/searches/open?card=search:s-contoso&tab=pipeline')
+    const dialog = await screen.findByRole('dialog')
+    const panel = await within(dialog).findByRole('region', { name: 'Recommended candidates' })
+    // With people on the board the form waits behind a link, so the board stays in view.
+    expect(within(panel).queryByRole('form')).toBeNull()
+    await user.click(within(panel).getByRole('button', { name: 'Find candidates' }))
+    const form = within(panel).getByRole('form', { name: 'What does a good candidate look like?' })
+    for (const label of ['Must-haves', 'Nice-to-haves', 'Target companies or backgrounds', 'Deal-breakers', 'Level and location']) expect(within(form).getByLabelText(label)).toBeInTheDocument()
+    await user.type(within(form).getByLabelText('Must-haves'), 'Launches at a B2B SaaS company')
+    await user.click(within(form).getByRole('button', { name: 'Find candidates' }))
+    expect(await within(panel).findByText('Working: the research agent answers within a few hours')).toBeInTheDocument()
+    // The stand-in answers a moment later; the screen looks again every half a minute.
+    await waitFor(async () => expect((await sampleSource.searchNotes('s-contoso')).some((n) => n.tab === 'match')).toBe(true), { timeout: 3000 })
+    await waitFor(async () => expect((await stand.searchJobs('s-contoso'))[0].status).toBe('ready'))
+    act(() => {
+      invalidate('searches.jobs.s-contoso')
+      invalidate('searches.notes.s-contoso')
+    })
+    const list = await within(panel).findByRole('list', { name: 'Recommended' })
+    expect(within(list).getByText('Cara Placeholder')).toBeInTheDocument()
+    expect(within(list).getByText('Strong fit')).toBeInTheDocument()
+    expect(within(list).getAllByText(/^Gap: /).length).toBe(4)
+    // Nobody already on the search is recommended.
+    expect(within(list).queryByText('Ben Sample')).toBeNull()
+    const cara = list.querySelector('[data-match="p-cara"]') as HTMLElement
+    await user.click(within(cara).getByRole('button', { name: 'Add to pipeline' }))
+    const board = within(dialog).getByRole('list', { name: 'Pipeline board' })
+    expect(await within(within(board).getByRole('listitem', { name: 'Sourced' })).findByText('Cara Placeholder')).toBeInTheDocument()
+    expect(await within(cara).findByText('On the board')).toBeInTheDocument()
+    const kit = list.querySelector('[data-match="p-kit"]') as HTMLElement
+    await user.click(within(kit).getByRole('button', { name: 'Not for this one' }))
+    await waitFor(() => expect(within(list).queryByText('Kit Sample')).toBeNull())
+    const note = (await sampleSource.searchNotes('s-contoso')).find((n) => n.tab === 'match')
+    expect((note?.structured as { dismissed?: string[] }).dismissed).toEqual(['p-kit'])
   })
 
   it('interview prep on the pipeline writes a draft with the booking link, or the email alone', async () => {
