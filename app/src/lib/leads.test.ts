@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { byFit, cityName, daysSince, funnel, funnelRatios, leadSourceWord, matchesFilter, nextStage, outreachShort, primaryLabel } from './leads'
+import { byFit, byPosted, cityName, isJobAdOnly, isPersonPost, daysSince, funnel, funnelRatios, leadSourceWord, matchesFilter, nextStage, outreachShort, primaryLabel } from './leads'
 import { freshSampleLeads, resetSampleLeads, sampleSource } from './sample'
 
 afterEach(() => resetSampleLeads())
@@ -100,5 +100,18 @@ describe('Ad and post chasers tiles (18 Nov)', () => {
     expect(matchesFilter({ ...base, outreachStage: 'connected' }, 'accepted')).toBe(true)
     expect(matchesFilter({ ...base, outreachStage: 'connected', stage: 'dead' }, 'accepted')).toBe(false)
     expect(matchesFilter({ ...base, outreachStage: 'found' }, 'sent')).toBe(false)
+  })
+
+  it("puts people's own posts first and keeps job ads out of All (18 November 2026)", () => {
+    const [x] = freshSampleLeads()
+    const post = { ...x, id: 'p', posterName: 'Finn Fictional', sources: ['linkedin_post'], postedOn: '2026-11-10', fitScore: 60 }
+    const alex = { ...x, id: 'a', posterName: null, sources: ['alex_leads'], postedOn: '2026-11-17', fitScore: 90 }
+    const ad = { ...x, id: 'd', posterName: null, sources: ['linkedin_advert'], stage: 'dead' as const }
+    expect(isPersonPost(post)).toBe(true)
+    expect(isPersonPost(alex)).toBe(false)
+    expect([alex, post].sort(byPosted).map((l) => l.id)).toEqual(['p', 'a'])
+    expect(isJobAdOnly(ad)).toBe(true)
+    expect(matchesFilter(ad, 'all')).toBe(false)
+    expect(matchesFilter(alex, 'all')).toBe(true)
   })
 })

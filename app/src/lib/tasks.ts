@@ -485,13 +485,17 @@ export function byDue(a: Task, b: Task): number {
   return a.createdAt.localeCompare(b.createdAt)
 }
 
-/** Business development: the owner's order, then accepted requests, then the newest post first. */
+/** Business development: the owner's order, then accepted requests, then people's posts, then the newest post first. */
 export function byLead(a: Task, b: Task): number {
   const o = ownerOrder(a, b)
   if (o !== null) return o
   const aa = isAccepted(a)
   const ab = isAccepted(b)
   if (aa !== ab) return aa ? -1 : 1
+  // People's own posts before Alex's leads (Jason, 18 November 2026).
+  const pa = leadSource(a) === 'LinkedIn post'
+  const pb = leadSource(b) === 'LinkedIn post'
+  if (pa !== pb) return pa ? -1 : 1
   const d = leadPostedOn(b).localeCompare(leadPostedOn(a))
   if (d !== 0) return d
   return b.rank - a.rank

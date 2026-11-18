@@ -102,7 +102,7 @@ export const filters: { value: JobFilter; label: string }[] = [
 ]
 
 export function matchesFilter(lead: JobLead, filter: JobFilter): boolean {
-  if (filter === 'all') return true
+  if (filter === 'all') return !isJobAdOnly(lead)
   if (filter === 'meeting') return lead.stage === 'meeting_booked'
   // The LinkedIn filters follow the outreach, on leads still open (Jason, 18 November 2026).
   const open = lead.stage !== 'dead' && lead.stage !== 'passed'
@@ -130,7 +130,20 @@ export function postedDay(lead: JobLead): string {
  * The Jobs list order (Jason, 16 November): the lower-fit group stays below the
  * line, and within each group the newest posting comes first.
  */
+/** A real person posted it (Jason, 18 November 2026: "the priority is the job posts people have made as they are actual people"). */
+export function isPersonPost(lead: Pick<JobLead, 'posterName' | 'sources'>): boolean {
+  return (lead.posterName ?? '').trim() !== '' && lead.sources.includes('linkedin_post')
+}
+
+/** Only from a LinkedIn job alert: a job ad, which Jason does not want (17 November 2026). */
+export function isJobAdOnly(lead: Pick<JobLead, 'sources'>): boolean {
+  return lead.sources.length > 0 && lead.sources.every((s) => s === 'linkedin_advert')
+}
+
 export function byPosted(a: JobLead, b: JobLead): number {
+  const pa = isPersonPost(a) ? 0 : 1
+  const pb = isPersonPost(b) ? 0 : 1
+  if (pa !== pb) return pa - pb
   const la = isLowerFit(a) ? 1 : 0
   const lb = isLowerFit(b) ? 1 : 0
   if (la !== lb) return la - lb

@@ -70,7 +70,7 @@ describe('Jobs', () => {
     // Newest posting first within the fit group (Jason, 16 November). The tile carries the role,
     // the company and city, the source in words, the day it was posted (or first seen, when the
     // post date is unknown) and where the outreach stands in one word (18 November).
-    expect(rows()[0]).toHaveTextContent('Director of PMM')
+    expect(rows()[0]).toHaveTextContent('Senior PMM') // people's own posts come first (18 November)
     expect(row('Senior PMM')).toHaveTextContent('Northwind Sample Co')
     expect(line('Senior PMM')).toHaveTextContent('New York')
     expect(line('Senior PMM')).toHaveTextContent('LinkedIn post · Posted 9 Nov')
@@ -331,7 +331,7 @@ describe('Jobs', () => {
     await userEvent.keyboard('k')
     expect(rows()[0]).toHaveFocus()
     await userEvent.keyboard('x')
-    const card = screen.getByRole('dialog', { name: 'Director of PMM' })
+    const card = screen.getByRole('dialog', { name: 'Senior PMM' })
     expect(within(card).getByRole('combobox', { name: 'Reason' })).toBeInTheDocument()
   })
 })
