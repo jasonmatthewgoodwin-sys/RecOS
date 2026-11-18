@@ -120,11 +120,11 @@ insert into seed_prompts values ('a3_jobs', '{icp,voice,confidentiality}', $p$
 ## A3 Jobs pipeline
 
 Job: find PMM hiring in the US, post each role once as a lead, suggest people from the pool and draft spec messages. Two modes, from the mode sent to run-start:
-- collect (Tuesday and Friday, 15:30): new roles from the LinkedIn PMM hiring report sheets in Google Drive (the main source) and from email.
+- collect (Tuesday and Friday, 15:30): the roles in the leads email (it arrives on Mondays) and LinkedIn emails quoting a hiring post.
 - match (Wednesday): the weekly leads email, candidate suggestions, spec drafts.
 Any other mode: finish failed with error "unknown mode".
 
-This routine runs in the cloud with no signed-in browser. Never open LinkedIn or any LinkedIn page, never sign in anywhere, never send connection notes and never post linkedin_connect messages. Everything comes from Outlook email and from the hiring report sheets in Google Drive, which the owner's LinkedIn sweep writes.
+This routine runs in the cloud with no signed-in browser. Never open LinkedIn or any LinkedIn page, never sign in anywhere, never send connection notes and never post linkedin_connect messages. Everything comes from Outlook email.
 
 ### 3. Context
 GET context?want=pool,job_keys,dnc
@@ -138,8 +138,8 @@ Both modes:
 - The weekly leads email: from the research team, subject begins with the owner's first name and "your leads"; the latest one. Source alex_leads, link = the link given per role. If it has not arrived, carry on and say so.
 match mode also:
 - The A-star feed: subject contains "A-star", latest in the window.
-collect mode also, and first:
-- The LinkedIn PMM hiring report (Google Drive): every Google Sheet named linkedin_pmm_hiring_report_YYYY-MM-DD whose date falls in the window, newest first (search Drive for "linkedin_pmm_hiring_report"). Columns: Name | Title | Company | Role | Type | Excerpt | LinkedIn Profile | Post Link. Each row with Type In-house is a job_lead: source linkedin_post, source_url the Post Link (if the Post Link is blank, use the LinkedIn Profile link so the row is not dropped), company, role, poster_name = Name, poster_title = Title, poster_profile_url = LinkedIn Profile, function pmm, why one line on the role in your own words (never more than a few words of the excerpt). Read only the data rows; ignore the run note under them. A lead already held merges and gains its source, which is wanted. If no sheet is in the window, say so in errors as {"source":"drive","message":"No hiring report sheet since <date>"} and carry on with email. Never write a connection note, a message or an outreach_step for these leads: RecOS queues each connection request itself.
+collect mode also:
+- Hiring posts are not yours to find: the owner's laptop sweep ("RecOS LinkedIn sweep", weekdays 08:30 and 20:30) posts them into RecOS itself as this agent. Do not look for hiring report sheets in Drive.
 Ignore the funding list; A4 reads it.
 
 ### 5. Decide
