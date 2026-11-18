@@ -1745,22 +1745,24 @@ test('0033: a search from a won lead counts, candidates move under CAN-1 to CAN-
     assert.equal(s.status, 'open')
     assert.equal(await count(`kpi_events where kpi = 'jobs_won' and source_id = '${s.id}'`), 1)
     const [p] = await rows(`select id from people where name_key = 'ada example'`)
-    const [c] = await rows(`insert into search_candidates (search_id, person_id, stage) values ($1, $2, 'spoken') returning id`, [s.id, p.id])
+    const [c] = await rows(`insert into search_candidates (search_id, person_id, stage) values ($1, $2, 'longlist') returning id`, [s.id, p.id])
     candId = c.id
     // CAN-1: no consent, no submission.
-    assert.match(await refused(`update search_candidates set stage = 'submitted' where id = '${c.id}'`), /Agreed to be put forward/)
-    await db.query(`update search_candidates set consent_to_submit = true, stage = 'submitted' where id = $1`, [c.id])
+    assert.match(await refused(`update search_candidates set stage = 'shortlist' where id = '${c.id}'`), /Agreed to be put forward/)
+    await db.query(`update search_candidates set consent_to_submit = true, stage = 'shortlist' where id = $1`, [c.id])
     const [after] = await rows(`select submitted_on, consent_on, stage_changed_on from search_candidates where id = $1`, [c.id])
     assert.notEqual(after.submitted_on, null)
     assert.notEqual(after.consent_on, null)
     // SEA-2 through CAN-2: the first submission is the shortlist.
     assert.notEqual((await rows(`select first_submission_on from searches where id = $1`, [s.id]))[0].first_submission_on, null)
     assert.equal(await count(`kpi_events where kpi = 'shortlists' and source_id = '${s.id}'`), 1)
-    await db.query(`update search_candidates set stage = 'first_stage' where id = $1`, [c.id])
+    await db.query(`update search_candidates set stage = 'interview_1' where id = $1`, [c.id])
     assert.equal(await count(`kpi_events where kpi = 'first_interviews' and source_id = '${c.id}'`), 1)
     await db.query(`update search_candidates set stage = 'offer' where id = $1`, [c.id])
     assert.equal(await count(`kpi_events where kpi = 'offers' and source_id = '${c.id}'`), 1)
     assert.deepEqual(await rows(`select offer_status from search_candidates where id = $1`, [c.id]), [{ offer_status: 'expected' }])
+    // Someone at offer makes the search offer (0053 and 0060).
+    assert.equal((await rows(`select status from searches where id = $1`, [s.id]))[0].status, 'offer')
     // Offer accepted: placed, the search placed, two testimonial requests, aftercare set.
     await db.query(`update search_candidates set offer_status = 'accepted', start_on = current_date + 21 where id = $1`, [c.id])
     assert.deepEqual(await rows(`select stage, aftercare_on is not null as aftercare from search_candidates where id = $1`, [c.id]), [{ stage: 'placed', aftercare: true }])
@@ -1769,7 +1771,7 @@ test('0033: a search from a won lead counts, candidates move under CAN-1 to CAN-
     assert.equal(await count(`content_items where kind = 'testimonial' and search_id = '${s.id}'`), 2)
     // CAN-4: a rejection owes a kind word within a working day.
     const [p2] = await rows(`select id from people where name_key = 'ben sample'`)
-    const [c2] = await rows(`insert into search_candidates (search_id, person_id, stage) values ($1, $2, 'spoken') returning id`, [s.id, p2.id])
+    const [c2] = await rows(`insert into search_candidates (search_id, person_id, stage) values ($1, $2, 'longlist') returning id`, [s.id, p2.id])
     await db.query(`update search_candidates set stage = 'rejected', outcome_reason = 'Too senior' where id = $1`, [c2.id])
     assert.deepEqual(await rows(`select kind, reason, person_name from follow_ups where dedup_key = $1`, [`rejection:${c2.id}`]), [{ kind: 'rejection', reason: 'Tell them it is a no, kindly: Too senior', person_name: 'Ben Sample' }])
     // Campaigns and the warm spec switch.
@@ -2275,7 +2277,10 @@ test('0048 intake: the owner starts a search and asks for research; one open job
     assert.deepEqual(await rows(`select role_type, jd_text, brief_due_on from searches where id = $1`, [bare]), [{ role_type: null, jd_text: null, brief_due_on: null }])
     assert.match(String(await refused(`select start_search(' ', 'PMM')`)), /needs a client/)
     assert.match(String(await refused(`select start_search('Globex Sample Inc', '')`)), /needs a role/)
-    assert.match(String(await refused(`select start_search('Globex Sample Inc', 'PMM', 'cmo')`)), /Unknown role type/)
+    // His own words for the role type are kept as typed (0060).
+    const [{ own }] = await rows(`select start_search('Globex Sample Inc', 'PMM', ' Head of Product Marketing ') as own`)
+    assert.equal((await rows(`select role_type from searches where id = $1`, [own]))[0].role_type, 'Head of Product Marketing')
+    assert.match(String(await refused(`select start_search('Globex Sample Inc', 'PMM', $1)`, ['x'.repeat(81)])), /80 characters/)
 
     const [{ j1 }] = await rows(`select request_search_job($1, 'questions') as j1`, [sid])
     const [{ j2 }] = await rows(`select request_search_job($1, 'questions') as j2`, [sid])
@@ -2286,7 +2291,7 @@ test('0048 intake: the owner starts a search and asks for research; one open job
       { kind: 'lowdown', status: 'waiting', owner_id: ownerId },
       { kind: 'questions', status: 'waiting', owner_id: ownerId },
     ])
-    assert.match(String(await refused(`select request_search_job($1, 'gossip')`, [sid])), /questions, lowdown, map or brief/)
+    assert.match(String(await refused(`select request_search_job($1, 'gossip')`, [sid])), /questions, lowdown, map, brief or match/)
     assert.match(String(await refused(`select request_search_job(gen_random_uuid(), 'map')`)), /No such search/)
     // The browser reads the queue and writes none of it.
     assert.match(String(await refused(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'map')`, [ownerId, sid])), /permission denied/)
@@ -2489,6 +2494,172 @@ test('inbox folders: moving an item into a folder works, and deleting the folder
     assert.equal(await count(`inbox_folders where id = '${folder}'`), 0)
     assert.deepEqual(await rows(`select folder_id, status from inbox_items where id = $1`, [item]), [{ folder_id: null, status: 'new' }])
     assert.match(String(await refused(`select delete_inbox_folder($1)`, [folder])), /No such folder/)
+  })
+})
+
+// ---------------------------------------------------------------- the search as one workflow (0060)
+
+test('0060 stages: the old words map to the new ones, days in stage kept; only the new words are allowed and nothing still uses the old', async () => {
+  // The migration's own mapping, run over a copy of the old words.
+  const sql = read('migrations', '0060_search_board_and_match.sql')
+  const from = sql.indexOf('update public.search_candidates set stage = case stage')
+  const to = sql.indexOf(';', from)
+  const mapping = sql.slice(from, to).replace('public.search_candidates', 'old_cands')
+  await db.exec('begin')
+  try {
+    await db.exec(`create temp table old_cands (id int, stage text, stage_changed_on date)`)
+    await db.exec(`insert into old_cands values (1, 'spoken', '2026-11-01'), (2, 'submitted', '2026-11-02'), (3, 'first_stage', '2026-11-03'), (4, 'later_stage', '2026-11-04'), (5, 'offer', '2026-11-05'), (6, 'sourced', '2026-11-06'), (7, 'withdrew', '2026-11-07')`)
+    await db.exec(mapping)
+    assert.deepEqual((await rows(`select stage, stage_changed_on::text as d from old_cands order by id`)).map((r) => [r.stage, r.d]), [
+      ['longlist', '2026-11-01'], ['shortlist', '2026-11-02'], ['interview_1', '2026-11-03'], ['interview_2', '2026-11-04'], ['offer', '2026-11-05'], ['sourced', '2026-11-06'], ['withdrew', '2026-11-07'],
+    ])
+  } finally {
+    await db.exec('rollback')
+  }
+  assert.match(sql.slice(sql.lastIndexOf('disable trigger t_rules', from), from), /disable trigger t_upd/, 'the rules and updated_at are off while mapping')
+  const [{ def }] = await rows(`select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'search_candidates_stage_check'`)
+  for (const w of ['application', 'sourced', 'longlist', 'shortlist', 'interview_1', 'interview_2', 'interview_3', 'interview_4', 'offer', 'placed', 'rejected', 'withdrew']) assert.ok(def.includes(`'${w}'`), w)
+  for (const w of ['spoken', 'submitted', 'first_stage', 'later_stage']) assert.ok(!def.includes(`'${w}'`), w)
+  const old = await rows(
+    `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.prosrc ~ 'search_candidates' and p.prosrc ~ $1`,
+    [`c?\\.?stage\\s*(=|<>|in)\\s*\\(?\\s*'(spoken|submitted|first_stage|later_stage)'`],
+  )
+  assert.deepEqual(old.map((r) => r.proname), [])
+  const [{ v }] = await rows(`select pg_get_viewdef('tasks_view'::regclass) as v`)
+  assert.match(v, /'shortlist'/)
+  assert.doesNotMatch(v, /'submitted'::text/)
+})
+
+test('0060 board: a search moves through the new stages; shortlist needs agreement; someone at offer makes the search offer; the counts keep their meaning', async () => {
+  await owner(async () => {
+    const [{ sid }] = await rows(`select start_search('Hooli Board Sample', 'Senior PMM') as sid`)
+    const people = await rows(`select id from people order by created_at limit 2`)
+    const [a] = await rows(`insert into search_candidates (search_id, person_id, stage) values ($1, $2, 'application') returning id`, [sid, people[0].id])
+    assert.equal((await rows(`select status from searches where id = $1`, [sid]))[0].status, 'intake', 'an application leaves the search at intake')
+    await db.query(`update search_candidates set stage = 'longlist' where id = $1`, [a.id])
+    assert.equal((await rows(`select status from searches where id = $1`, [sid]))[0].status, 'open', 'the longlist opens it')
+    assert.match(await refused(`update search_candidates set stage = 'shortlist' where id = '${a.id}'`), /Agreed to be put forward/)
+    // Dragged past the shortlist, the person still counts as put forward.
+    await db.query(`update search_candidates set stage = 'interview_3' where id = $1`, [a.id])
+    assert.deepEqual((await rows(`select submitted_on is not null as sent, stage_changed_on = current_date as today from search_candidates where id = $1`, [a.id]))[0], { sent: true, today: true })
+    assert.notEqual((await rows(`select first_submission_on from searches where id = $1`, [sid]))[0].first_submission_on, null)
+    const [b] = await rows(`insert into search_candidates (search_id, person_id, stage, consent_to_submit) values ($1, $2, 'shortlist', true) returning id`, [sid, people[1].id])
+    await db.query(`update search_candidates set stage = 'interview_1' where id = $1`, [b.id])
+    assert.equal(await count(`kpi_events where kpi = 'first_interviews' and source_id = '${b.id}'`), 1)
+    await db.query(`update search_candidates set stage = 'offer' where id = $1`, [b.id])
+    assert.equal((await rows(`select status from searches where id = $1`, [sid]))[0].status, 'offer')
+    assert.match(await refused(`update search_candidates set stage = 'first_stage' where id = '${b.id}'`), /search_candidates_stage_check/)
+  })
+  // The agent's counts keep their meaning: offer still implies offer, spoken still opens a search at intake.
+  const [{ s2 }] = await rows(`insert into searches (owner_id, client, client_key, role, status) values ($1, 'Counter Sample', 'counter sample', 'PMM', 'intake') returning id as s2`, [ownerId])
+  const [{ run }] = await rows(`select agent_run_start('a6_calls', 'schedule', 'searches') as run`)
+  const write = async (d) => (await rows(`select agent_write($1, $2) as out`, [run.run_id, JSON.stringify([{ kind: 'search_counts', data: d }])]))[0].out.results[0]
+  const r1 = await write({ search_id: s2, n_sourced: 4, n_spoken: 3, n_submitted: 2, n_first_stage: 1, n_later_stage: 1, n_offer: 0 })
+  assert.equal(r1.outcome, 'merged', JSON.stringify(r1))
+  assert.deepEqual(await rows(`select status, n_spoken, n_submitted, n_first_stage, n_later_stage, n_offer from searches where id = $1`, [s2]), [{ status: 'open', n_spoken: 3, n_submitted: 2, n_first_stage: 1, n_later_stage: 1, n_offer: 0 }])
+  assert.equal((await write({ search_id: s2, n_offer: 1 })).outcome, 'merged')
+  assert.equal((await rows(`select status from searches where id = $1`, [s2]))[0].status, 'offer')
+  await rows(`select agent_run_finish($1, 'ok', '[]', 'counts')`, [run.run_id])
+})
+
+test('0060 role type and job description: the owner saves both, his own words included; blank clears; nobody else may', async () => {
+  const [{ sid }] = await rows(`insert into searches (owner_id, client, client_key, role, status) values ($1, 'Intake Sample', 'intake sample', 'Head of PMM', 'intake') returning id as sid`, [ownerId])
+  for (const who of [anon, reviewer, noRole]) {
+    await who(async () => {
+      assert.match(String(await refused(`select set_search_role_type($1, 'head_of_pmm')`, [sid])), /permission denied|Only the owner/)
+      assert.match(String(await refused(`select set_search_jd($1, 'A job')`, [sid])), /permission denied|Only the owner/)
+    })
+  }
+  assert.equal((await rows(`select role_type, jd_text from searches where id = $1`, [sid]))[0].role_type, null)
+  await owner(async () => {
+    assert.equal((await rows(`select set_search_role_type($1, 'head_of_pmm') as r`, [sid]))[0].r, 'head_of_pmm')
+    assert.equal((await rows(`select set_search_role_type($1, '  Head of Product Marketing ') as r`, [sid]))[0].r, 'Head of Product Marketing')
+    assert.equal((await rows(`select role_type from searches where id = $1`, [sid]))[0].role_type, 'Head of Product Marketing')
+    assert.match(String(await refused(`select set_search_role_type($1, $2)`, [sid, 'x'.repeat(81)])), /80 characters/)
+    assert.match(String(await refused(`select set_search_role_type(gen_random_uuid(), 'x')`)), /No such search/)
+    await db.query(`select set_search_role_type($1, ' ')`, [sid])
+    assert.equal((await rows(`select role_type from searches where id = $1`, [sid]))[0].role_type, null)
+
+    assert.equal((await rows(`select set_search_jd($1, '  Own launches for two product lines.  ') as n`, [sid]))[0].n, 35)
+    assert.equal((await rows(`select jd_text from searches where id = $1`, [sid]))[0].jd_text, 'Own launches for two product lines.')
+    assert.match(String(await refused(`select set_search_jd($1, $2)`, [sid, 'x'.repeat(60001)])), /too long/)
+    await db.query(`select set_search_jd($1, '')`, [sid])
+    assert.equal((await rows(`select jd_text from searches where id = $1`, [sid]))[0].jd_text, null)
+  })
+})
+
+test('0060 match: the owner asks with his answers; the claim carries them and a pool of people he knows; search_result keeps only people in people', async () => {
+  await db.query(`update search_jobs set status = 'failed', finished_at = now() where status in ('waiting', 'working')`)
+  const [{ sid }] = await rows(`insert into searches (owner_id, client, client_key, role, status) values ($1, 'Match Sample', 'match sample', 'Senior PMM', 'open') returning id as sid`, [ownerId])
+  const answers = { must_haves: 'B2B SaaS launches', nice_to_haves: 'Finance buyer', target_backgrounds: 'Ledgerly Sample', deal_breakers: 'No people management', level_and_location: 'Senior, New York' }
+  await anon(async () => {
+    assert.match(String(await refused(`select request_search_job($1, 'match', $2)`, [sid, JSON.stringify(answers)])), /permission denied|Only the owner/)
+  })
+  await reviewer(async () => {
+    assert.match(String(await refused(`select request_search_job($1, 'match', $2)`, [sid, JSON.stringify(answers)])), /Only the owner/)
+  })
+  await owner(async () => {
+    assert.match(String(await refused(`select request_search_job($1, 'match')`, [sid])), /good candidate looks like/)
+    assert.match(String(await refused(`select request_search_job($1, 'match', '{"must_haves": " "}')`, [sid])), /good candidate looks like/)
+    assert.match(String(await refused(`select request_search_job($1, 'match', '{"salary": "200k"}')`, [sid])), /Unknown answer/)
+    assert.match(String(await refused(`select request_search_job($1, 'map', '{"must_haves": "x"}')`, [sid])), /Only a match job/)
+  })
+  // The ask itself is kept, so the agent can claim it.
+  await db.exec('begin')
+  await db.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: ownerId, email: OWNER_EMAIL, role: 'authenticated', app_role: 'owner' })])
+  const jid = (await rows(`select request_search_job($1, 'match', $2) as j`, [sid, JSON.stringify({ ...answers, must_haves: 'first answer' })]))[0].j
+  assert.equal((await rows(`select request_search_job($1, 'match', $2) as j`, [sid, JSON.stringify(answers)]))[0].j, jid, 'a second ask while waiting takes the newer answers')
+  await db.exec('commit')
+  assert.deepEqual((await rows(`select instruction from search_jobs where id = $1`, [jid]))[0].instruction, answers)
+
+  // People he knows: a call, a spec request or a pipeline. Someone with none is not in the pool.
+  const [known] = await rows(`insert into people (owner_id, display_name, name_key, display_title, display_company, kind, crm_url, linkedin_url) values ($1, 'Pool Person Sample', 'pool person sample', 'Senior PMM', 'Ledgerly Sample', 'candidate', 'https://example.com/crm/pool', 'https://example.com/in/pool') returning id`, [ownerId])
+  const [stranger] = await rows(`insert into people (owner_id, display_name, name_key, kind) values ($1, 'Stranger Sample', 'stranger sample', 'candidate') returning id`, [ownerId])
+  await db.query(`insert into calls (owner_id, held_at, person_id, call_type, summary) values ($1, now() + interval '1 minute', $2, 'candidate_screen', 'Ran launches at a finance software company')`, [ownerId, known.id])
+  await db.query(`insert into search_notes (owner_id, search_id, tab, content, structured, version) values ($1, $2, 'match', 'Old', $3::jsonb, 1)`, [ownerId, sid, JSON.stringify({ candidates: [], dismissed: [stranger.id] })])
+
+  const [{ ctx }] = await rows(`select agent_context('a6_calls', array['search_jobs']) as ctx`)
+  const mj = ctx.search_jobs.find((j) => j.job_id === jid)
+  assert.equal(mj.kind, 'match')
+  assert.deepEqual(mj.instruction, answers)
+  assert.ok(Array.isArray(mj.pool) && mj.pool.length > 0 && mj.pool.length <= 300)
+  assert.deepEqual(mj.pool[0], {
+    person_id: known.id, name: 'Pool Person Sample', title: 'Senior PMM', company: 'Ledgerly Sample', crm_url: 'https://example.com/crm/pool', linkedin_url: 'https://example.com/in/pool',
+    last_call_on: mj.pool[0].last_call_on, last_call_summary: 'Ran launches at a finance software company', spec_skills: null, spec_summary: null,
+  }, 'newest contact first, with no address and no CV')
+  assert.ok(mj.pool[0].last_call_on)
+  assert.equal(mj.pool.some((p) => p.person_id === stranger.id), false)
+  const keys = ['person_id', 'name', 'title', 'company', 'crm_url', 'linkedin_url', 'last_call_on', 'last_call_summary', 'spec_skills', 'spec_summary']
+  for (const p of mj.pool) assert.deepEqual(Object.keys(p).sort(), [...keys].sort())
+  assert.deepEqual(mj.not_for_this_one, [stranger.id])
+  assert.deepEqual(mj.on_this_search, [])
+  // Other kinds carry no pool.
+  const qJob = (await rows(`insert into search_jobs (owner_id, search_id, kind) values ($1, $2, 'questions') returning id`, [ownerId, sid]))[0].id
+  const [{ ctx2 }] = await rows(`select agent_context('a6_calls', array['search_jobs']) as ctx2`)
+  const qj = ctx2.search_jobs.find((j) => j.job_id === qJob)
+  assert.deepEqual([qj.pool, qj.instruction], [null, null])
+  await db.query(`update search_jobs set status = 'failed', finished_at = now() where id = $1`, [qJob])
+
+  const [{ run }] = await rows(`select agent_run_start('a6_calls', 'schedule', 'research') as run`)
+  const result = (d) => ({ kind: 'search_result', data: d })
+  const good = { person_id: known.id, name: 'Wrong Name', title: 'Senior PMM', company: 'Ledgerly Sample', fit: 'strong', why: 'Ran launches for a finance buyer', gaps: 'No people management', email: 'leak@example.test' }
+  const [{ out }] = await rows(`select agent_write($1, $2) as out`, [run.run_id, JSON.stringify([
+    result({ job_id: jid, status: 'ready', content: 'Matches', structured: { people: [] } }),
+    result({ job_id: jid, status: 'ready', content: 'Matches', structured: { candidates: [good, { ...good, person_id: '00000000-0000-0000-0000-000000000009' }, { ...good, person_id: 'not-a-uuid' }, { ...good, fit: 'perfect' }] } }),
+  ])])
+  assert.deepEqual([out.results[0].code, out.results[0].field], ['invalid', 'structured'])
+  assert.equal(out.results[1].outcome, 'created', JSON.stringify(out.results[1]))
+  assert.match(out.results[1].note, /Version 2, 3 left out/)
+  const [note] = await rows(`select structured, created_by from search_notes where search_id = $1 and tab = 'match' order by version desc limit 1`, [sid])
+  assert.equal(note.created_by, 'agent')
+  assert.deepEqual(note.structured, { candidates: [{ person_id: known.id, name: 'Pool Person Sample', title: 'Senior PMM', company: 'Ledgerly Sample', fit: 'strong', why: 'Ran launches for a finance buyer', gaps: 'No people management' }], left_out: 3 })
+  assert.equal((await rows(`select status from search_jobs where id = $1`, [jid]))[0].status, 'ready')
+  await rows(`select agent_run_finish($1, 'ok', '[]', 'match written')`, [run.run_id])
+  // The owner hides one for this search: his edit to the note.
+  await owner(async () => {
+    await db.query(`update search_notes set structured = structured || jsonb_build_object('dismissed', jsonb_build_array($2::text)) where search_id = $1 and tab = 'match' and version = 2`, [sid, known.id])
+    assert.equal(await count(`search_notes where search_id = '${sid}' and tab = 'match' and structured -> 'dismissed' ? '${known.id}'`), 1)
   })
 })
 

@@ -140,7 +140,7 @@ with base as (
 
   union all
 
-  -- 5. Feedback overdue on a submitted candidate (CAN-2, the client nudge rule).
+  -- 5. Feedback overdue on a shortlisted candidate (CAN-2, the client nudge rule).
   select
     'feedback_chase:' || c.id, 'search_candidates', c.id,
     'feedback_chase', 'Chase feedback on ' || p.display_name || ' at ' || s.client,
@@ -158,7 +158,7 @@ with base as (
   join people p on p.id = c.person_id
   left join people cp on cp.id = s.client_contact_id
   cross join (select feedback_nudge_days from app_settings limit 1) cfg
-  where c.stage = 'submitted' and c.feedback_received_on is null and c.submitted_on is not null
+  where c.stage = 'shortlist' and c.feedback_received_on is null and c.submitted_on is not null
     and public.working_days(c.submitted_on, current_date) >= cfg.feedback_nudge_days
 
   union all
