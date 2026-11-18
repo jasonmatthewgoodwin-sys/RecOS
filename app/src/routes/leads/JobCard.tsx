@@ -9,7 +9,7 @@ import { Steps } from '../../components/Steps'
 import { TextLink } from '../../components/TextLink'
 import type { JobLead, JobStage, OutreachPatch, ReplyOutcome } from '../../lib/data'
 import { defaultConnectionNote, nextOutreach, outreachSteps, outreachSummary, outreachWord } from '../../lib/outreach'
-import { cityName, deadReasonWord, deadReasons, nextStage, primaryLabel, sourceWord, stagePills, stageWord } from '../../lib/leads'
+import { cityName, deadReasonWord, deadReasons, leadSourceWord, nextStage, outreachShort, postedDay, primaryLabel, shortDate, sourceWord, stagePills, stageWord } from '../../lib/leads'
 
 export type CardMode = 'view' | 'bin' | 'pass'
 
@@ -96,7 +96,18 @@ export function JobCard({ lead, mode, onMode, onStage, onPass, onOutreach, onCam
   const header = [lead.company, cityName(lead.city)].filter(Boolean).join(', ')
 
   const sections = [
-    { body: <p className="text-ink-2">{header}</p> },
+    {
+      body: (
+        <div className="flex flex-col gap-1">
+          <p className="text-ink-2">{header}</p>
+          {/* Where it came from, when it was posted and where the outreach stands (Jason, 18 November 2026). */}
+          <p className="font-mono text-label text-ink-2" data-testid="lead-facts">
+            {[leadSourceWord(lead.sources), `Posted ${shortDate(postedDay(lead))}`].filter(Boolean).join(' · ')}
+            {outreachShort(lead) && open && <span className="label-caps ml-3 text-ink">{outreachShort(lead)}</span>}
+          </p>
+        </div>
+      ),
+    },
     ...(lead.stage === 'dead'
       ? [{ label: 'Dead', body: <p>{deadReasonWord(lead.deadReason)}</p> }]
       : lead.stage === 'passed'

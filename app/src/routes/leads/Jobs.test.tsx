@@ -67,11 +67,18 @@ describe('Jobs', () => {
     expect(main.querySelectorAll('ul')).toHaveLength(1)
     expect(main.querySelectorAll('svg:not([data-icon]), canvas, img')).toHaveLength(0)
     expect(main.querySelectorAll('[data-kind="primary"]')).toHaveLength(0)
-    // Newest posting first within the fit group (Jason, 16 November). The row carries the role,
-    // the company, the city and the days since it was posted (or first seen, when the post date is unknown).
+    // Newest posting first within the fit group (Jason, 16 November). The tile carries the role,
+    // the company and city, the source in words, the day it was posted (or first seen, when the
+    // post date is unknown) and where the outreach stands in one word (18 November).
     expect(rows()[0]).toHaveTextContent('Director of PMM')
     expect(row('Senior PMM')).toHaveTextContent('Northwind Sample Co')
-    expect(line('Senior PMM')).toHaveTextContent('New York 2d')
+    expect(line('Senior PMM')).toHaveTextContent('New York')
+    expect(line('Senior PMM')).toHaveTextContent('LinkedIn post · Posted 9 Nov')
+    expect(row('Senior PMM')).toHaveTextContent('Request sent')
+    expect(line('Director of PMM')).toHaveTextContent("Alex's leads · Posted 10 Nov")
+    expect(row('Director of PMM')).toHaveTextContent('Accepted')
+    expect(row('Director of PMM').querySelector('[data-dot]')).toHaveAttribute('data-dot', 'solid')
+    expect(row('Product Marketing Manager')).toHaveTextContent('Request queued')
     expect(row('Senior PMM').querySelector('[data-dot]')).toHaveAttribute('data-dot', 'solid')
     expect(row('Head of Product Marketing')).toHaveTextContent('Existing client')
   })
@@ -260,6 +267,22 @@ describe('Jobs', () => {
     await userEvent.click(screen.getAllByTestId('hero-value')[0].closest('button')!)
     expect(rows()).toHaveLength(1)
     expect(rows()[0]).toHaveTextContent('Initech Mock')
+  })
+
+  it('Request sent and Accepted filter on where the LinkedIn outreach stands', async () => {
+    mock()
+    open()
+    await waitFor(() => expect(rows().length).toBe(7))
+    const nav = screen.getByRole('navigation', { name: 'Show' })
+    expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['New', 'Chased', 'Replied', 'Meeting', 'Request sent', 'Accepted', 'All'])
+    await userEvent.click(within(nav).getByRole('button', { name: 'Request sent' }))
+    expect(within(nav).getByRole('button', { name: 'Request sent', current: true })).toBeInTheDocument()
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0]).toHaveTextContent('Senior PMM')
+    await userEvent.click(within(nav).getByRole('button', { name: 'Accepted' }))
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0]).toHaveTextContent('Director of PMM')
+    expect(rows()[0].closest('li')).toHaveAttribute('data-tone', 'action')
   })
 
   it('sets leads under 40 below one hairline labelled Lower fit', async () => {

@@ -2,7 +2,7 @@
 // Local). Every name here is made up. Nothing in this file is real.
 
 import { composeLink } from './send'
-import type { Task, TaskChat, TaskEdits } from './tasks'
+import { needsYouCount, type Task, type TaskChat, type TaskEdits } from './tasks'
 import type {
   SpokenPerson, SpecRequest, BehalfRow,
   SendLogRow, Template,
@@ -123,6 +123,12 @@ export function freshSampleLeads(): JobLead[] {
       ],
       draft: 'Hi, I saw you are hiring a Director of PMM. I have two directors in Boston worth a look. Open to a short call?',
       firstSeenOn: daysAgo(1),
+      posterName: 'Hal Sample',
+      posterTitle: 'CMO',
+      outreachStage: 'connected',
+      outreachConnectionOn: daysAgo(1),
+      outreachConnectedOn: daysAgo(0),
+      connectMessageId: 'm-connect-contoso',
     }),
     lead({
       id: 'job-globex',
@@ -136,6 +142,7 @@ export function freshSampleLeads(): JobLead[] {
       fitReason: 'Remote US. Second PMM hire this quarter',
       draft: 'Hi, I saw the PMM role at Globex Fiction. I work only on product marketing hires and may be able to help.',
       firstSeenOn: daysAgo(3),
+      connectMessageId: 'm-connect-globex',
     }),
     lead({
       id: 'job-acme',
@@ -1185,7 +1192,7 @@ export function freshSampleTasks(): Task[] {
       lead: {
         id: 'job-northwind', postedOn: daysAgo(2), foundOn: daysAgo(1), posterName: 'Gail Example', posterTitle: 'VP Marketing', profileUrl: 'https://example.com/in/gail',
         stage: 'found', connectionOn: null, connectedOn: null, messagedOn: null, repliedOn: null, replyOutcome: null,
-        connectState: null, connectHold: null, connectAfter: null, campaign: null,
+        connectState: null, connectHold: null, connectAfter: null, campaign: null, sources: ['linkedin_post'],
       },
     }),
     task({
@@ -1210,7 +1217,7 @@ export function freshSampleTasks(): Task[] {
       lead: {
         id: 'job-contoso', postedOn: daysAgo(5), foundOn: daysAgo(4), posterName: 'Hal Sample', posterTitle: 'CMO', profileUrl: 'https://example.com/in/hal',
         stage: 'connected', connectionOn: daysAgo(3), connectedOn: daysAgo(1), messagedOn: null, repliedOn: null, replyOutcome: null,
-        connectState: 'sent', connectHold: null, connectAfter: null, campaign: null,
+        connectState: 'sent', connectHold: null, connectAfter: null, campaign: null, sources: ['alex_leads'],
       },
     }),
     task({
@@ -1325,6 +1332,28 @@ export function freshSampleTasks(): Task[] {
       rank: 5,
       agent: 'a7_events',
     }),
+    // Posted more than 21 days ago: it stays on Business development but leaves Tasks.
+    task({
+      key: 'inbox_items:i-old',
+      source: 'inbox_items',
+      kind: 'job_lead',
+      title: 'PMM Lead at Vandelay Sample',
+      why: 'An older post from the import.',
+      company: 'Vandelay Sample',
+      personName: 'Ola Example',
+      rank: 31,
+      channel: 'linkedin',
+      sourceUrl: 'https://www.linkedin.com/posts/vandelay-sample',
+      refTable: 'job_leads',
+      refId: 'job-vandelay',
+      agent: 'a3_jobs',
+      createdAt: `${daysAgo(4)}T09:00:00Z`,
+      lead: {
+        id: 'job-vandelay', postedOn: daysAgo(40), foundOn: daysAgo(4), posterName: 'Ola Example', posterTitle: 'VP Marketing', profileUrl: 'https://example.com/in/ola',
+        stage: 'found', connectionOn: null, connectedOn: null, messagedOn: null, repliedOn: null, replyOutcome: null,
+        connectState: null, connectHold: null, connectAfter: null, campaign: null, sources: ['linkedin_post'],
+      },
+    }),
   ]
 }
 
@@ -1346,7 +1375,8 @@ function takeOut(key: string) {
 
 export const sampleSource: DataSource = {
   async needsYou() {
-    return sampleInbox.filter((i) => (i.status === 'new' || i.status === 'stale') && i.type !== 'auto_sent').length
+    // What is due or late across the three columns of the Tasks board (18 November 2026).
+    return needsYouCount(sampleTasks, ukClock(new Date()).date)
   },
   async followUpsDue() {
     const today = ukClock(new Date()).date

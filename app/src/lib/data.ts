@@ -7,7 +7,7 @@ import { supabase } from './supabase'
 import { splitCopy, topicFrom, topicKey } from './calendar'
 import type { CaptureKind, SearchHit } from './capture'
 import { mondayOf, shiftDate, ukClock, weekdayOf } from './time'
-import { band, type LeadOutreach, type Task, type TaskChat, type TaskLead, type TaskChatLine, type TaskEdits, type TaskJob, type TaskJobKind, type TaskKind, type TaskLink, type TaskSource } from './tasks'
+import { needsYouCount, type LeadOutreach, type Task, type TaskChat, type TaskLead, type TaskChatLine, type TaskEdits, type TaskJob, type TaskJobKind, type TaskKind, type TaskLink, type TaskSource } from './tasks'
 import type { Tone } from '../theme/tokens'
 
 export type CalendarCall = {
@@ -76,6 +76,8 @@ export type JobLead = {
   outreachConnectedOn: string | null
   outreachMessagedOn: string | null
   outreachRepliedOn: string | null
+  /** The connection request in the send engine (0054), when one has been made: set while the stage is still found means Request queued. */
+  connectMessageId?: string | null
   replyOutcome: ReplyOutcome | null
   /** The two staged messages: the connection note and the first message once connected. */
   connectionNote: string | null
@@ -703,6 +705,7 @@ type LeadRow = {
   stage: LeadOutreach; connection_on: string | null; connected_on: string | null; messaged_on: string | null; replied_on: string | null; reply_outcome: string | null
   connect_state: string | null; connect_hold: string | null; connect_after: string | null
   campaign: { name: string; added_on: string | null; enrolled_on: string | null } | null
+  sources?: string[] | null
 }
 
 function leadFromRow(r: LeadRow): TaskLead {
@@ -711,6 +714,7 @@ function leadFromRow(r: LeadRow): TaskLead {
     stage: r.stage ?? 'found', connectionOn: r.connection_on, connectedOn: r.connected_on, messagedOn: r.messaged_on, repliedOn: r.replied_on, replyOutcome: r.reply_outcome,
     connectState: r.connect_state, connectHold: r.connect_hold, connectAfter: r.connect_after,
     campaign: r.campaign ? { name: r.campaign.name, addedOn: r.campaign.added_on, enrolledOn: r.campaign.enrolled_on } : null,
+    ...(Array.isArray(r.sources) ? { sources: r.sources } : {}),
   }
 }
 
@@ -1204,10 +1208,10 @@ async function invokeFunction<T = unknown>(name: string, body: Record<string, un
 const live: DataSource = {
   // Section 14.1: new and stale items, not counting sent-for-you.
   async needsYou() {
-    // Needs you is the Now column of the Tasks board: late, due today or urgent (16 November).
+    // Needs you is what is due or late across Emails, Business development and Other on the Tasks board (18 November).
     const today = ukClock(new Date()).date
     const all = await live.tasks()
-    return all.filter((t) => !t.waitingOn && band(t, today) === 'now').length
+    return needsYouCount(all, today)
   },
 
   async followUpsDue() {
@@ -1297,7 +1301,7 @@ const live: DataSource = {
     const { data, error } = await supabase!
       .from('job_leads')
       .select(
-        'id, company, role, city, country, level, sources, source_urls, poster_name, poster_title, poster_profile_url, outreach_stage, outreach_connection_on, outreach_connected_on, outreach_messaged_on, outreach_replied_on, reply_outcome, connection_note, first_message, outreach_note, uk_to_us, ' +
+        'id, company, role, city, country, level, sources, source_urls, poster_name, poster_title, poster_profile_url, outreach_stage, outreach_connection_on, outreach_connected_on, outreach_messaged_on, outreach_replied_on, reply_outcome, connection_note, first_message, outreach_note, uk_to_us, connect_message_id, ' +
           'fit_score, fit_reason, existing_client, stage, dead_reason, matched, first_seen_on, posted_on, chased_on, replied_on, ' +
           'meeting_on, won_on, spec_message:messages!spec_message_id (body)',
       )
@@ -1338,6 +1342,7 @@ const live: DataSource = {
       first_message: string | null
       outreach_note?: string | null
       uk_to_us: boolean
+      connect_message_id?: string | null
     }
     return ((data ?? []) as unknown as Row[]).map((r) => ({
       id: r.id,
@@ -1366,6 +1371,7 @@ const live: DataSource = {
       firstMessage: r.first_message,
       outreachNote: r.outreach_note ?? null,
       ukToUs: r.uk_to_us ?? false,
+      connectMessageId: r.connect_message_id ?? null,
       matched: (Array.isArray(r.matched) ? r.matched : [])
         .filter((m) => typeof m.name === 'string')
         .map((m) => ({ personId: m.person_id ?? null, name: m.name!, reason: m.reason ?? '' })),

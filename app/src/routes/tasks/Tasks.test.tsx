@@ -76,57 +76,60 @@ afterEach(() => {
 })
 
 describe('Tasks', () => {
-  it('opens on a board of Now, This week and Waiting, with two hero numbers and one Start button', async () => {
+  it('opens on a board of Emails, Business development and Other, with two hero numbers and one Start button', async () => {
     mock()
     open()
     expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
     await waitFor(() => expect(board()).toBeInTheDocument())
+    // Needs you: what is due or late across the three columns. Waiting: on someone else.
     expect(values()).toEqual(['07', '02'])
     expect(screen.getByRole('main').querySelectorAll('[data-hero-stat]')).toHaveLength(2)
     expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
-    expect(column('Now')).toBeInTheDocument()
-    expect(column('This week')).toBeInTheDocument()
-    expect(column('Waiting')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Later' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Later, 2' })).toBeInTheDocument()
+    expect(column('Emails')).toBeInTheDocument()
+    expect(column('Business development')).toBeInTheDocument()
+    expect(column('Other')).toBeInTheDocument()
+    for (const gone of ['Now', 'This week', 'Later', 'Waiting']) expect(screen.queryByRole('region', { name: gone })).not.toBeInTheDocument()
+    expect(tilesIn('Emails')).toHaveLength(3)
+    // The lead posted 40 days ago stays on Business development, not here.
+    expect(tilesIn('Business development')).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: /Ola Example/ })).not.toBeInTheDocument()
     // Four cards per column, then Show more.
-    expect(tilesIn('Now')).toHaveLength(4)
-    expect(within(column('Now')).getByRole('button', { name: 'Show more' })).toBeInTheDocument()
+    expect(tilesIn('Other')).toHaveLength(4)
+    expect(within(column('Other')).getByRole('button', { name: 'Show more' })).toBeInTheDocument()
     expect(screen.getByRole('main').querySelectorAll('svg, canvas, img')).toHaveLength(0)
   })
 
-  it('marks status with a colour bar, a dot and a word, and the late one comes first in Now', async () => {
+  it('marks status with a colour bar, a dot and a word; overdue email first, the accepted request first in Business development', async () => {
     mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
-    const first = tilesIn('Now')[0]
+    const first = tilesIn('Emails')[0]
     expect(first).toHaveAttribute('data-status', 'late')
     expect(first).toHaveTextContent('Cara Placeholder')
     expect(first).toHaveTextContent('Late')
     expect(first.querySelector('[data-mark]')).toHaveClass('bg-tone-action')
     expect(first.querySelector('[data-dot]')).toHaveAttribute('data-dot', 'solid')
-    const waiting = tilesIn('Waiting')[0]
-    expect(waiting).toHaveAttribute('data-status', 'waiting')
-    expect(waiting).toHaveTextContent(/Waiting on (their reply|the candidate)/)
-    expect(waiting.querySelector('[data-dot]')).toHaveAttribute('data-dot', 'hollow')
-    const week = tilesIn('This week')[0]
-    expect(week.querySelector('[data-mark]')).toHaveClass('bg-tone-new')
+    const [accepted, fresh] = tilesIn('Business development')
+    expect(accepted).toHaveTextContent('Message Hal Sample: accepted your request')
+    expect(within(accepted).getByTestId('tile-action')).toHaveTextContent("Alex's leads")
+    expect(fresh.querySelector('[data-mark]')).toHaveClass('bg-tone-new')
   })
 
-  it('filters by priority, with the chosen filter shown by weight', async () => {
+  it('Waiting is a filter above the board, shown by weight, and shows only those', async () => {
     mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'Waiting' }))
     expect(screen.getByRole('button', { name: 'Waiting', current: true })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Now' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Emails' })).not.toBeInTheDocument()
     expect(tilesIn('Waiting')).toHaveLength(2)
-    await userEvent.click(screen.getByRole('button', { name: 'Later' }))
-    expect(tilesIn('Later')).toHaveLength(2)
-    expect(tilesIn('Later')[0]).toHaveTextContent('Hal Hypothetical')
-    await userEvent.click(screen.getAllByTestId('hero-value')[0].closest('button')!)
-    expect(column('Now')).toBeInTheDocument()
+    const waiting = tilesIn('Waiting')[0]
+    expect(waiting).toHaveAttribute('data-status', 'waiting')
+    expect(waiting).toHaveTextContent(/Waiting on (their reply|the candidate)/)
+    expect(waiting.querySelector('[data-dot]')).toHaveAttribute('data-dot', 'hollow')
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
+    expect(column('Emails')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Waiting' })).not.toBeInTheDocument()
   })
 
@@ -134,26 +137,26 @@ describe('Tasks', () => {
     const { reorder } = mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
-    const before = tilesIn('Now').map((t) => t.textContent)
-    const second = tilesIn('Now')[1].querySelector('button')!
+    const before = tilesIn('Other').map((t) => t.textContent)
+    const second = tilesIn('Other')[1].querySelector('button')!
     second.focus()
     fireEvent.keyDown(second, { key: 'ArrowUp', shiftKey: true })
-    await waitFor(() => expect(tilesIn('Now')[0].textContent).toBe(before[1]))
+    await waitFor(() => expect(tilesIn('Other')[0].textContent).toBe(before[1]))
     expect(reorder).toHaveBeenCalledTimes(1)
     const keys = reorder.mock.calls[0][0]
-    expect(keys[0]).toBe(tilesIn('Now')[0].querySelector('[data-task]')!.getAttribute('data-task'))
+    expect(keys[0]).toBe(tilesIn('Other')[0].querySelector('[data-task]')!.getAttribute('data-task'))
   })
 
   it('reorders by dragging a card onto another in the same column', async () => {
     const { reorder } = mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
-    const [first, , third] = tilesIn('Now')
+    const [first, , third] = tilesIn('Other')
     const firstText = first.textContent
     fireEvent.dragStart(third)
     fireEvent.dragOver(first)
     fireEvent.drop(first)
-    await waitFor(() => expect(tilesIn('Now')[1].textContent).toBe(firstText))
+    await waitFor(() => expect(tilesIn('Other')[1].textContent).toBe(firstText))
     expect(reorder).toHaveBeenCalledTimes(1)
   })
 
@@ -239,7 +242,8 @@ describe('Tasks', () => {
 
   it('Edit saves the owner\'s title, due day and notes without touching the agent\'s words', async () => {
     const { edits } = mock()
-    open()
+    // The CV is waiting on the candidate, so it shows under the Waiting filter.
+    open('/tasks?show=waiting')
     await waitFor(() => expect(board()).toBeInTheDocument())
     await userEvent.click(tile('Get the CV from Ada Example'))
     let card = screen.getByRole('dialog', { name: 'Get the CV from Ada Example' })
@@ -284,8 +288,8 @@ describe('Tasks', () => {
     const { complete } = mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
-    // Now holds more than the column shows at first: open the rest.
-    const more = within(column('Now')).queryByRole('button', { name: /Show more/ })
+    // Other holds more than the column shows at first: open the rest.
+    const more = within(column('Other')).queryByRole('button', { name: /Show more/ })
     if (more) await userEvent.click(more)
     await userEvent.click(tile('Confirm the search for your call with Finn Fictional'))
     const card = screen.getByRole('dialog', { name: /Confirm the search for your call with Finn Fictional/ })
@@ -308,7 +312,7 @@ describe('Tasks', () => {
     expect(tile('Tailspin Example Inc')).toBeInTheDocument()
   })
 
-  it('Start works the Now column one task at a time, and List comes back to the board', async () => {
+  it('Start works what is due or late one task at a time, and List comes back to the board', async () => {
     const { complete } = mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
@@ -352,13 +356,15 @@ describe('Tasks', () => {
     expect(document.querySelectorAll('[data-kind="primary"]')).toHaveLength(1)
   })
 
-  it('every tile says where the task came from, what to do and the day it surfaced; past three days with no date of its own it is late', async () => {
+  it('every tile says where the task came from, what to do and the day it surfaced, and a lead the day it was posted; past three days with no date of its own it is late', async () => {
     mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
     const north = tile('Connect with Gail Example at Northwind Sample Co')
     expect(within(north).getByTestId('tile-action')).toHaveTextContent('LinkedIn post·Connect on LinkedIn')
-    expect(within(north).getByTestId('tile-surfaced')).toHaveTextContent(/^Surfaced \d+ \w+$/)
+    expect(within(north).getByTestId('tile-surfaced')).toHaveTextContent('Posted 14 Nov')
+    const prep = tile('Prepare for your call with Dev Madeup')
+    expect(within(prep).getByTestId('tile-surfaced')).toHaveTextContent(/^Surfaced \d+ \w+$/)
     const late = document.querySelectorAll('[data-task-tile][data-status="late"]')
     expect(late.length).toBeGreaterThan(0)
   })
@@ -390,8 +396,8 @@ describe('Tasks', () => {
     mock()
     open()
     await waitFor(() => expect(board()).toBeInTheDocument())
-    await userEvent.click(tile('Message Hal Sample at Contoso Demo Inc'))
-    const card = screen.getByRole('dialog', { name: 'Message Hal Sample at Contoso Demo Inc' })
+    await userEvent.click(tile('Message Hal Sample: accepted your request'))
+    const card = screen.getByRole('dialog', { name: 'Message Hal Sample: accepted your request' })
     expect(within(card).getByTestId('lead-status')).toHaveTextContent(/^Connected \d+ \w+\. Message not sent yet$/)
     expect((within(card).getByRole('textbox', { name: 'LinkedIn message' }) as HTMLTextAreaElement).value).toMatch(/^Thanks for connecting, Hal\./)
     expect(card.querySelector('[data-kind="primary"]')).toHaveTextContent('Copy and open LinkedIn')

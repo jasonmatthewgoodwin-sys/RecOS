@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { byFit, cityName, daysSince, funnel, funnelRatios, nextStage, primaryLabel } from './leads'
+import { byFit, cityName, daysSince, funnel, funnelRatios, leadSourceWord, matchesFilter, nextStage, outreachShort, primaryLabel } from './leads'
 import { freshSampleLeads, resetSampleLeads, sampleSource } from './sample'
 
 afterEach(() => resetSampleLeads())
@@ -77,5 +77,28 @@ describe('sample leads', () => {
   it('holds no contact details', async () => {
     const text = JSON.stringify(await sampleSource.jobLeads())
     expect(text).not.toMatch(/@|\+?\d{3}[\s-]?\d{3}[\s-]?\d{4}/)
+  })
+})
+
+describe('Ad and post chasers tiles (18 Nov)', () => {
+  const base = freshSampleLeads()[0]
+  it('says where the outreach stands in one short word', () => {
+    expect(outreachShort({ outreachStage: 'found', connectMessageId: null })).toBeNull()
+    expect(outreachShort({ outreachStage: 'found', connectMessageId: 'm-1' })).toBe('Request queued')
+    expect(outreachShort({ outreachStage: 'connection_sent', connectMessageId: 'm-1' })).toBe('Request sent')
+    expect(outreachShort({ outreachStage: 'connected', connectMessageId: 'm-1' })).toBe('Accepted')
+    expect(outreachShort({ outreachStage: 'messaged', connectMessageId: 'm-1' })).toBe('Messaged')
+    expect(outreachShort({ outreachStage: 'replied', connectMessageId: 'm-1' })).toBe('Replied')
+  })
+  it('names the source in words, LinkedIn post and Alex leads first', () => {
+    expect(leadSourceWord(['linkedin_post'])).toBe('LinkedIn post')
+    expect(leadSourceWord(['linkedin_advert', 'alex_leads'])).toBe("Alex's leads")
+    expect(leadSourceWord([])).toBeNull()
+  })
+  it('Request sent and Accepted follow the outreach on open leads only', () => {
+    expect(matchesFilter({ ...base, outreachStage: 'connection_sent' }, 'sent')).toBe(true)
+    expect(matchesFilter({ ...base, outreachStage: 'connected' }, 'accepted')).toBe(true)
+    expect(matchesFilter({ ...base, outreachStage: 'connected', stage: 'dead' }, 'accepted')).toBe(false)
+    expect(matchesFilter({ ...base, outreachStage: 'found' }, 'sent')).toBe(false)
   })
 })

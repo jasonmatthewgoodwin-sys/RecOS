@@ -14,13 +14,15 @@ import {
   byPosted,
   postedDay,
   cityName,
-  daysSince,
   filters,
   funnel,
   funnelPairs,
   funnelRatios,
   isLowerFit,
+  leadSourceWord,
   matchesFilter,
+  outreachShort,
+  shortDate,
   type JobFilter,
 } from '../../lib/leads'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
@@ -39,6 +41,8 @@ const emptyWords: Record<JobFilter, string> = {
   chased: 'No leads chased',
   replied: 'No replies',
   meeting: 'No meetings booked',
+  sent: 'No requests waiting to be accepted',
+  accepted: 'Nobody waiting for your message',
   all: 'All clear',
 }
 
@@ -211,19 +215,25 @@ export function Jobs() {
     }
   }
 
+  // Each tile says where the lead came from, the day it was posted and where
+  // the LinkedIn outreach stands in one word (Jason, 18 November 2026).
+  // Accepted carries the solid dot and the strongest tone: message them.
   const rows = visible.map((l) => {
     const open = l.stage !== 'dead' && l.stage !== 'passed'
+    const accepted = open && l.outreachStage === 'connected'
+    const source = leadSourceWord(l.sources)
     const actions = []
     if (l.stage === 'new') actions.push({ label: 'Chased', onClick: () => move(l, 'chased') })
     if (open) actions.push({ label: 'Bin', onClick: () => openCard(l.id, 'bin') })
     return {
       id: l.id,
-      dot: l.stage === 'new' ? ('solid' as const) : ('hollow' as const),
-      tone: !open ? ('clear' as const) : l.stage === 'new' ? ('new' as const) : l.stage === 'replied' ? ('action' as const) : ('pending' as const),
+      dot: l.stage === 'new' || accepted ? ('solid' as const) : ('hollow' as const),
+      tone: !open ? ('clear' as const) : accepted ? ('action' as const) : l.stage === 'new' ? ('new' as const) : l.stage === 'replied' ? ('action' as const) : ('pending' as const),
       title: l.role,
-      detail: l.company,
+      word: open ? (outreachShort(l) ?? undefined) : undefined,
+      detail: [l.company, cityName(l.city)].filter(Boolean).join(', '),
       detailWord: l.existingClient ? 'Existing client' : undefined,
-      meta: `${cityName(l.city)} ${daysSince(postedDay(l), today)}d`.trim(),
+      meta: [source, `Posted ${shortDate(postedDay(l))}`].filter(Boolean).join(' · '),
       done: !open,
       section: isLowerFit(l) ? 'Lower fit' : undefined,
       actions,

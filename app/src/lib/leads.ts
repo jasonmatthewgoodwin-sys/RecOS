@@ -41,6 +41,39 @@ export const sourceWord: Record<string, string> = {
   call: 'From a call',
 }
 
+/** Where the lead came from, in words: LinkedIn post or Alex's leads first, then whatever else it was seen in. */
+export function leadSourceWord(sources: string[]): string | null {
+  if (sources.includes('linkedin_post')) return sourceWord.linkedin_post
+  if (sources.includes('alex_leads')) return sourceWord.alex_leads
+  const first = sources[0]
+  return first ? (sourceWord[first] ?? null) : null
+}
+
+/**
+ * Where the LinkedIn outreach stands, in one short word (Jason, 18 November
+ * 2026). Accepted means the poster took the request and Jason must message
+ * them. Null when nothing has been asked yet.
+ */
+export function outreachShort(lead: Pick<JobLead, 'outreachStage' | 'connectMessageId'>): string | null {
+  switch (lead.outreachStage) {
+    case 'replied':
+      return 'Replied'
+    case 'messaged':
+      return 'Messaged'
+    case 'connected':
+      return 'Accepted'
+    case 'connection_sent':
+      return 'Request sent'
+    default:
+      return lead.connectMessageId ? 'Request queued' : null
+  }
+}
+
+/** 16 Nov. */
+export function shortDate(date: string): string {
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date.slice(0, 10)}T12:00:00Z`))
+}
+
 /** new_york becomes New York, remote_us becomes Remote US. */
 export function cityName(city: string | null): string {
   if (!city) return ''
@@ -56,19 +89,25 @@ export function daysSince(date: string, today: string): number {
   return Math.max(0, Math.round(ms / 86_400_000))
 }
 
-export type JobFilter = 'new' | 'chased' | 'replied' | 'meeting' | 'all'
+export type JobFilter = 'new' | 'chased' | 'replied' | 'meeting' | 'sent' | 'accepted' | 'all'
 
 export const filters: { value: JobFilter; label: string }[] = [
   { value: 'new', label: 'New' },
   { value: 'chased', label: 'Chased' },
   { value: 'replied', label: 'Replied' },
   { value: 'meeting', label: 'Meeting' },
+  { value: 'sent', label: 'Request sent' },
+  { value: 'accepted', label: 'Accepted' },
   { value: 'all', label: 'All' },
 ]
 
 export function matchesFilter(lead: JobLead, filter: JobFilter): boolean {
   if (filter === 'all') return true
   if (filter === 'meeting') return lead.stage === 'meeting_booked'
+  // The LinkedIn filters follow the outreach, on leads still open (Jason, 18 November 2026).
+  const open = lead.stage !== 'dead' && lead.stage !== 'passed'
+  if (filter === 'sent') return open && lead.outreachStage === 'connection_sent'
+  if (filter === 'accepted') return open && lead.outreachStage === 'connected'
   return lead.stage === filter
 }
 

@@ -95,9 +95,10 @@ export type TaskLead = {
   connectHold: string | null
   connectAfter: string | null
   campaign: { name: string; addedOn: string | null; enrolledOn: string | null } | null
+  /** Where the lead was seen (job_leads.sources), such as linkedin_post or alex_leads. Filled from the lead list. */
+  sources?: string[]
 }
 
-export type Band = 'now' | 'week' | 'later'
 export type TaskStatus = 'late' | 'today' | 'waiting' | 'on_track'
 
 export const typeWord: Record<TaskKind, string> = {
@@ -256,7 +257,7 @@ export function actionTitle(task: Task): string {
         case 'connection_sent':
           return `Wait for ${poster}${at} to accept`
         case 'connected':
-          return `Message ${poster}${at}`
+          return `Message ${poster}: accepted your request`
         case 'messaged':
           return `Chase ${poster}${at} for a reply`
         case 'replied':
@@ -366,30 +367,10 @@ export function shortDay(date: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`))
 }
 
-/** The Monday of the week holding a plain date, as a plain date. */
-function mondayOf(date: string): string {
-  const d = new Date(`${date}T12:00:00Z`)
-  const back = (d.getUTCDay() + 6) % 7
-  d.setUTCDate(d.getUTCDate() - back)
-  return d.toISOString().slice(0, 10)
-}
-
 function addDays(date: string, n: number): string {
   const d = new Date(`${date}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + n)
   return d.toISOString().slice(0, 10)
-}
-
-/** Now: due today or late, or urgent by rank. This week: due by Sunday. Later: the rest. */
-export function band(task: Task, today: string): Band {
-  const due = effectiveDue(task)
-  if (task.kind === 'system_notice') return 'now'
-  if (due !== null && due <= today) return 'now'
-  if (task.rank >= 50) return 'now'
-  const sunday = addDays(mondayOf(today), 6)
-  if (due !== null && due <= sunday) return 'week'
-  if (task.rank >= 30) return 'week'
-  return 'later'
 }
 
 /** Shown as a colour mark and a word. Waiting beats the date. */
@@ -421,14 +402,106 @@ export function dueWord(task: Task, today: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d)
 }
 
-/** The owner's order first, then late before the rest (21.4), then rank, then the nearer due date, then the oldest. */
+// ---- The board (Jason, 18 November 2026): Emails, Business development and
+// Other. Waiting is a filter above the board, not a column.
+
+export type TaskFilter = 'all' | 'waiting'
+
+export const filters: { value: TaskFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'waiting', label: 'Waiting' },
+]
+
+export type ColumnKey = 'emails' | 'bd' | 'other' | 'waiting'
+export type Column = { key: ColumnKey; label: string; tasks: Task[] }
+
+/** A lead stays on Tasks for this many days after it was posted. Older ones live on Business development only. */
+export const LEAD_DAYS = 21
+
+export function isBdTask(task: Task): boolean {
+  return task.kind === 'job_lead' || task.kind === 'wider_lead'
+}
+
+/** Replies owed, chases and drafts to send: follow-ups and anything going out by email. */
+export function isEmailTask(task: Task): boolean {
+  return !isBdTask(task) && (task.kind === 'follow_up' || task.channel === 'email')
+}
+
+export function columnOf(task: Task): 'emails' | 'bd' | 'other' {
+  if (isBdTask(task)) return 'bd'
+  if (isEmailTask(task)) return 'emails'
+  return 'other'
+}
+
+/** The day a lead was posted: the post date, else the day it was first seen, else the day the task was raised. */
+export function leadPostedOn(task: Task): string {
+  return task.lead?.postedOn ?? task.lead?.foundOn ?? task.createdAt.slice(0, 10)
+}
+
+/** Posted within the last 21 days. */
+export function isFreshLead(task: Task, today: string): boolean {
+  return leadPostedOn(task) >= addDays(today, -LEAD_DAYS)
+}
+
+/** The poster accepted the connection request: Jason must message them. */
+export function isAccepted(task: Task): boolean {
+  return task.kind === 'job_lead' && task.lead?.stage === 'connected'
+}
+
+/** Where a lead came from, in words: LinkedIn post or Alex's leads. */
+export function leadSource(task: Task): string {
+  const sources = task.lead?.sources ?? []
+  if (sources.includes('linkedin_post')) return 'LinkedIn post'
+  if (sources.includes('alex_leads')) return "Alex's leads"
+  if (sources.includes('linkedin_advert')) return 'LinkedIn advert'
+  if (sources.includes('manual')) return 'Added by hand'
+  return sourceShort(task)
+}
+
+/** tasks_view leaves the lead's sources out: fill them from the lead list, which the Business development page loads anyway. */
+export function withLeadSources(tasks: Task[], leads: { id: string; sources: string[] }[] | undefined): Task[] {
+  if (!leads || leads.length === 0) return tasks
+  const byId = new Map(leads.map((l) => [l.id, l.sources]))
+  return tasks.map((t) => (t.lead && !t.lead.sources && byId.has(t.lead.id) ? { ...t, lead: { ...t.lead, sources: byId.get(t.lead.id) } } : t))
+}
+
+/** The owner's own order first; null when it does not decide. */
+function ownerOrder(a: Task, b: Task): number | null {
+  const oa = a.edits.sortOrder
+  const ob = b.edits.sortOrder
+  if (oa !== null && ob !== null && oa !== ob) return oa - ob
+  if (oa !== null && ob === null) return -1
+  if (oa === null && ob !== null) return 1
+  return null
+}
+
+/** Emails: the owner's order, then the oldest due date first, so overdue comes first. */
+export function byDue(a: Task, b: Task): number {
+  const o = ownerOrder(a, b)
+  if (o !== null) return o
+  const da = effectiveDue(a) ?? '9999'
+  const db = effectiveDue(b) ?? '9999'
+  if (da !== db) return da.localeCompare(db)
+  return a.createdAt.localeCompare(b.createdAt)
+}
+
+/** Business development: the owner's order, then accepted requests, then the newest post first. */
+export function byLead(a: Task, b: Task): number {
+  const o = ownerOrder(a, b)
+  if (o !== null) return o
+  const aa = isAccepted(a)
+  const ab = isAccepted(b)
+  if (aa !== ab) return aa ? -1 : 1
+  const d = leadPostedOn(b).localeCompare(leadPostedOn(a))
+  if (d !== 0) return d
+  return b.rank - a.rank
+}
+
+/** Other: the owner's order, then late before the rest (21.4), then rank, then the nearer due date, then the oldest. */
 export function byOrder(today: string): (a: Task, b: Task) => number {
   return (a, b) => {
-    const oa = a.edits.sortOrder
-    const ob = b.edits.sortOrder
-    if (oa !== null && ob !== null && oa !== ob) return oa - ob
-    if (oa !== null && ob === null) return -1
-    if (oa === null && ob !== null) return 1
+    const o = ownerOrder(a, b)
+    if (o !== null) return o
     const la = status(a, today) === 'late'
     const lb = status(b, today) === 'late'
     if (la !== lb) return la ? -1 : 1
@@ -440,29 +513,41 @@ export function byOrder(today: string): (a: Task, b: Task) => number {
   }
 }
 
-export type TaskFilter = 'now' | 'week' | 'later' | 'waiting' | 'all'
+/** Whether a task shows on Tasks at all: leads posted more than 21 days ago do not. */
+export function onTasks(task: Task, today: string): boolean {
+  return !isBdTask(task) || isFreshLead(task, today)
+}
 
-export const filters: { value: TaskFilter; label: string }[] = [
-  { value: 'now', label: 'Now' },
-  { value: 'week', label: 'This week' },
-  { value: 'later', label: 'Later' },
-  { value: 'waiting', label: 'Waiting' },
-  { value: 'all', label: 'All' },
-]
-
-export type Column = { key: 'now' | 'week' | 'later' | 'waiting'; label: string; tasks: Task[] }
-
-/** Waiting tasks sit in their own column whatever their band. */
+/**
+ * The three columns, then Waiting for the filter. A task waiting on someone
+ * else leaves the columns and shows only under Waiting.
+ */
 export function columns(tasks: Task[], today: string): Column[] {
-  const sorted = [...tasks].sort(byOrder(today))
-  const waiting = sorted.filter((t) => status(t, today) === 'waiting')
-  const rest = sorted.filter((t) => status(t, today) !== 'waiting')
+  const shown = tasks.filter((t) => onTasks(t, today))
+  const waiting = shown.filter((t) => status(t, today) === 'waiting')
+  const rest = shown.filter((t) => status(t, today) !== 'waiting')
   return [
-    { key: 'now', label: 'Now', tasks: rest.filter((t) => band(t, today) === 'now') },
-    { key: 'week', label: 'This week', tasks: rest.filter((t) => band(t, today) === 'week') },
-    { key: 'later', label: 'Later', tasks: rest.filter((t) => band(t, today) === 'later') },
-    { key: 'waiting', label: 'Waiting', tasks: waiting },
+    { key: 'emails', label: 'Emails', tasks: rest.filter((t) => columnOf(t) === 'emails').sort(byDue) },
+    { key: 'bd', label: 'Business development', tasks: rest.filter((t) => columnOf(t) === 'bd').sort(byLead) },
+    { key: 'other', label: 'Other', tasks: rest.filter((t) => columnOf(t) === 'other').sort(byOrder(today)) },
+    { key: 'waiting', label: 'Waiting', tasks: waiting.sort(byOrder(today)) },
   ]
+}
+
+/**
+ * Needs you, on Home and on Tasks: the items in the three columns that are
+ * due today or late, in board order. Waiting items and leads older than 21
+ * days do not count. Start works through these.
+ */
+export function dueNow(tasks: Task[], today: string): Task[] {
+  return columns(tasks, today)
+    .filter((c) => c.key !== 'waiting')
+    .flatMap((c) => c.tasks)
+    .filter((t) => t.kind === 'system_notice' || status(t, today) !== 'on_track')
+}
+
+export function needsYouCount(tasks: Task[], today: string): number {
+  return dueNow(tasks, today).length
 }
 
 /** Bin reasons by kind: three quick choices and Other (27.2). */

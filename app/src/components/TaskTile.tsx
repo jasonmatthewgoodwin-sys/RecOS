@@ -1,5 +1,5 @@
 import type { Task, TaskStatus } from '../lib/tasks'
-import { dueWord, primaryLabel, shortDay, shownTitle, sourceShort, status, statusWord, surfacedOn, typeWord } from '../lib/tasks'
+import { dueWord, isBdTask, leadPostedOn, leadSource, primaryLabel, shortDay, shownTitle, sourceShort, status, statusWord, surfacedOn, typeWord } from '../lib/tasks'
 
 type Props = {
   task: Task
@@ -26,10 +26,13 @@ const mark: Record<TaskStatus, string> = {
 // why, where it came from and what to do (Jason, 17 November 2026), the day
 // it surfaced and the due day. Status is a dot, a word and one thin colour mark on
 // the left edge, so it still reads in greyscale. Added for the Tasks tab
-// (docs/decisions.md, Pending for Jason).
+// (docs/decisions.md, Pending for Jason). A lead says where it came from in
+// words (LinkedIn post, Alex's leads) and the day it was posted (Jason, 18
+// November 2026).
 export function TaskTile({ task, today, onOpen, draggable, onDragStart, onDragOver, onDrop, dragging }: Props) {
   const st = status(task, today)
   const solid = st === 'late' || st === 'today'
+  const lead = isBdTask(task)
   return (
     <li
       data-task-tile
@@ -62,7 +65,7 @@ export function TaskTile({ task, today, onOpen, draggable, onDragStart, onDragOv
         <span className="line-clamp-2 text-body text-ink">{shownTitle(task)}</span>
         {task.why && <span className="line-clamp-1 text-label text-ink-2">{task.why}</span>}
         <span className="truncate text-label text-ink" data-testid="tile-action">
-          <span className="text-ink-2">{sourceShort(task)}</span>
+          <span className="text-ink-2">{lead ? leadSource(task) : sourceShort(task)}</span>
           <span className="mx-2 text-ink-3">·</span>
           {primaryLabel(task)}
         </span>
@@ -72,7 +75,7 @@ export function TaskTile({ task, today, onOpen, draggable, onDragStart, onDragOv
             {task.waitingOn ? ` on ${task.waitingOn.toLowerCase()}` : ''}
           </span>
           <span className="shrink-0 font-mono text-label text-ink-3" data-testid="tile-surfaced">
-            Surfaced {shortDay(surfacedOn(task))}
+            {lead ? `Posted ${shortDay(leadPostedOn(task))}` : `Surfaced ${shortDay(surfacedOn(task))}`}
           </span>
         </span>
       </button>

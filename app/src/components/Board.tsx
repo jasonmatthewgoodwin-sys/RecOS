@@ -15,7 +15,7 @@ type Props = {
   onReorder?: (column: Column['key'], keys: string[]) => void
 }
 
-// Columns of small cards: Now, This week, Later and Waiting. Every card is
+// Columns of small cards: Emails, Business development and Other. Every card is
 // the same height so the rows line up across columns. One column on its own
 // (a filter) spreads across the sheet as a gallery instead. Nothing moves on
 // its own. Drag a card, or hold Shift and press the arrow keys, to put it

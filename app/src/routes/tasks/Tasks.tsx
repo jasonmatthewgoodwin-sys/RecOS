@@ -14,12 +14,14 @@ import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import {
   binReasons,
   columns,
+  dueNow,
   filters,
   primaryLabel,
   refreshLine,
   shownTitle,
   snoozeChoices,
   typeWord,
+  withLeadSources,
   type Column,
   type Task,
   type TaskEdits,
@@ -30,11 +32,14 @@ import { ukClock } from '../../lib/time'
 import { TaskBody, TaskCard, type CardMode } from './TaskCard'
 
 // Tasks: everything the owner has to do, drawn from every source, on a board
-// of Now, This week, Later and Waiting. One Start button works the Now column
-// as a deck. A card opens a task over the right half of the sheet.
+// of Emails, Business development and Other (Jason, 18 November 2026).
+// Waiting is a filter above the board. One Start button works what is due or
+// late as a deck. A card opens a task over the right half of the sheet.
 
 const TASKS_KEY = 'tasks.all'
 const SEARCHES_KEY = 'tasks.searches'
+/** The lead list the Business development page loads: it gives each lead task its source in words. */
+const LEADS_KEY = 'leads.jobs'
 
 type Props = {
   /** Show one kind only: the Follow-ups page under Leads is this board filtered. */
@@ -54,6 +59,7 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
 
   const tasks = useQuery(TASKS_KEY, data.tasks)
   const searches = useQuery(SEARCHES_KEY, data.searches)
+  const leads = useQuery(LEADS_KEY, data.jobLeads)
 
   const filter: TaskFilter = isFilter(params.get('show')) ? (params.get('show') as TaskFilter) : 'all'
   const view = params.get('view') === 'deck' ? 'deck' : 'board'
@@ -62,12 +68,14 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const all = useMemo(() => (tasks.data ?? []).filter((t) => !only || t.kind === only), [tasks.data, only])
+  const all = useMemo(
+    () => withLeadSources((tasks.data ?? []).filter((t) => !only || t.kind === only), leads.data),
+    [tasks.data, leads.data, only],
+  )
   const cols = useMemo(() => columns(all, today), [all, today])
-  const shownCols: Column[] =
-    filter === 'all' ? cols.filter((c) => c.key !== 'later') : cols.filter((c) => c.key === filter)
-  const later = cols.find((c) => c.key === 'later')!
-  const nowCount = cols[0].tasks.length
+  const due = useMemo(() => dueNow(all, today), [all, today])
+  const shownCols: Column[] = filter === 'waiting' ? cols.filter((c) => c.key === 'waiting') : cols.filter((c) => c.key !== 'waiting')
+  const dueCount = due.length
   const waitingCount = cols[3].tasks.length
   const card = cardKey ? all.find((t) => t.key === cardKey) : undefined
   const searchRefs: Search[] = searches.data ?? []
@@ -224,20 +232,20 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  // The deck is built once from the Now column when the view opens (INBX-1).
+  // The deck is built once from what is due or late when the view opens (INBX-1).
   const [deckItems, setDeckItems] = useState<(Task & { id: string })[] | null>(null)
   useEffect(() => {
     if (view !== 'deck') {
       setDeckItems(null)
       return
     }
-    if (deckItems === null && tasks.status === 'ready') setDeckItems(cols[0].tasks.map((t) => ({ ...t, id: t.key })))
-  }, [view, tasks.status, cols, deckItems])
+    if (deckItems === null && tasks.status === 'ready') setDeckItems(due.map((t) => ({ ...t, id: t.key })))
+  }, [view, tasks.status, due, deckItems])
 
   const [deckDrafts, setDeckDrafts] = useState<Record<string, { body: string; subject: string }>>({})
   const [deckSearch, setDeckSearch] = useState<Record<string, string>>({})
 
-  const needsYou = tasks.data === undefined ? undefined : twoDigits(nowCount)
+  const needsYou = tasks.data === undefined ? undefined : twoDigits(dueCount)
   const waiting = tasks.data === undefined ? undefined : twoDigits(waitingCount)
 
   return (
@@ -245,7 +253,7 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
       <PageHeader title={title} />
 
       <div className="grid grid-cols-2 gap-x-8 gap-y-12 md:flex md:gap-x-16">
-        <HeroStat label="Now" value={needsYou?.text} plus={needsYou?.plus} onClick={() => setParam('show', 'now')} />
+        <HeroStat label="Needs you" value={needsYou?.text} plus={needsYou?.plus} onClick={() => setParam('show', null)} />
         <HeroStat label="Waiting" value={waiting?.text} plus={waiting?.plus} onClick={() => setParam('show', 'waiting')} />
       </div>
 
@@ -300,14 +308,9 @@ export function Tasks({ only, title = 'Tasks' }: Props) {
                 <TextLink key={f.value} label={f.label} active={f.value === filter} onClick={() => setParam('show', f.value === 'all' ? null : f.value)} />
               ))}
             </nav>
-            {nowCount > 0 && !card && <PillButton kind="primary" label="Start" onClick={() => setParam('view', 'deck')} />}
+            {dueCount > 0 && !card && <PillButton kind="primary" label="Start" onClick={() => setParam('view', 'deck')} />}
           </div>
           <Board columns={shownCols} today={today} state={tasks.status} onOpen={openCard} onReorder={reorder} />
-          {filter === 'all' && later.tasks.length > 0 && tasks.status === 'ready' && (
-            <div>
-              <TextLink label={`Later, ${later.tasks.length}`} onClick={() => setParam('show', 'later')} />
-            </div>
-          )}
         </div>
       )}
 
