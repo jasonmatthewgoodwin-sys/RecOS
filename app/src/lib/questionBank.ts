@@ -256,16 +256,41 @@ export function isRoleType(value: unknown): value is RoleType {
   return typeof value === 'string' && value in BY_ROLE
 }
 
-/** The standard groups for a role type, at once. An unknown or missing role type gets the `other` set. The role's own group comes second, after why the role is open. */
-export function questionBank(roleType: RoleType | null | undefined): QuestionGroup[] {
-  const role = BY_ROLE[isRoleType(roleType) ? roleType : 'other']
+/**
+ * The role type behind a saved value: a code, a choice's own words, or his
+ * own words that name one plainly ("Head of Product Marketing"). Anything
+ * else is his own description and has no set of its own (0060).
+ */
+export function roleTypeOf(value: string | null | undefined): RoleType | null {
+  if (!value) return null
+  if (isRoleType(value)) return value
+  const v = value.trim().toLowerCase()
+  const byLabel = ROLE_TYPES.find((r) => r.label.toLowerCase() === v)
+  if (byLabel) return byLabel.value
+  if (/\b(vp|vice president|director)\b/.test(v)) return 'director_vp_pmm'
+  if (/\bhead of\b/.test(v) && /product marketing|pmm/.test(v)) return 'head_of_pmm'
+  if (/product[- ]led|\bplg\b/.test(v)) return 'plg_pmm'
+  if (/\btechnical\b/.test(v)) return 'technical_pmm'
+  if (/\b(senior|principal|staff|lead)\b/.test(v) && /product marketing|pmm/.test(v)) return 'senior_pmm'
+  if (/^(product marketing manager|pmm)$/.test(v)) return 'ic_pmm'
+  return null
+}
+
+/**
+ * The standard groups for a role type, at once. The role's own group comes
+ * second, after why the role is open. None given gets the `other` set; his
+ * own words that name no type get the core product marketing questions only.
+ */
+export function questionBank(roleType: string | null | undefined): QuestionGroup[] {
+  const known = roleTypeOf(roleType)
   const [first, ...rest] = CORE.map(toGroup)
-  return [first, toGroup(role), ...rest]
+  if (!known && roleType) return [first, ...rest]
+  return [first, toGroup(BY_ROLE[known ?? 'other']), ...rest]
 }
 
 /** The same, as the `structured` of a questions note, ready for saveSearchNote. */
-export function questionSet(roleType: RoleType | null | undefined): QuestionSet {
-  return { role_type: isRoleType(roleType) ? roleType : 'other', from_jd: false, groups: questionBank(roleType) }
+export function questionSet(roleType: string | null | undefined): QuestionSet {
+  return { role_type: roleTypeOf(roleType) ?? 'other', from_jd: false, groups: questionBank(roleType) }
 }
 
 /** The questions as plain text, for Copy all and for the note's `content`. */

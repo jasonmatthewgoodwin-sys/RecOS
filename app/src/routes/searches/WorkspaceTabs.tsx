@@ -1,14 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
 import { Dots } from '../../components/Quiet'
 import { TextLink } from '../../components/TextLink'
-import { data, requestSearchJob, searchIntake, searchJobs, type Call, type Search, type SearchJob, type SearchJobKind, type SearchNote } from '../../lib/data'
+import { data, requestSearchJob, searchIntake, searchJobs, type Call, type Search, type SearchCandidate, type SearchJob, type SearchJobKind, type SearchNote } from '../../lib/data'
 import { invalidate, useQuery } from '../../lib/query'
-import { briefFields, bulletLines, writeUpTicks } from '../../lib/searches'
-import { questionBank, ROLE_TYPES, type RoleType } from '../../lib/questionBank'
+import { boardCounts, briefFields, bulletLines, writeUpTicks } from '../../lib/searches'
+import { questionBank } from '../../lib/questionBank'
 import { latestJobs } from '../../lib/searchResearch'
 import { ukTime } from '../../lib/time'
+import { intakeKey, JobDescription, RoleTypeField } from './Intake'
 
 // The workspace tabs rebuilt on 16 November 2026 (Mia): Pre-brief holds the
 // intake and the research before the brief call; Brief is read, not typed,
@@ -18,22 +18,12 @@ import { ukTime } from '../../lib/time'
 
 const jobsKey = (id: string) => `searches.jobs.${id}`
 
-const roleTypeWord: Record<RoleType, string> = {
-  ic_pmm: 'Product marketing manager',
-  senior_pmm: 'Senior PMM',
-  technical_pmm: 'Technical PMM',
-  head_of_pmm: 'Head of product marketing',
-  director_vp_pmm: 'Director or VP',
-  plg_pmm: 'Product-led growth PMM',
-  other: 'Other',
-}
-
 function when(iso: string | null): string {
   return iso ? `${iso.slice(0, 10)} ${ukTime(new Date(iso))}` : ''
 }
 
 /** One research action: Ask, Working, then the result in place (30.6). */
-function Action({ kind, job, label, onAsk, children }: { kind: SearchJobKind; job: SearchJob | undefined; label: string; onAsk: (kind: SearchJobKind) => void; children?: ReactNode }) {
+function Action({ kind, job, label, onAsk, pane, children }: { kind: SearchJobKind; job: SearchJob | undefined; label: string; onAsk: (kind: SearchJobKind) => void; pane?: boolean; children?: ReactNode }) {
   const working = job?.status === 'waiting' || job?.status === 'working'
   return (
     <section className="flex flex-col gap-3" aria-label={label}>
@@ -43,7 +33,7 @@ function Action({ kind, job, label, onAsk, children }: { kind: SearchJobKind; jo
         {job?.status === 'failed' && <span className="text-ink-2">Could not finish. {job.note ?? 'Try again.'}</span>}
         {job?.status === 'ready' && job.finishedAt && <span className="font-mono text-label text-ink-3">{when(job.finishedAt)}</span>}
       </div>
-      {children}
+      {pane && children ? <div className="max-h-[calc(100vh-24rem)] min-h-40 overflow-y-auto pr-3">{children}</div> : children}
       {job?.status === 'ready' && job.note && <p className="font-mono text-label text-ink-3">{job.note}</p>}
     </section>
   )
@@ -98,12 +88,11 @@ function Structured({ value }: { value: unknown }): ReactNode {
 /** Pre-brief: the intake, the questions for the brief call, the client lowdown and the map. */
 export function PreBriefTab({ search: s, notes, onNote }: { search: Search; notes: SearchNote[]; onNote: (t: string) => void }) {
   const jobs = useQuery(jobsKey(s.id), () => searchJobs(s.id))
-  const intake = useQuery(`searches.intake.${s.id}`, () => searchIntake(s.id))
+  const intake = useQuery(intakeKey(s.id), () => searchIntake(s.id))
   const latest = latestJobs(jobs.data ?? [])
-  const [roleType, setRoleType] = useState<RoleType | ''>('')
-  useEffect(() => {
-    if (intake.data?.roleType) setRoleType(intake.data.roleType)
-  }, [intake.data])
+  // The role type is read from what is saved, never held apart from it, so a
+  // refresh cannot put back an old value (the bug Jason found, 18 November).
+  const roleType = intake.data?.roleType ?? null
 
   // Working jobs are looked at again every half a minute while the tab is open.
   const working = Object.values(latest).some((j) => j.status === 'waiting' || j.status === 'working')
@@ -135,15 +124,16 @@ export function PreBriefTab({ search: s, notes, onNote }: { search: Search; note
 
   return (
     <div className="flex flex-col gap-8">
-      <section className="flex flex-col gap-3" aria-label="Intake">
-        <h4 className="label-caps text-ink-2">Intake</h4>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Role type" kind="choice" value={roleType} onChange={(v) => setRoleType(v as RoleType | '')} placeholder="Pick one" choices={ROLE_TYPES.map((r) => ({ value: r.value, label: roleTypeWord[r.value] ?? r.label }))} />
-          <p className="self-end font-mono text-label text-ink-3">{intake.data?.jdText ? `Job description on file, ${intake.data.jdText.split(/\s+/).length} words` : 'No job description yet'}{intake.data?.briefDueOn ? `. Brief due ${intake.data.briefDueOn}` : ''}</p>
+      <section className="grid gap-x-12 gap-y-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]" aria-label="Intake">
+        <div className="flex flex-col gap-2">
+          <RoleTypeField key={intake.data ? 'ready' : 'loading'} searchId={s.id} intake={intake.data} onNote={onNote} />
+          {intake.data?.briefDueOn && <p className="font-mono text-label text-ink-3">Brief due {intake.data.briefDueOn}</p>}
         </div>
+        {intake.data ? <JobDescription searchId={s.id} intake={intake.data} onNote={onNote} /> : <Dots />}
       </section>
 
-      <Action kind="questions" job={latest.questions} label="Questions for the brief call" onAsk={ask}>
+      <div className="grid gap-x-12 gap-y-8 xl:grid-cols-2">
+      <Action kind="questions" job={latest.questions} label="Questions for the brief call" onAsk={ask} pane>
         {groups.length > 0 && (
           <div className="flex flex-col gap-3">
             {groups.map((g) => (
@@ -151,7 +141,7 @@ export function PreBriefTab({ search: s, notes, onNote }: { search: Search; note
                 <h5 className="text-body text-ink">{g.title}</h5>
                 <ul className="flex flex-col gap-1">
                   {g.questions.map((qq) => (
-                    <li key={qq.id} className="flex flex-col">
+                    <li key={qq.id} className="flex max-w-prose flex-col">
                       <span className="text-body text-ink">{qq.text}</span>
                       {qq.why && <span className="font-mono text-label text-ink-3">{qq.why}</span>}
                     </li>
@@ -166,9 +156,10 @@ export function PreBriefTab({ search: s, notes, onNote }: { search: Search; note
         )}
       </Action>
 
-      <Action kind="lowdown" job={latest.lowdown} label="Client lowdown" onAsk={ask}>
+      <Action kind="lowdown" job={latest.lowdown} label="Client lowdown" onAsk={ask} pane>
         {lowdown?.structured && <Structured value={lowdown.structured} />}
       </Action>
+      </div>
 
       <Action kind="map" job={latest.map} label="Market map, after the brief call" onAsk={ask}>
         {tiers.length > 0 && (
@@ -263,7 +254,7 @@ export function BriefTab({ search: s, note, loading, onNote }: { search: Search;
       {filled.length === 0 ? (
         <p className="text-ink-3">Nothing filled yet. Once the brief call is in Granola and the job is in Spott, Fill brings it here.</p>
       ) : (
-        <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+        <dl className="grid max-w-6xl gap-x-12 gap-y-4 sm:grid-cols-2">
           {filled.map((f) => (
             <div key={f.key} className="flex flex-col">
               <dt className="label-caps text-ink-2">{f.label}</dt>
@@ -313,7 +304,7 @@ export function CallsTab({ calls, others = [], loading, onConfirm }: { calls: Ca
       ) : (
         <div className="flex flex-col gap-2">
           <p className="font-mono text-label text-ink-3">{writeUpTicks.map((t) => t.label).join(' . ')}</p>
-          <ul className="flex flex-col" aria-label="Calls on this search">
+          <ul className="flex max-h-[calc(100vh-24rem)] flex-col overflow-y-auto pr-3" aria-label="Calls on this search">
             {calls.map((c) => (
               <CallRow key={c.id} c={c} />
             ))}
@@ -327,7 +318,7 @@ export function CallsTab({ calls, others = [], loading, onConfirm }: { calls: Ca
             <TextLink label={showOthers ? 'Hide' : 'Show'} onClick={() => setShowOthers((v) => !v)} />
           </div>
           {showOthers && (
-            <ul className="flex flex-col" aria-label="Other calls">
+            <ul className="flex max-h-96 flex-col overflow-y-auto pr-3" aria-label="Other calls">
               {rest.map((c) => (
                 <CallRow key={c.id} c={c} action={onConfirm ? <TextLink label="This search" onClick={() => onConfirm(c)} /> : undefined} />
               ))}
@@ -354,7 +345,7 @@ function CallRow({ c, action }: { c: Call; action?: ReactNode }) {
         {action}
       </div>
       {c.summary && (
-        <ul className="flex flex-col gap-0.5 text-body text-ink-2">
+        <ul className="flex max-w-prose flex-col gap-0.5 text-body text-ink-2">
           {bulletLines(c.summary).map((l) => (
             <li key={l} className="flex gap-3">
               <span className="text-ink-3">·</span>
@@ -371,8 +362,12 @@ function CallRow({ c, action }: { c: Call; action?: ReactNode }) {
   )
 }
 
-/** The pipeline's header: Spott's counts, when they were read, and Refresh. */
-export function PipelineHeader({ search: s, onNote }: { search: Search; onNote: (t: string) => void }) {
+/**
+ * The pipeline's header: Spott's counts, when they were read, and Refresh.
+ * In Jason's stage words since 18 November 2026; when Spott has given
+ * nothing yet and the board has people, the board's own counts stand in.
+ */
+export function PipelineHeader({ search: s, candidates = [], onNote }: { search: Search; candidates?: SearchCandidate[]; onNote: (t: string) => void }) {
   const [asked, setAsked] = useState(false)
   async function refresh() {
     try {
@@ -382,17 +377,20 @@ export function PipelineHeader({ search: s, onNote }: { search: Search; onNote: 
       onNote('Could not ask. Try again.')
     }
   }
+  const spott = s.nSourced + s.nSpoken + s.nSubmitted + s.nFirstStage + s.nLaterStage + s.nOffer > 0
+  const fromBoard = !spott && candidates.length > 0
+  const n = fromBoard ? boardCounts(candidates) : s
   const counts = [
-    ['sourced', s.nSourced],
-    ['spoken', s.nSpoken],
-    ['submitted', s.nSubmitted],
-    ['first stage', s.nFirstStage],
-    ['later stage', s.nLaterStage],
-    ['offer', s.nOffer],
+    ['sourced', n.nSourced],
+    ['longlist', n.nSpoken],
+    ['shortlist', n.nSubmitted],
+    ['interview 1', n.nFirstStage],
+    ['interviews 2 to 4', n.nLaterStage],
+    ['offer', n.nOffer],
   ] as const
   return (
     <div className="flex flex-col gap-2">
-      <p className="flex flex-wrap items-baseline gap-x-3 font-mono text-label text-ink-2" aria-label="Spott counts">
+      <p className="flex flex-wrap items-baseline gap-x-3 font-mono text-label text-ink-2" aria-label={fromBoard ? 'Board counts' : 'Spott counts'}>
         {counts.map(([label, n], i) => (
           <span key={label}>
             {i > 0 && <span className="mr-3 text-ink-3">›</span>}
@@ -401,7 +399,7 @@ export function PipelineHeader({ search: s, onNote }: { search: Search; onNote: 
         ))}
       </p>
       <p className="flex flex-wrap items-center gap-x-6">
-        <span className="font-mono text-label text-ink-3">From Spott, read by the call agent each weekday morning</span>
+        <span className="font-mono text-label text-ink-3">{fromBoard ? 'From the board below, until Spott is read' : 'From Spott, read by the call agent each weekday morning'}</span>
         {asked ? <span className="font-mono text-label text-ink-3">Asked. The agent refreshes at its next check.</span> : <TextLink label="Refresh from Spott" onClick={() => void refresh()} />}
       </p>
     </div>

@@ -5,9 +5,9 @@
 // shown without the database or the research routine. Every name here is
 // made up.
 
-import { questionBank, questionsAsText, type QuestionGroup, type RoleType } from './questionBank'
+import { questionBank, questionsAsText, type QuestionGroup } from './questionBank'
 
-export type SearchJobKind = 'questions' | 'lowdown' | 'map' | 'brief'
+export type SearchJobKind = 'questions' | 'lowdown' | 'map' | 'brief' | 'match'
 export type SearchJobStatus = 'waiting' | 'working' | 'ready' | 'failed'
 export type SearchJob = {
   kind: SearchJobKind
@@ -16,16 +16,47 @@ export type SearchJob = {
   note: string | null
   requestedAt: string
   finishedAt: string | null
+  /** A match job's answers (0060). */
+  instruction?: MatchAnswers | null
 }
-export type StartSearchInput = { client: string; role: string; roleType?: RoleType | null; jdText?: string | null; briefDueOn?: string | null }
-/** What the intake step saved on the search. */
-export type SearchIntake = { roleType: RoleType | null; jdText: string | null; briefDueOn: string | null }
+export type StartSearchInput = { client: string; role: string; roleType?: string | null; jdText?: string | null; briefDueOn?: string | null }
+/** What the intake step saved on the search. The role type is one of the RoleType codes or Jason's own words (0060). */
+export type SearchIntake = { roleType: string | null; jdText: string | null; briefDueOn: string | null }
+
+/** His answers to "what does a good candidate look like?", the instruction of a match job (0060). */
+export type MatchAnswers = { must_haves?: string; nice_to_haves?: string; target_backgrounds?: string; deal_breakers?: string; level_and_location?: string }
+export const matchQuestions: { key: keyof MatchAnswers; label: string }[] = [
+  { key: 'must_haves', label: 'Must-haves' },
+  { key: 'nice_to_haves', label: 'Nice-to-haves' },
+  { key: 'target_backgrounds', label: 'Target companies or backgrounds' },
+  { key: 'deal_breakers', label: 'Deal-breakers' },
+  { key: 'level_and_location', label: 'Level and location' },
+]
+export type MatchFit = 'strong' | 'good' | 'maybe'
+/** One recommended candidate, as the match note holds it: someone already in people. */
+export type MatchCandidate = { person_id: string; name: string; title: string | null; company: string | null; fit: MatchFit; why: string; gaps: string }
+/** The `structured` of a match note. `dismissed` is the owner's: people he said are not for this one. */
+export type MatchResult = { candidates: MatchCandidate[]; left_out?: number; dismissed?: string[] }
 
 export type SearchResearch = {
   startSearch(input: StartSearchInput): Promise<string>
-  requestSearchJob(searchId: string, kind: SearchJobKind): Promise<void>
+  requestSearchJob(searchId: string, kind: SearchJobKind, answers?: MatchAnswers): Promise<void>
   searchJobs(searchId: string): Promise<SearchJob[]>
   searchIntake(searchId: string): Promise<SearchIntake>
+  /** One of the codes, or his own words. Blank clears it. */
+  saveRoleType(searchId: string, roleType: string | null): Promise<void>
+  /** The job description as text. Blank clears it. The file itself is never kept. */
+  saveJd(searchId: string, text: string | null): Promise<void>
+}
+
+/** Only the answers with something in them, trimmed. Empty means nothing to ask with. */
+export function cleanAnswers(a: MatchAnswers): MatchAnswers {
+  const out: MatchAnswers = {}
+  for (const q of matchQuestions) {
+    const v = a[q.key]?.trim()
+    if (v) out[q.key] = v
+  }
+  return out
 }
 
 /** The newest job of each kind, for a screen that shows one state per button. */
@@ -133,6 +164,21 @@ export function sampleBrief(client: string, role: string): Result {
   return { content, structured }
 }
 
+/** Recommended candidates from the people he knows (0060): invented why and gaps over the sample people. */
+export function sampleMatch(pool: { personId: string; name: string; title: string | null; company: string | null }[], answers: MatchAnswers): Result {
+  const fits: MatchFit[] = ['strong', 'good', 'good', 'maybe']
+  const whys = [
+    'Ran two launches a year for a finance buyer and leads a small team',
+    'Owns positioning and pricing for a product line much like this one',
+    'Strong on sales enablement, and has worked with the CMO type described',
+    'Right level, though most of the work has been in brand rather than product',
+  ]
+  const gaps = ['Has not managed managers yet', 'No time in a product-led company', 'Would need to relocate to the East Coast', 'Light on launches at this scale']
+  const candidates: MatchCandidate[] = pool.slice(0, 4).map((p, i) => ({ person_id: p.personId, name: p.name, title: p.title, company: p.company, fit: fits[i], why: whys[i], gaps: gaps[i] }))
+  const content = [`Sample matches${answers.must_haves ? ` for: ${answers.must_haves}` : ''}`, ...candidates.map((c) => `${c.name} (${c.fit}): ${c.why}. Gap: ${c.gaps}`)].join('\n')
+  return { content, structured: { candidates, left_out: 0 } }
+}
+
 // ---------------------------------------------------------------- the stand-in
 
 type Deps = {
@@ -140,6 +186,10 @@ type Deps = {
   addSearch(input: { client: string; role: string }): Promise<string>
   /** Save a result where searchNotes will find it. */
   saveNote(searchId: string, tab: SearchJobKind, content: string, structured: Record<string, unknown>): Promise<void>
+  /** The people he knows, for a sample match. */
+  pool?: () => Promise<{ personId: string; name: string; title: string | null; company: string | null }[]>
+  /** The people already on a search, left out of a sample match. */
+  onSearch?: (searchId: string) => Promise<string[]>
   /** How long a job takes. Working shows from half way. */
   delayMs?: number
 }
@@ -148,6 +198,14 @@ export function createSampleSearchResearch(deps: Deps): SearchResearch {
   const delay = deps.delayMs ?? 4000
   const jobs = new Map<string, SearchJob[]>()
   const intakes = new Map<string, SearchIntake & { client: string; role: string }>()
+  const intakeOf = (searchId: string) => {
+    let i = intakes.get(searchId)
+    if (!i) {
+      i = { client: '', role: '', roleType: null, jdText: null, briefDueOn: null }
+      intakes.set(searchId, i)
+    }
+    return i
+  }
 
   return {
     async startSearch(input) {
@@ -160,19 +218,28 @@ export function createSampleSearchResearch(deps: Deps): SearchResearch {
       return id
     },
 
-    async requestSearchJob(searchId, kind) {
+    async requestSearchJob(searchId, kind, answers) {
+      const asked = kind === 'match' ? cleanAnswers(answers ?? {}) : {}
+      if (kind === 'match' && Object.keys(asked).length === 0) throw new Error('Say what a good candidate looks like first')
       const list = jobs.get(searchId) ?? []
       jobs.set(searchId, list)
-      // One open job per search and kind.
+      // One open job per search and kind; a waiting match takes the newer answers.
+      const open = list.find((j) => j.kind === kind && j.status === 'waiting')
+      if (open && kind === 'match') open.instruction = asked
       if (list.some((j) => j.kind === kind && (j.status === 'waiting' || j.status === 'working'))) return
-      const job: SearchJob = { kind, status: 'waiting', note: null, requestedAt: new Date().toISOString(), finishedAt: null }
+      const job: SearchJob = { kind, status: 'waiting', note: null, requestedAt: new Date().toISOString(), finishedAt: null, instruction: kind === 'match' ? asked : null }
       list.unshift(job)
       setTimeout(() => {
         job.status = 'working'
       }, delay / 2)
-      setTimeout(() => {
-        const intake = intakes.get(searchId) ?? { client: 'The client', role: 'the role', roleType: null, jdText: null, briefDueOn: null }
-        const result = kind === 'questions' ? sampleQuestions(intake) : kind === 'lowdown' ? sampleLowdown(intake.client) : kind === 'brief' ? sampleBrief(intake.client, intake.role) : sampleMap(intake.role)
+      setTimeout(async () => {
+        const saved = intakes.get(searchId)
+        const intake = { roleType: saved?.roleType ?? null, jdText: saved?.jdText ?? null, briefDueOn: saved?.briefDueOn ?? null, client: saved?.client || 'The client', role: saved?.role || 'the role' }
+        let result: Result
+        if (kind === 'match') {
+          const taken = new Set((await deps.onSearch?.(searchId)) ?? [])
+          result = sampleMatch(((await deps.pool?.()) ?? []).filter((p) => !taken.has(p.personId)), asked)
+        } else result = kind === 'questions' ? sampleQuestions(intake) : kind === 'lowdown' ? sampleLowdown(intake.client) : kind === 'brief' ? sampleBrief(intake.client, intake.role) : sampleMap(intake.role)
         deps.saveNote(searchId, kind, result.content, result.structured).then(
           () => Object.assign(job, { status: 'ready', note: 'Sample result', finishedAt: new Date().toISOString() }),
           () => Object.assign(job, { status: 'failed', note: 'The sample result could not be saved.', finishedAt: new Date().toISOString() }),
@@ -187,6 +254,18 @@ export function createSampleSearchResearch(deps: Deps): SearchResearch {
     async searchIntake(searchId) {
       const i = intakes.get(searchId)
       return { roleType: i?.roleType ?? null, jdText: i?.jdText ?? null, briefDueOn: i?.briefDueOn ?? null }
+    },
+
+    async saveRoleType(searchId, roleType) {
+      const v = roleType?.trim() || null
+      if (v && v.length > 80) throw new Error('Keep the role type to 80 characters')
+      intakeOf(searchId).roleType = v
+    },
+
+    async saveJd(searchId, text) {
+      const v = text?.trim() || null
+      if (v && v.length > 60000) throw new Error('That job description is too long. Keep it under 60,000 characters')
+      intakeOf(searchId).jdText = v
     },
   }
 }

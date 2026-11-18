@@ -531,7 +531,7 @@ export type Search = {
 export type NewSearch = { client: string; role: string; function: string; crmUrl: string | null; priority: SearchPriority; confidential?: boolean; wonFromJobLead?: string | null }
 export type SearchPatch = Partial<Pick<Search, 'priority' | 'status' | 'waitingOn' | 'nextStep' | 'nextStepOn' | 'health' | 'healthReason' | 'nSourced' | 'nSpoken' | 'nSubmitted' | 'nFirstStage' | 'nLaterStage' | 'nOffer' | 'confidential' | 'crmUrl' | 'level' | 'location' | 'feeEstimate' | 'lastClientContactOn'>>
 
-export type CandidateStage = 'sourced' | 'spoken' | 'submitted' | 'first_stage' | 'later_stage' | 'offer' | 'placed' | 'rejected' | 'withdrew'
+export type CandidateStage = 'application' | 'sourced' | 'longlist' | 'shortlist' | 'interview_1' | 'interview_2' | 'interview_3' | 'interview_4' | 'offer' | 'placed' | 'rejected' | 'withdrew'
 export type OfferStatus = 'expected' | 'verbal' | 'written' | 'accepted' | 'declined'
 /** A candidate in play on a search (11.3): names and clocks only (CAN-5). */
 export type SearchCandidate = {
@@ -565,7 +565,7 @@ export type SearchCandidate = {
 }
 export type CandidatePatch = Partial<Pick<SearchCandidate, 'stage' | 'consentToSubmit' | 'feedbackReceivedOn' | 'feedbackNudges' | 'nextInterviewAt' | 'prepSent' | 'lastCandidateContactOn' | 'outcomeReason' | 'offerStatus' | 'decisionDueOn' | 'startOn' | 'referencesTaken' | 'referencesNeeded' | 'competingProcess' | 'risks' | 'wouldSwing'>>
 
-export type SearchNoteTab = 'brief' | 'map' | 'calibration' | 'client_updates' | 'interviews' | 'offer' | 'close_out' | 'questions' | 'lowdown'
+export type SearchNoteTab = 'brief' | 'map' | 'calibration' | 'client_updates' | 'interviews' | 'offer' | 'close_out' | 'questions' | 'lowdown' | 'match'
 export type SearchNote = { id: string; searchId: string; tab: SearchNoteTab; title: string | null; content: string; structured: Record<string, unknown> | null; version: number; updatedAt: string }
 
 // ======================================================================
@@ -576,13 +576,12 @@ export type SearchNote = { id: string; searchId: string; tab: SearchNoteTab; tit
 // one. With no Supabase project the stand-in in searchResearch.ts answers: a
 // requested job turns ready a few seconds later with an invented result.
 // ======================================================================
-import { createSampleSearchResearch, type SearchIntake, type SearchJob, type SearchJobKind, type SearchResearch, type StartSearchInput } from './searchResearch'
-import { isRoleType } from './questionBank'
+import { cleanAnswers, createSampleSearchResearch, type MatchAnswers, type SearchIntake, type SearchJob, type SearchJobKind, type SearchResearch, type StartSearchInput } from './searchResearch'
 
-export { questionBank, questionSet, questionsAsText, isRoleType, ROLE_TYPES } from './questionBank'
+export { questionBank, questionSet, questionsAsText, isRoleType, roleTypeOf, ROLE_TYPES } from './questionBank'
 export type { RoleType, QuestionSource, BriefQuestion, QuestionGroup, QuestionSet } from './questionBank'
-export { latestJobs } from './searchResearch'
-export type { SearchJob, SearchJobKind, SearchJobStatus, StartSearchInput, SearchIntake } from './searchResearch'
+export { latestJobs, matchQuestions, cleanAnswers } from './searchResearch'
+export type { SearchJob, SearchJobKind, SearchJobStatus, StartSearchInput, SearchIntake, MatchAnswers, MatchCandidate, MatchFit, MatchResult } from './searchResearch'
 
 const liveResearch: SearchResearch = {
   async startSearch(input) {
@@ -596,38 +595,59 @@ const liveResearch: SearchResearch = {
     fail(error)
     return id as string
   },
-  async requestSearchJob(searchId, kind) {
-    const { error } = await supabase!.rpc('request_search_job', { p_search: searchId, p_kind: kind })
+  async requestSearchJob(searchId, kind, answers) {
+    const args: Record<string, unknown> = { p_search: searchId, p_kind: kind }
+    if (kind === 'match') args.p_instruction = cleanAnswers(answers ?? {})
+    const { error } = await supabase!.rpc('request_search_job', args)
     fail(error)
   },
   async searchJobs(searchId) {
-    const { data: found, error } = await supabase!.from('search_jobs').select('kind, status, note, requested_at, finished_at').eq('search_id', searchId).order('requested_at', { ascending: false })
+    const { data: found, error } = await supabase!.from('search_jobs').select('kind, status, note, requested_at, finished_at, instruction').eq('search_id', searchId).order('requested_at', { ascending: false })
     fail(error)
-    type Row = { kind: SearchJob['kind']; status: SearchJob['status']; note: string | null; requested_at: string; finished_at: string | null }
-    return ((found ?? []) as Row[]).map((j) => ({ kind: j.kind, status: j.status, note: j.note, requestedAt: j.requested_at, finishedAt: j.finished_at }))
+    type Row = { kind: SearchJob['kind']; status: SearchJob['status']; note: string | null; requested_at: string; finished_at: string | null; instruction: MatchAnswers | null }
+    return ((found ?? []) as Row[]).map((j) => ({ kind: j.kind, status: j.status, note: j.note, requestedAt: j.requested_at, finishedAt: j.finished_at, instruction: j.instruction }))
   },
   async searchIntake(searchId) {
     const { data: row, error } = await supabase!.from('searches').select('role_type, jd_text, brief_due_on').eq('id', searchId).maybeSingle()
     fail(error)
     const r = row as { role_type: string | null; jd_text: string | null; brief_due_on: string | null } | null
-    return { roleType: isRoleType(r?.role_type) ? r.role_type : null, jdText: r?.jd_text ?? null, briefDueOn: r?.brief_due_on ?? null }
+    return { roleType: r?.role_type ?? null, jdText: r?.jd_text ?? null, briefDueOn: r?.brief_due_on ?? null }
+  },
+  async saveRoleType(searchId, roleType) {
+    const { error } = await supabase!.rpc('set_search_role_type', { p_search: searchId, p_role_type: roleType?.trim() || null })
+    fail(error)
+  },
+  async saveJd(searchId, text) {
+    const { error } = await supabase!.rpc('set_search_jd', { p_search: searchId, p_jd_text: text?.trim() || null })
+    fail(error)
   },
 }
 
-const research: SearchResearch = supabase
+/** The research jobs' source, live or the sample stand-in. Exported so a screen test can stand in for it. */
+export const research: SearchResearch = supabase
   ? liveResearch
   : createSampleSearchResearch({
       addSearch: async ({ client, role }) => (await data.addSearch({ client, role, function: 'pmm', crmUrl: null, priority: 'active' })).id,
       saveNote: (searchId, tab, content, structured) => data.saveSearchNote(searchId, tab, content, structured),
+      pool: async () => (await data.members()).map((m) => ({ personId: m.personId, name: m.name, title: m.title, company: m.company })),
+      onSearch: async (searchId) => (await data.searchCandidates()).filter((c) => c.searchId === searchId).map((c) => c.personId),
     })
 
 /** Start a search from the intake step, at status `intake`. Gives back the new search's id. */
 export function startSearch(input: StartSearchInput): Promise<string> {
   return research.startSearch(input)
 }
-/** Ask for tailored questions, the client lowdown or the market map. A second ask while one is open does nothing. */
-export function requestSearchJob(searchId: string, kind: SearchJobKind): Promise<void> {
-  return research.requestSearchJob(searchId, kind)
+/** Ask for tailored questions, the client lowdown, the market map, the brief or recommended candidates (match, with his answers). A second ask while one is open does nothing, save that a waiting match takes the newer answers. */
+export function requestSearchJob(searchId: string, kind: SearchJobKind, answers?: MatchAnswers): Promise<void> {
+  return research.requestSearchJob(searchId, kind, answers)
+}
+/** Save the role type: one of the codes, or his own words such as "Head of Product Marketing" (0060). Blank clears it. */
+export function saveSearchRoleType(searchId: string, roleType: string | null): Promise<void> {
+  return research.saveRoleType(searchId, roleType)
+}
+/** Save the job description as text, pasted or read from a file in the browser (0060). Blank clears it. */
+export function saveSearchJd(searchId: string, text: string | null): Promise<void> {
+  return research.saveJd(searchId, text)
 }
 /** Every job asked for on a search, newest first. `latestJobs` picks one per kind. */
 export function searchJobs(searchId: string): Promise<SearchJob[]> {
