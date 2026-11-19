@@ -1,6 +1,7 @@
 -- tasks_view: everything the owner has to do, in one shape, drawn from the
 -- tables the agents and triggers already write. Nothing here is typed in by
--- hand. Safe to run again: the view is replaced in place.
+-- hand. Since 0061 also overdue contact rhythms (kind keep_in_touch), so
+-- apply views/last_contact_view.sql and views/league_due_view.sql first. Safe to run again: the view is replaced in place.
 --
 -- Owner only. The view runs with its owner's rights and checks the caller.
 --
@@ -227,6 +228,29 @@ with base as (
     'content_items', ci.id, 'a2_content', ci.search_id, ci.created_at, false, ci.post_url
   from content_items ci
   where ci.status = 'planned' and ci.planned_for <= current_date and ci.kind in ('linkedin_post', 'job_post', 'blog')
+
+  union all
+
+  -- 9. Someone on a list with a contact rhythm who is overdue (0061, Jason,
+  --    19 November 2026). One task per person per cycle: the key carries the
+  --    date it fell due, so a bin or a snooze lasts until the next cycle.
+  select
+    'keep_in_touch:' || d.id || ':' || d.next_contact_on, 'league_members', d.id,
+    'keep_in_touch',
+    'Get in touch with ' || d.display_name || ': ' || case when d.last_contact_on is null then 'no contact yet'
+      else 'last contact ' || to_char(d.last_contact_on, 'FMDD Mon') || ', ' || public.contact_how_word(d.last_contact_how) end,
+    format('Every %s days. Due %s.', d.contact_every_days, to_char(d.next_contact_on, 'FMDD Mon')),
+    d.display_name, d.display_company,
+    d.next_contact_on, 30, null,
+    null, null, null, null, null, null,
+    public.compact_links(
+      case when p.linkedin_url is not null then jsonb_build_object('label', 'Profile', 'url', p.linkedin_url) end,
+      case when p.crm_url is not null then jsonb_build_object('label', 'Open in CRM', 'url', p.crm_url) end
+    ),
+    'people', d.person_id, 'system', null, public.uk_day_start(d.next_contact_on), false, p.linkedin_url
+  from league_due_view d
+  join people p on p.id = d.person_id
+  where d.contact_status = 'overdue'
 )
 select
   b.*,

@@ -2663,6 +2663,303 @@ test('0060 match: the owner asks with his answers; the claim carries them and a 
   })
 })
 
+// ---------------------------------------------------------------- 0061 senior network
+
+const senior = async () => (await rows(`select id from lists where key = 'senior_network'`))[0].id
+const other = async () => (await rows(`select id from lists where key <> 'senior_network' order by position limit 1`))[0].id
+async function newPerson(name, extra = {}) {
+  const [p] = await rows(
+    `insert into people (owner_id, display_name, name_key, display_title, display_company, company_key, linkedin_url, kind)
+     values ($1, $2, norm_text($2), $3, $4, norm_company($4), $5, 'leader') returning id`,
+    [ownerId, name, extra.title ?? null, extra.company ?? null, extra.linkedin ?? null],
+  )
+  return p.id
+}
+async function onList(personId, listId, addedOn = null) {
+  const [m] = await rows(
+    `insert into league_members (owner_id, person_id, list_id, tier, added_on) values ($1, $2, $3, 'premier', coalesce($4::date, current_date)) returning id, contact_every_days`,
+    [ownerId, personId, listId, addedOn],
+  )
+  return m
+}
+
+test('0061 LinkedIn link: the owner saves a linkedin.com/in/ link, tidied; a bad one is refused; saving queues them unless read in the last 30 days; nobody else may', async () => {
+  const pid = await newPerson('Link Sample')
+  for (const who of [anon, reviewer, noRole]) {
+    await who(async () => {
+      assert.match(String(await refused(`select set_person_linkedin($1, 'https://www.linkedin.com/in/link-sample')`, [pid])), /permission denied|Only the owner/)
+    })
+  }
+  await owner(async () => {
+    for (const bad of ['https://example.com/in/link', 'linkedin.com/company/acme', 'https://www.linkedin.com/in/', 'just words']) {
+      assert.match(String(await refused(`select set_person_linkedin($1, $2)`, [pid, bad])), /not a LinkedIn profile link/, bad)
+    }
+    const [{ r }] = await rows(`select set_person_linkedin($1, ' uk.linkedin.com/in/Link-Sample-123/?utm=x ') as r`, [pid])
+    assert.deepEqual(r, { linkedin_url: 'https://www.linkedin.com/in/Link-Sample-123', queued: true })
+    assert.match(String(await refused(`select set_person_linkedin(gen_random_uuid(), 'linkedin.com/in/x')`)), /No such person/)
+    // Read 10 days ago: saving the same link again does not queue them.
+    await db.query(`update people set linkedin_queued_at = null, linkedin_read_at = now() - interval '10 days' where id = $1`, [pid])
+    assert.equal((await rows(`select set_person_linkedin($1, 'https://www.linkedin.com/in/Link-Sample-123') as r`, [pid]))[0].r.queued, false)
+    // A different link is a different profile: it is read again.
+    assert.equal((await rows(`select set_person_linkedin($1, 'https://linkedin.com/in/someone-else') as r`, [pid]))[0].r.queued, true)
+    // Read 40 days ago: queued again.
+    await db.query(`update people set linkedin_queued_at = null, linkedin_read_at = now() - interval '40 days' where id = $1`, [pid])
+    assert.equal((await rows(`select set_person_linkedin($1, 'https://linkedin.com/in/someone-else') as r`, [pid]))[0].r.queued, true)
+    // Blank clears the link and takes them out of the queue.
+    assert.deepEqual((await rows(`select set_person_linkedin($1, '  ') as r`, [pid]))[0].r, { linkedin_url: null, queued: false })
+  })
+})
+
+test('0061 LinkedIn reader: the sender claims the oldest 10, never twice within 2 hours; a report fills the profile but keeps hand edits; email or phone values are refused; a failure leaves the queue; the browser may do neither', async () => {
+  await db.query(`update people set linkedin_queued_at = null, linkedin_claimed_at = null where linkedin_queued_at is not null`)
+  const ids = []
+  for (let i = 0; i < 12; i++) {
+    const id = await newPerson(`Reader Sample ${String.fromCharCode(65 + i)}`, { linkedin: `https://www.linkedin.com/in/reader-${i}` })
+    await db.query(`update people set linkedin_queued_at = now() - ($2 || ' minutes')::interval where id = $1`, [id, String(100 - i)])
+    ids.push(id)
+  }
+  const gone = await newPerson('Reader Blocked', { linkedin: 'https://www.linkedin.com/in/reader-blocked' })
+  await db.query(`update people set linkedin_queued_at = now() - interval '1 day', do_not_contact = true where id = $1`, [gone])
+  for (const who of [anon, reviewer, noRole, owner]) {
+    await who(async () => {
+      assert.match(String(await refused(`select linkedin_profiles_claim(10)`)), /permission denied|not_allowed/)
+      assert.match(String(await refused(`select linkedin_profile_report($1, true, 'x')`, [ids[0]])), /permission denied|not_allowed/)
+    })
+  }
+  const claim = async (n) => (await rows(`select linkedin_profiles_claim($1) as c`, [n]))[0].c
+  const first = await claim(50)
+  assert.equal(first.profiles.length, 10, 'at most 10 a run')
+  assert.deepEqual(first.profiles.map((p) => p.person_id), ids.slice(0, 10), 'oldest first')
+  assert.deepEqual(Object.keys(first.profiles[0]).sort(), ['linkedin_url', 'name', 'person_id'])
+  assert.deepEqual(first.profiles[0], { person_id: ids[0], name: 'Reader Sample A', linkedin_url: 'https://www.linkedin.com/in/reader-0' })
+  assert.deepEqual((await claim(10)).profiles.map((p) => p.person_id), ids.slice(10), 'a second run takes the rest, never the same ones, never someone not to contact')
+  assert.deepEqual((await claim(10)).profiles, [])
+  await db.query(`update people set linkedin_claimed_at = now() - interval '121 minutes' where id = $1`, [ids[3]])
+  assert.deepEqual((await claim(10)).profiles.map((p) => p.person_id), [ids[3]], 'released after 2 hours')
+
+  // Jason typed the title by hand: the reader keeps it, fills the rest.
+  await db.exec('begin')
+  await db.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: ownerId, email: OWNER_EMAIL, role: 'authenticated', app_role: 'owner' })])
+  await db.query(`select set_person_detail($1, 'title', 'Chief Marketing Officer')`, [ids[0]])
+  await db.exec('commit')
+  const report = async (...args) => (await rows(`select linkedin_profile_report($1, $2, $3, $4, $5, $6, $7, $8) as r`, args))[0].r
+  const r1 = await report(ids[0], true, 'Marketing leader for B2B SaaS', 'VP Marketing', 'Contoso Demo Inc', 'Boston', 'United States', null)
+  assert.deepEqual(r1, { person_id: ids[0], read: true, kept_by_hand: ['title'] })
+  const [p0] = await rows(`select display_title, display_company, company_key, city, country, linkedin_headline, linkedin_read_at is not null as read, linkedin_queued_at, linkedin_claimed_at, hand_edited from people where id = $1`, [ids[0]])
+  assert.deepEqual(p0, { display_title: 'Chief Marketing Officer', display_company: 'Contoso Demo Inc', company_key: 'contoso demo', city: 'Boston', country: 'United States', linkedin_headline: 'Marketing leader for B2B SaaS', read: true, linkedin_queued_at: null, linkedin_claimed_at: null, hand_edited: ['title'] })
+
+  // As the send function calls it: the service role.
+  await service(async () => {
+    for (const [field, at] of [['headline', 2], ['title', 3], ['company', 4], ['location', 5], ['country', 6]]) {
+      for (const bad of ['reach me at dana@example.test', 'Call +1 (212) 555-0147']) {
+        const args = [ids[1], true, null, null, null, null, null, null]
+        args[at] = bad
+        assert.match(String(await refused(`select linkedin_profile_report($1, $2, $3, $4, $5, $6, $7, $8)`, args)), new RegExp(`invalid: ${field} looks like an email address or phone number`), `${field}: ${bad}`)
+      }
+    }
+    assert.match(String(await refused(`select linkedin_profile_report(gen_random_uuid(), true)`)), /not_found/)
+    assert.deepEqual((await rows(`select linkedin_profiles_claim(10) as c`))[0].c, { profiles: [] })
+  })
+  assert.equal((await report(ids[1], true, 'Led PMM 2018-2023 at two Series B companies', 'Director of PMM', null, null, null, null)).read, true, 'a year range is not a phone number')
+
+  const r2 = await report(ids[2], false, null, null, null, null, null, 'The profile was not found')
+  assert.deepEqual(r2, { person_id: ids[2], read: false })
+  assert.deepEqual(await rows(`select linkedin_queued_at, linkedin_read_at, linkedin_read_error from people where id = $1`, [ids[2]]), [{ linkedin_queued_at: null, linkedin_read_at: null, linkedin_read_error: 'The profile was not found' }])
+  assert.equal(await count(`audit_log where action = 'linkedin profile read' and target_id = '${ids[0]}'`), 1)
+  await db.query(`update people set linkedin_queued_at = null, linkedin_claimed_at = null where linkedin_queued_at is not null`)
+})
+
+test('0061 how you know them and hand edits: the owner saves up to 500 characters, never an address or number; a hand edit marks the field, blank hands it back; nobody else may', async () => {
+  const pid = await newPerson('Known Sample', { title: 'PMM', company: 'Globex Fiction' })
+  for (const who of [anon, reviewer, noRole]) {
+    await who(async () => {
+      assert.match(String(await refused(`select set_person_how_known($1, 'Met at a breakfast')`, [pid])), /permission denied|Only the owner/)
+      assert.match(String(await refused(`select set_person_detail($1, 'city', 'Austin')`, [pid])), /permission denied|Only the owner/)
+      assert.match(String(await refused(`select set_contact_rhythm(gen_random_uuid(), 30)`)), /permission denied|Only the owner/)
+    })
+  }
+  await owner(async () => {
+    assert.equal((await rows(`select set_person_how_known($1, '  Placed her in 2024; she refers PMMs.  ') as t`, [pid]))[0].t, 'Placed her in 2024; she refers PMMs.')
+    assert.match(String(await refused(`select set_person_how_known($1, $2)`, [pid, 'x'.repeat(501)])), /500 characters/)
+    assert.match(String(await refused(`select set_person_how_known($1, 'her mobile is 07700 900123')`, [pid])), /email addresses and phone numbers/)
+    assert.equal((await rows(`select set_person_how_known($1, '') as t`, [pid]))[0].t, null)
+
+    const [{ r }] = await rows(`select set_person_detail($1, 'company', 'Initech Mock') as r`, [pid])
+    assert.deepEqual(r, { field: 'company', value: 'Initech Mock', hand_edited: ['company'] })
+    await db.query(`select set_person_detail($1, 'country', 'United States')`, [pid])
+    await db.query(`select set_person_detail($1, 'company', 'Initech Mock Two')`, [pid])
+    assert.deepEqual(await rows(`select display_company, company_key, country, hand_edited from people where id = $1`, [pid]), [{ display_company: 'Initech Mock Two', company_key: 'initech mock two', country: 'United States', hand_edited: ['company', 'country'] }])
+    await db.query(`select set_person_detail($1, 'company', ' ')`, [pid])
+    assert.deepEqual(await rows(`select display_company, hand_edited from people where id = $1`, [pid]), [{ display_company: null, hand_edited: ['country'] }])
+    assert.match(String(await refused(`select set_person_detail($1, 'email', 'x')`, [pid])), /title, company, city, country or headline/)
+    assert.match(String(await refused(`select set_person_detail($1, 'headline', 'dana@example.test')`, [pid])), /email addresses and phone numbers/)
+  })
+})
+
+test('0061 rhythm: senior network members start at every 60 days, other lists at none; the owner sets 30, 60, 90 or none', async () => {
+  assert.equal(await count(`league_members m join lists l on l.id = m.list_id where l.key = 'senior_network' and m.contact_every_days is distinct from 60`), 0, 'the seeded senior network is at 60')
+  const a = await onList(await newPerson('Rhythm Senior'), await senior())
+  const b = await onList(await newPerson('Rhythm Other'), await other())
+  assert.equal(a.contact_every_days, 60)
+  assert.equal(b.contact_every_days, null)
+  await owner(async () => {
+    assert.equal((await rows(`select set_contact_rhythm($1, 30) as d`, [a.id]))[0].d, 30)
+    assert.equal((await rows(`select set_contact_rhythm($1, null) as d`, [a.id]))[0].d, null)
+    assert.equal((await rows(`select set_contact_rhythm($1, 90) as d`, [b.id]))[0].d, 90)
+    assert.match(String(await refused(`select set_contact_rhythm($1, 45)`, [a.id])), /30, 60 or 90/)
+    assert.match(String(await refused(`select set_contact_rhythm(gen_random_uuid(), 30)`)), /No such person/)
+  })
+})
+
+test('0061 last contact: the newest of touches, calls, sent messages, LinkedIn outreach and follow-ups done, with how; status from the rhythm; overdue people are tasks; only the owner reads it', async () => {
+  const sid = await senior()
+  const lastOf = async (pid) => (await rows(`select last_contact_on::text as on, last_contact_how as how from last_contact_view where person_id = $1`, [pid]))[0] ?? null
+  const day = async (n) => (await rows(`select (current_date - $1::int)::text as d`, [n]))[0].d
+
+  // Nothing yet: never.
+  const never = await newPerson('Contact Never')
+  assert.equal(await lastOf(never), null)
+
+  // Each source on its own.
+  const t = await newPerson('Contact Touch')
+  await db.query(`insert into touches (owner_id, person_id, touched_on, channel, kind, source) values ($1, $2, current_date - 5, 'email', 'message_replied', 'email')`, [ownerId, t])
+  assert.deepEqual(await lastOf(t), { on: await day(5), how: 'email' })
+
+  const c = await newPerson('Contact Call')
+  await db.query(`insert into calls (owner_id, person_id, held_at, call_type) values ($1, $2, now() - interval '3 days', 'client_update')`, [ownerId, c])
+  await db.query(`insert into calls (owner_id, person_id, held_at, call_type) values ($1, $2, now() - interval '1 day', 'internal')`, [ownerId, c])
+  assert.deepEqual(await lastOf(c), { on: (await rows(`select uk_day(now() - interval '3 days')::text as d`))[0].d, how: 'call' }, 'an internal call is not contact')
+
+  const m = await newPerson('Contact Request')
+  await db.query(`insert into messages (owner_id, type, channel, person_id, to_name, created_by, level_at_creation, state, sent_at) values ($1, 'linkedin_connect', 'linkedin', $2, 'Contact Request', 'sender', 'one_click', 'sent', now() - interval '2 days')`, [ownerId, m])
+  await db.query(`insert into messages (owner_id, type, channel, person_id, to_name, created_by, level_at_creation, state) values ($1, 'email_reply', 'email', $2, 'Contact Request', 'a5_followups', 'draft_only', 'draft')`, [ownerId, m])
+  assert.equal((await lastOf(m)).how, 'linkedin_request', 'a draft is not contact')
+
+  const l = await newPerson('Contact Poster')
+  await db.query(`insert into job_leads (owner_id, company, company_key, role, role_key, hiring_manager_id, outreach_connection_on, outreach_messaged_on) values ($1, 'Poster Sample Co', 'poster sample', 'PMM', 'product marketing manager', $2, current_date - 9, current_date - 4)`, [ownerId, l])
+  assert.deepEqual(await lastOf(l), { on: await day(4), how: 'linkedin_message' })
+
+  const f = await newPerson('Contact Follow')
+  await db.query(`insert into follow_ups (owner_id, person_id, person_name, kind, reason, source, due_on, status, dedup_key) values ($1, $2, 'Contact Follow', 'chase', 'Chase', 'manual', current_date, 'done', 'test:0061:follow')`, [ownerId, f])
+  assert.deepEqual(await lastOf(f), { on: (await rows(`select uk_day(now())::text as d`))[0].d, how: 'other' })
+
+  // The newest wins; on the same day a call beats an email.
+  await db.query(`insert into touches (owner_id, person_id, touched_on, channel, kind, source) values ($1, $2, current_date - 2, 'linkedin', 'message_replied', 'manual')`, [ownerId, t])
+  assert.deepEqual(await lastOf(t), { on: await day(2), how: 'linkedin_message' })
+  await db.query(`insert into calls (owner_id, person_id, held_at, call_type) values ($1, $2, uk_day_start(current_date - 2) + interval '12 hours', 'candidate_screen')`, [ownerId, t])
+  assert.deepEqual(await lastOf(t), { on: await day(2), how: 'call' })
+
+  // Status: 60 days from the last contact, or from the day they joined.
+  const ontrack = await onList(t, sid)
+  const overdue = await onList(never, sid, await day(70))
+  const due = await onList(await newPerson('Contact Due'), sid, await day(55))
+  const none = await onList(await newPerson('Contact None'), sid, await day(200))
+  await db.query(`update league_members set contact_every_days = null where id = $1`, [none.id])
+  const status = async (id) => (await rows(`select contact_status, next_contact_on::text as next, last_contact_how from league_due_view where id = $1`, [id]))[0]
+  assert.deepEqual(await status(ontrack.id), { contact_status: 'on_track', next: (await rows(`select (current_date + 58)::text as d`))[0].d, last_contact_how: 'call' })
+  assert.equal((await status(overdue.id)).contact_status, 'overdue')
+  assert.equal((await status(due.id)).contact_status, 'due')
+  assert.equal((await status(none.id)).contact_status, null)
+  // The touch trigger and the rhythm agree: a reply today puts them back on track.
+  const ov2 = await onList(c, sid, await day(100))
+  await db.query(`update league_members set contact_every_days = 30 where id = $1`, [ov2.id])
+  assert.equal((await status(ov2.id)).contact_status, 'on_track', 'a call 3 days ago, every 30 days')
+
+  // Overdue people are tasks in Other, once per cycle.
+  const tasks = await rows(`select task_key, kind, title, why, person_name, due_on::text as due, source, ref_table, ref_id, channel from tasks_view where kind = 'keep_in_touch'`)
+  const mine = tasks.find((x) => x.ref_id === never)
+  assert.ok(mine, JSON.stringify(tasks))
+  assert.equal(mine.title, 'Get in touch with Contact Never: no contact yet')
+  assert.equal(mine.task_key, `keep_in_touch:${overdue.id}:${await day(10)}`)
+  assert.deepEqual([mine.source, mine.ref_table, mine.channel, mine.due], ['league_members', 'people', null, await day(10)])
+  assert.match(mine.why, /^Every 60 days\. Due \d+ \w{3}\.$/)
+  assert.equal(tasks.some((x) => [t, c].includes(x.ref_id)), false, 'on track is not a task')
+  assert.equal(tasks.some((x) => x.person_name === 'Contact Due' || x.person_name === 'Contact None'), false)
+  // A last contact reads in the title: "last contact 12 Nov, LinkedIn message".
+  const p2 = await newPerson('Contact Lapsed')
+  await db.query(`insert into touches (owner_id, person_id, touched_on, channel, kind, source) values ($1, $2, current_date - 61, 'linkedin', 'message_replied', 'manual')`, [ownerId, p2])
+  await onList(p2, sid, await day(120))
+  const [lapsed] = await rows(`select title from tasks_view where kind = 'keep_in_touch' and ref_id = $1`, [p2])
+  const word = (await rows(`select to_char(current_date - 61, 'FMDD Mon') as w`))[0].w
+  assert.equal(lapsed.title, `Get in touch with Contact Lapsed: last contact ${word}, LinkedIn message`)
+  // Done through the override hides this cycle only.
+  await db.query(`insert into task_overrides (owner_id, task_key, status) values ($1, $2, 'done')`, [ownerId, mine.task_key])
+  assert.equal(await count(`tasks_view where task_key = '${mine.task_key}'`), 0)
+  await db.query(`delete from task_overrides where task_key = $1`, [mine.task_key])
+
+  await owner(async () => {
+    assert.ok(await count(`last_contact_view where person_id = '${t}'`) === 1)
+  })
+  await reviewer(async () => {
+    assert.equal(await count('last_contact_view'), 0)
+    assert.equal(await count(`tasks_view where kind = 'keep_in_touch'`), 0)
+  })
+  await anon(async () => {
+    assert.match(String(await refused(`select * from last_contact_view`)), /permission denied/)
+  })
+})
+
+test('0061 calls: a write-up finds the person by name and company, accents and case folded, or makes a thin one; internal calls and no name leave it empty; old calls are linked from the title; match_pool then has them', async () => {
+  const [{ run }] = await rows(`select agent_run_start('a6_calls', 'after_call') as run`)
+  const known = await newPerson('Zoë Fictional', { title: 'Director of PMM', company: 'Stark Sample' })
+  const [{ out }] = await rows(`select agent_write($1, $2) as out`, [run.run_id, JSON.stringify([
+    { kind: 'call', data: { granola_ref: 'g61-1', held_at: '2026-11-17T10:00:00Z', call_type: 'candidate_screen', person_name: 'zoe FICTIONAL', company: 'Stark Sample Inc' } },
+    { kind: 'call', data: { granola_ref: 'g61-2', held_at: '2026-11-17T11:00:00Z', call_type: 'client_intake', person_name: 'Yan Invented', person_title: 'VP Marketing', company: 'Umbrella Sample' } },
+    { kind: 'call', data: { granola_ref: 'g61-3', held_at: '2026-11-17T12:00:00Z', call_type: 'internal', person_name: 'Desk Colleague' } },
+    { kind: 'call', data: { granola_ref: 'g61-4', held_at: '2026-11-17T13:00:00Z', call_type: 'debrief' } },
+    { kind: 'call', data: { granola_ref: 'g61-5', held_at: '2026-11-17T14:00:00Z', call_type: 'coaching', person_name: 'Yan Invented', company: 'Umbrella Sample' } },
+    { kind: 'call', data: { granola_ref: 'g61-6', held_at: '2026-11-17T15:00:00Z', call_type: 'coaching', person_name: 'dana@example.test' } },
+  ])])
+  const r = out.results
+  for (const i of [0, 1, 2, 3, 4]) assert.equal(r[i].outcome, 'created', JSON.stringify(r[i]))
+  assert.deepEqual([r[5].code, r[5].field], ['invalid', 'person_name'])
+  const call = async (ref) => (await rows(`select person_id, person_name from calls where granola_ref = $1`, [ref]))[0]
+  assert.deepEqual(await call('g61-1'), { person_id: known, person_name: 'zoe FICTIONAL' })
+  const yan = (await call('g61-2')).person_id
+  assert.ok(yan)
+  assert.deepEqual(await rows(`select display_name, display_title, display_company, company_key, kind, email, linkedin_url from people where id = $1`, [yan]), [{ display_name: 'Yan Invented', display_title: 'VP Marketing', display_company: 'Umbrella Sample', company_key: 'umbrella sample', kind: 'client_contact', email: null, linkedin_url: null }])
+  assert.equal((await call('g61-5')).person_id, yan, 'the same name and company is the same person')
+  assert.deepEqual(await call('g61-3'), { person_id: null, person_name: 'Desk Colleague' })
+  assert.deepEqual(await call('g61-4'), { person_id: null, person_name: null })
+  assert.equal(await count(`people where name_key = 'desk colleague'`), 0)
+  await rows(`select agent_run_finish($1, 'ok')`, [run.run_id])
+
+  // Calls written up before 0061: the name from the agent's item, else from the title.
+  const held = `now() - interval '1 hour'`
+  const old = async (title, type = 'candidate_screen') => (await rows(`insert into calls (owner_id, title, held_at, call_type) values ($1, $2, ${held}, $3) returning id`, [ownerId, title, type]))[0].id
+  const c1 = await old('Call with Vic Pretend')
+  const c2 = await old('Wes Madeup (Wonka Imaginary Ltd) <> Jason Sample')
+  const c3 = await old('Jason / Xia Example')
+  const c4 = await old('3Search - Role discussion - Senior PMM')
+  const c5 = await old('Team sync', 'internal')
+  const c6 = await old('Screen')
+  await db.query(`insert into inbox_items (owner_id, type, agent, title, company, ref_table, ref_id, dedup_key, rank) values ($1, 'call_writeup', 'a6_calls', 'Which search was Uma Sample on?', 'Hooli Pretend', 'calls', $2, 'test:0061:uma', 30)`, [ownerId, c6])
+  const [{ n }] = await rows(`select link_call_people() as n`)
+  assert.ok(n >= 4, `linked ${n}`)
+  const nameOf = async (id) => (await rows(`select p.display_name, p.display_company from calls c left join people p on p.id = c.person_id where c.id = $1`, [id]))[0]
+  assert.deepEqual(await nameOf(c1), { display_name: 'Vic Pretend', display_company: null })
+  assert.deepEqual(await nameOf(c2), { display_name: 'Wes Madeup', display_company: 'Wonka Imaginary Ltd' })
+  assert.deepEqual(await nameOf(c3), { display_name: 'Xia Example', display_company: null })
+  assert.deepEqual(await nameOf(c4), { display_name: null, display_company: null }, 'a topic is not a name')
+  assert.deepEqual(await nameOf(c5), { display_name: null, display_company: null }, 'internal calls stay unlinked')
+  assert.deepEqual(await nameOf(c6), { display_name: 'Uma Sample', display_company: 'Hooli Pretend' })
+  // Running it again links nothing new.
+  assert.equal((await rows(`select link_call_people() as n`))[0].n, 0)
+  // By hand from the server, for a title with no name in it.
+  const pid = (await rows(`select link_call_person($1, 'Tess Placeholder', 'Globex Fiction', 'Senior PMM') as p`, [c4]))[0].p
+  assert.deepEqual(await nameOf(c4), { display_name: 'Tess Placeholder', display_company: 'Globex Fiction' })
+  await owner(async () => {
+    assert.match(String(await refused(`select link_call_people()`)), /permission denied/)
+    assert.match(String(await refused(`select link_call_person($1, 'x')`, [c4])), /permission denied/)
+  })
+
+  // The matcher's pool now has the people behind the calls.
+  const [{ pool }] = await rows(`select match_pool() as pool`)
+  for (const id of [known, yan, pid, (await rows(`select person_id from calls where id = $1`, [c2]))[0].person_id]) {
+    assert.ok(pool.some((p) => p.person_id === id), `${id} in the pool`)
+  }
+})
+
 // ---------------------------------------------------------------- run
 
 let failed = 0
