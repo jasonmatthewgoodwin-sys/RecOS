@@ -1,8 +1,10 @@
-// E5 and the queue (sections 15.6, 20.6, 20.7, 20.8). One function, four paths:
+// E5 and the queue (sections 15.6, 20.6, 20.7, 20.8). One function, these paths:
 //   POST /send                   { message_id, action }        the owner's session
 //   POST /send/tick              { channel?, limit? }          the sender task's agent key
 //   POST /send/report            { message_id, ok, external_ref?, error?, to_address? }   agent key
 //   POST /send/linkedin-warning  { reason }                    agent key
+//   POST /send/linkedin-profiles { limit? }                    the sender only: profiles to read (0061)
+//   POST /send/linkedin-profile  { person_id, ok, headline?, title?, company?, location?, country?, error? }   the sender only
 //
 // Deploy: supabase functions deploy send --no-verify-jwt
 //
@@ -178,6 +180,37 @@ Deno.serve(async (req) => {
     return ok(data)
   }
 
+  // The LinkedIn reader (0061): the people whose profile is waiting to be
+  // read, and what the top card says. Only the sender may ask or report.
+  // Never an email address or phone number: the database refuses one.
+  if (path === 'linkedin-profiles' || path === 'linkedin-profile') {
+    if (agent !== 'sender') return fail('not_allowed', 'Only the sender reads LinkedIn profiles.')
+    const body = await readJson(req)
+    if (body instanceof Response) return body
+    if (path === 'linkedin-profiles') {
+      const limit = typeof body.limit === 'number' && body.limit > 0 ? Math.min(Math.floor(body.limit), 10) : 10
+      const { data, error } = await db.rpc('linkedin_profiles_claim', { p_limit: limit })
+      if (error) return fromDbError(error.message)
+      return ok(data)
+    }
+    const personId = typeof body.person_id === 'string' ? body.person_id : ''
+    if (!personId) return fail('invalid', 'person_id is needed.', 'person_id')
+    if (typeof body.ok !== 'boolean') return fail('invalid', 'ok is true or false.', 'ok')
+    const text = (k: string) => (typeof body[k] === 'string' ? (body[k] as string) : null)
+    const { data, error } = await db.rpc('linkedin_profile_report', {
+      p_person: personId,
+      p_ok: body.ok,
+      p_headline: text('headline'),
+      p_title: text('title'),
+      p_company: text('company'),
+      p_location: text('location'),
+      p_country: text('country'),
+      p_error: text('error'),
+    })
+    if (error) return fromDbError(error.message)
+    return ok(data)
+  }
+
   if (path === 'linkedin-warning') {
     const body = await readJson(req)
     if (body instanceof Response) return body
@@ -186,5 +219,5 @@ Deno.serve(async (req) => {
     return ok({ held: data, note: 'Every LinkedIn type is paused until the owner resumes it in Settings, Send rules.' })
   }
 
-  return fail('not_found', 'No such path. Use /send, /send/tick, /send/report, /send/linkedin-pending, /send/linkedin-status or /send/linkedin-warning.')
+  return fail('not_found', 'No such path. Use /send, /send/tick, /send/report, /send/linkedin-pending, /send/linkedin-status, /send/linkedin-profiles, /send/linkedin-profile or /send/linkedin-warning.')
 })

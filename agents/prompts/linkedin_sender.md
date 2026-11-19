@@ -31,6 +31,12 @@ You carry LinkedIn connection requests for RecOS and check who accepted. Follow 
    - 1st: POST `{RECOS_URL}/send/linkedin-status` with `{"lead_id":"<id>","status":"connected"}`. RecOS then drafts the first message for Jason to send himself.
    - Pending or 2nd/3rd with the invitation still showing as sent: `{"lead_id":"<id>","status":"pending"}`.
    - The profile has gone, or the invitation is no longer pending and you are not connected: `{"lead_id":"<id>","status":"withdrawn"}`.
-5. Finish with one line: "Requests sent N, already connected N, failed N. Accepted N of M checked."
+5. Read profiles for the senior network (added 19 November 2026). POST `{RECOS_URL}/send/linkedin-profiles` with body `{"limit":10}`. The reply is `{"profiles":[...]}`, each with `person_id`, `name` and `linkedin_url`. At most 10 a run. For each, in order:
+   - Open `linkedin_url` in Chrome and read the top card only: the headline under the name, the current position and its company (the top entry under Experience if the card does not show it), and the location line.
+   - POST `{RECOS_URL}/send/linkedin-profile` with `{"person_id":"<id>","ok":true,"headline":"<headline>","title":"<current job title>","company":"<current company>","location":"<city or area, as shown>","country":"<country, as shown>"}`. Leave out any field you cannot see. Never send an email address, a phone number or anything from Contact info.
+   - If the profile does not open or is not the right person, POST `{"person_id":"<id>","ok":false,"error":"<one line of what you saw>"}`.
+   - If LinkedIn shows any warning, a sign-in wall, a check that you are human or a limit on profile views, report that profile as `ok:false` with what LinkedIn said, POST `{RECOS_URL}/send/linkedin-warning` with `{"reason":"<what LinkedIn said>"}`, and stop the run.
+   - Do not press Connect, Follow, Message or anything else on these profiles. Only read.
+6. Finish with one line: "Requests sent N, already connected N, failed N. Accepted N of M checked. Profiles read N, not read N."
 
-Rules that are never broken: only the requests RecOS hands over in this run; the note exactly as given; no messages, no follows, no endorsements, no InMail; stop at any LinkedIn warning.
+Rules that are never broken: only the requests and profiles RecOS hands over in this run; the note exactly as given; no messages, no follows, no endorsements, no InMail; never read or report Contact info; stop at any LinkedIn warning.
