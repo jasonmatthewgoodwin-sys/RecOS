@@ -8,9 +8,11 @@ import { PillButton } from '../../components/PillButton'
 import { EmptyLine } from '../../components/Quiet'
 import { RowList } from '../../components/RowList'
 import { TextLink } from '../../components/TextLink'
-import { data, type Member, type Tier } from '../../lib/data'
+import { data, type DetailField, type Member, type Rhythm, type Tier } from '../../lib/data'
 import { twoDigits } from '../../lib/format'
-import { byTierOrder, onCadence, signalWord, sinceWord, thisWeek, tierSeats, tierShort, tierWord, tiers } from '../../lib/people'
+import {
+  byTierOrder, contactStatusWord, contactTone, dueCount, dueOrOverdue, lastContactWords, linkedinLine, onCadence, placeLine, signalWord, thisWeek, tierSeats, tierWord, tiers, usesRhythm,
+} from '../../lib/people'
 import { invalidate, setQueryData, useQuery } from '../../lib/query'
 import { sections } from '../../lib/sections'
 import { ukClock } from '../../lib/time'
@@ -24,7 +26,7 @@ import { usePeopleTabs } from '../../lib/peopleTabs'
 const MEMBERS_KEY = 'people.members'
 const LISTS_KEY = 'people.lists'
 
-type Filter = 'week' | 'all'
+type Filter = 'week' | 'due' | 'all'
 
 export function PeopleList({ listKey }: { listKey: string }) {
   const navigate = useNavigate()
@@ -35,7 +37,8 @@ export function PeopleList({ listKey }: { listKey: string }) {
 
   const lists = useQuery(LISTS_KEY, data.lists)
   const members = useQuery(MEMBERS_KEY, data.members)
-  const filter: Filter = params.get('show') === 'all' ? 'all' : 'week'
+  const shown = params.get('show')
+  const filter: Filter = shown === 'all' ? 'all' : shown === 'due' ? 'due' : 'week'
   const cardId = params.get('card')?.startsWith('person:') ? params.get('card')!.slice(7) : null
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ name: '', title: '', company: '', tier: 'league_one' as Tier, why: '' })
@@ -48,7 +51,9 @@ export function PeopleList({ listKey }: { listKey: string }) {
   const list = lists.data?.find((l) => l.key === listKey)
   const mine = (members.data ?? []).filter((m) => list && m.listId === list.id)
 
-  const due = mine.filter((m) => m.state !== 'fine').length
+  // The senior network works by contact rhythm (Jason, 19 November 2026): Due counts due this week or overdue.
+  const rhythm = usesRhythm(mine, listKey)
+  const due = dueCount(mine)
   const cadence = onCadence(mine)
   const seats = list?.seats ?? 50
   const chosen = cardId ? mine.find((m) => m.personId === cardId) : undefined
@@ -56,7 +61,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
   function setFilter(next: Filter) {
     setParams((p) => {
       if (next === 'week') p.delete('show')
-      else p.set('show', 'all')
+      else p.set('show', next)
       p.delete('card')
       return p
     })
@@ -106,7 +111,10 @@ export function PeopleList({ listKey }: { listKey: string }) {
   // hollow and the cadence resets on screen first (T-PEO-2).
   function reply(m: Member) {
     const before = members.data
-    patch(m.id, { lastTouchOn: today, state: 'fine', daysLate: -1, missedCycles: 0 })
+    patch(m.id, {
+      lastTouchOn: today, state: 'fine', daysLate: -1, missedCycles: 0, lastContactOn: today, lastContactHow: 'linkedin_message',
+      ...(m.contactEveryDays ? { contactStatus: 'on_track' as const, nextContactOn: plusDays(today, m.contactEveryDays) } : {}),
+    })
     void run(before, () => data.logReply(m.personId), 'That did not save. Try again.')
   }
 
@@ -130,6 +138,43 @@ export function PeopleList({ listKey }: { listKey: string }) {
     const before = members.data
     patch(m.id, { notesForNextContact: notes })
     void run(before, () => data.saveNotes(m.personId, notes), 'That did not save. Try again.')
+  }
+
+  async function saveLinkedIn(m: Member, url: string) {
+    const before = members.data
+    patch(m.id, { profileUrl: url || null })
+    try {
+      const r = await data.saveLinkedIn(m.personId, url)
+      patch(m.id, { profileUrl: r.linkedinUrl, linkedinQueued: r.queued, ...(r.queued ? { linkedinError: null } : {}) })
+    } catch (e) {
+      setQueryData<Member[]>(MEMBERS_KEY, () => before ?? [])
+      setNote(e instanceof Error && /LinkedIn profile link/.test(e.message) ? e.message : 'That did not save. Try again.')
+    }
+  }
+
+  function saveHowKnown(m: Member, text: string) {
+    const before = members.data
+    patch(m.id, { howKnown: text || null })
+    void run(before, () => data.saveHowKnown(m.personId, text), 'That did not save. Try again.')
+  }
+
+  function saveDetail(m: Member, field: DetailField, value: string) {
+    const before = members.data
+    const v = value.trim() || null
+    // The field names match the member's: title, company, city, country, headline.
+    const marks = v ? [...new Set([...m.handEdited, field])] : m.handEdited.filter((f) => f !== field)
+    patch(m.id, { [field]: v, handEdited: marks } as Partial<Member>)
+    void run(before, () => data.saveDetail(m.personId, field, value), 'That did not save. Try again.')
+  }
+
+  function setRhythm(m: Member, days: Rhythm) {
+    const before = members.data
+    patch(m.id, { contactEveryDays: days })
+    // The status comes back from the database with the new rhythm.
+    void run(before, async () => {
+      await data.setRhythm(m.id, days)
+      invalidate(MEMBERS_KEY)
+    }, 'That did not save. Try again.')
   }
 
   function remove(m: Member, reason: string) {
@@ -164,14 +209,21 @@ export function PeopleList({ listKey }: { listKey: string }) {
     }
   }
 
+  // A member with a contact rhythm shows its status (0061): overdue needs you,
+  // due is waiting, on track is settled. Without one, the tier's cadence.
   const row = (m: Member) => ({
     id: m.id,
-    dot: m.state === 'late' ? ('solid' as const) : ('hollow' as const),
-    tone: m.liveSignal ? ('new' as const) : m.state === 'late' ? ('action' as const) : m.state === 'fine' ? ('clear' as const) : ('pending' as const),
+    dot: (m.contactStatus ? m.contactStatus === 'overdue' : m.state === 'late') ? ('solid' as const) : ('hollow' as const),
+    tone: m.contactStatus
+      ? contactTone[m.contactStatus]
+      : m.liveSignal ? ('new' as const) : m.state === 'late' ? ('action' as const) : m.state === 'fine' ? ('clear' as const) : ('pending' as const),
     title: m.name,
-    detail: [m.title, m.company].filter(Boolean).join(', '),
-    meta: `${tierShort[m.tier]} ${sinceWord(m.lastTouchOn, today)}`,
-    word: m.state === 'late' ? 'Late' : m.liveSignal ? signalWord[m.liveSignal] : undefined,
+    detail: [m.title, m.company, placeLine(m.city, m.country)].filter(Boolean).join(', '),
+    detailWord: linkedinLine(m) ?? undefined,
+    meta: lastContactWords(m.lastContactOn, m.lastContactHow),
+    word: m.contactStatus && m.contactStatus !== 'on_track'
+      ? contactStatusWord[m.contactStatus]
+      : !m.contactStatus && m.state === 'late' ? 'Late' : m.liveSignal ? signalWord[m.liveSignal] : undefined,
     actions: [
       { label: 'Logged a reply', onClick: () => reply(m) },
       { label: 'Open', onClick: () => openCard(m.personId) },
@@ -181,6 +233,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
   })
 
   const weekRows = thisWeek(mine).map(row)
+  const dueRows = dueOrOverdue(mine).map(row)
   const allRows = [...mine].sort((a, b) => (a.groupName ?? '').localeCompare(b.groupName ?? '') || byTierOrder(a, b)).map((m) => {
     const inTier = mine.filter((x) => x.tier === m.tier).length
     const over = inTier > tierSeats[m.tier] ? `, ${inTier} of ${tierSeats[m.tier]} seats` : ''
@@ -194,7 +247,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
       <PageHeader title={tab.label} tabs={tabs} aside={<TextLink label="Edit tabs" icon="pen" onClick={() => setEditing(true)} />} />
 
       <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:flex md:gap-x-16">
-        <HeroStat label="Due" value={members.data ? twoDigits(due).text : undefined} onClick={() => setFilter('week')} />
+        <HeroStat label="Due" value={members.data ? twoDigits(due).text : undefined} onClick={() => setFilter(rhythm ? 'due' : 'week')} />
         <HeroStat
           label="On cadence"
           value={members.data ? `${cadence}/${seats}` : undefined}
@@ -212,12 +265,13 @@ export function PeopleList({ listKey }: { listKey: string }) {
         <div className="flex flex-col gap-4">
           <nav aria-label="Show" className="flex gap-x-6">
             <TextLink label="This week" active={filter === 'week'} onClick={() => setFilter('week')} />
+            {rhythm && <TextLink label="Due or overdue" active={filter === 'due'} onClick={() => setFilter('due')} />}
             <TextLink label="All" active={filter === 'all'} onClick={() => setFilter('all')} />
           </nav>
           <RowList icon="user" variant="avatar"
-            rows={filter === 'week' ? weekRows : allRows}
+            rows={filter === 'week' ? weekRows : filter === 'due' ? dueRows : allRows}
             state={members.status}
-            emptyText={filter === 'week' ? 'Everyone is on cadence' : 'Nobody on this list yet'}
+            emptyText={filter === 'week' ? 'Everyone is on cadence' : filter === 'due' ? 'Nobody is due or overdue' : 'Nobody on this list yet'}
             limit={filter === 'week' ? 8 : 7}
           />
           {!adding && (
@@ -259,6 +313,10 @@ export function PeopleList({ listKey }: { listKey: string }) {
           onNotes={(notes) => saveNotes(chosen, notes)}
           onProfile={(text) => saveProfile(chosen, text)}
           onPull={() => askPull(chosen)}
+          onLinkedIn={(url) => void saveLinkedIn(chosen, url)}
+          onHowKnown={(text) => saveHowKnown(chosen, text)}
+          onDetail={(field, value) => saveDetail(chosen, field, value)}
+          onRhythm={(days) => setRhythm(chosen, days)}
           onRemove={(reason) => remove(chosen, reason)}
           onDoNotContact={() => doNotContact(chosen)}
           onClose={closeCard}
@@ -269,6 +327,10 @@ export function PeopleList({ listKey }: { listKey: string }) {
       {note && <Note text={note} onClose={() => setNote(null)} />}
     </div>
   )
+}
+
+function plusDays(date: string, n: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 }
 
 /** A list reached by its tab: /people/<key with dashes>. */

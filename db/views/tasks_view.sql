@@ -247,7 +247,7 @@ with base as (
       case when p.linkedin_url is not null then jsonb_build_object('label', 'Profile', 'url', p.linkedin_url) end,
       case when p.crm_url is not null then jsonb_build_object('label', 'Open in CRM', 'url', p.crm_url) end
     ),
-    'people', d.person_id, 'system', null, public.uk_day_start(d.next_contact_on), false, p.linkedin_url
+    'people', d.person_id, 'system', null, public.uk_day_start(d.next_contact_on), false, null::text
   from league_due_view d
   join people p on p.id = d.person_id
   where d.contact_status = 'overdue'

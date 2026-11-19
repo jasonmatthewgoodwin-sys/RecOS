@@ -22,6 +22,7 @@ import { splitCopy, topicFrom } from './calendar'
 import type { SearchHit } from './capture'
 import { shiftDate, ukClock } from './time'
 import { putForward } from './searches'
+import { dayMonth, howWord, linkedinProfileUrl } from './people'
 
 function todayAt(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 3_600_000).toISOString()
@@ -447,11 +448,30 @@ export let sampleLists: PeopleList[] = [
 
 const cadence = { premier: 18, championship: 30, league_one: 49 } as const
 
+/** What league_due_view works out from the last contact and the rhythm (0061). */
+function rhythmStatus(lastContactOn: string | null, addedOn: string, every: Member['contactEveryDays'], today: string): Pick<Member, 'nextContactOn' | 'contactStatus'> {
+  if (!every) return { nextContactOn: null, contactStatus: null }
+  const next = plusDays(lastContactOn ?? addedOn, every)
+  return { nextContactOn: next, contactStatus: next < today ? 'overdue' : next <= plusDays(today, 7) ? 'due' : 'on_track' }
+}
+
 function member(over: Partial<Member> & Pick<Member, 'id' | 'personId' | 'name' | 'listId' | 'tier' | 'lastTouchOn'> & { addedOn?: string }): Member {
   const today = ukClock(new Date()).date
   const nextDue = over.nextDueOn ?? (over.lastTouchOn ? plusDays(over.lastTouchOn, cadence[over.tier]) : plusDays(over.addedOn ?? today, 7))
   const daysLate = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${nextDue}T00:00:00Z`)) / 86_400_000)
+  // The senior network starts at every 60 days (0061); other lists have no rhythm.
+  const every = over.contactEveryDays !== undefined ? over.contactEveryDays : over.listId === 'list-senior' ? 60 : null
+  const lastContactOn = over.lastContactOn !== undefined ? over.lastContactOn : over.lastTouchOn
   return {
+    country: null,
+    headline: null,
+    howKnown: null,
+    handEdited: [],
+    linkedinReadAt: null,
+    linkedinQueued: false,
+    linkedinError: null,
+    lastContactHow: lastContactOn ? 'linkedin_message' : null,
+    ...rhythmStatus(lastContactOn, over.addedOn ?? daysAgo(120), every, today),
     title: null,
     company: null,
     city: null,
@@ -470,6 +490,8 @@ function member(over: Partial<Member> & Pick<Member, 'id' | 'personId' | 'name' 
     referralsGiven: 0,
     introsMade: 0,
     ...over,
+    contactEveryDays: every,
+    lastContactOn,
     nextDueOn: nextDue,
   }
 }
@@ -478,14 +500,14 @@ function member(over: Partial<Member> & Pick<Member, 'id' | 'personId' | 'name' 
 // each list runs past seven rows: on cadence, due this week, late.
 export function freshSampleMembers(): Member[] {
   return [
-    member({ id: 'm-ben', personId: 'p-ben', name: 'Ben Sample', title: 'VP Product Marketing', company: 'Contoso Demo Inc', city: 'boston', listId: 'list-senior', tier: 'premier', why: 'VP who has briefed two roles', lastTouchOn: daysAgo(4), liveSignal: 'promoted', jobsBriefed: 2, crmUrl: 'https://example.com/crm/ben' }),
-    member({ id: 'm-cara', personId: 'p-cara', name: 'Cara Placeholder', title: 'Head of Marketing', company: 'Fabrikam Test Ltd', city: 'austin', listId: 'list-senior', tier: 'championship', why: 'Client contact, warm', lastTouchOn: daysAgo(45), notesForNextContact: 'Ask about the Austin office' }),
-    member({ id: 'm-eve', personId: 'p-eve', name: 'Eve Invented', title: 'Director of PMM', company: 'Initech Mock', city: 'san_francisco', listId: 'list-senior', tier: 'league_one', why: 'Director who gives referrals', lastTouchOn: daysAgo(44), referralsGiven: 1 }),
+    member({ id: 'm-ben', personId: 'p-ben', name: 'Ben Sample', title: 'VP Product Marketing', company: 'Contoso Demo Inc', city: 'boston', listId: 'list-senior', tier: 'premier', why: 'VP who has briefed two roles', lastTouchOn: daysAgo(4), lastContactHow: 'call', liveSignal: 'promoted', jobsBriefed: 2, crmUrl: 'https://example.com/crm/ben' }),
+    member({ id: 'm-cara', personId: 'p-cara', name: 'Cara Placeholder', title: 'Head of Marketing', company: 'Fabrikam Test Ltd', city: 'austin', listId: 'list-senior', tier: 'championship', why: 'Client contact, warm', lastTouchOn: daysAgo(45), lastContactHow: 'meeting', contactEveryDays: 30, notesForNextContact: 'Ask about the Austin office', howKnown: 'Placed two PMMs in her team in 2024.', profileUrl: 'https://www.linkedin.com/in/cara-placeholder', headline: 'Marketing leader, B2B SaaS', country: 'United States', linkedinReadAt: `${daysAgo(8)}T07:00:00Z`, handEdited: ['title'] }),
+    member({ id: 'm-eve', personId: 'p-eve', name: 'Eve Invented', title: 'Director of PMM', company: 'Initech Mock', city: 'san_francisco', listId: 'list-senior', tier: 'league_one', why: 'Director who gives referrals', lastTouchOn: daysAgo(44), referralsGiven: 1, profileUrl: 'https://www.linkedin.com/in/eve-invented', linkedinQueued: true }),
     member({ id: 'm-gia', personId: 'p-gia', name: 'Gia Imaginary', title: 'Head of Marketing', company: 'Initech Mock', listId: 'list-senior', tier: 'premier', why: 'New in post, building a team', lastTouchOn: daysAgo(20), liveSignal: 'new_role' }),
-    member({ id: 'm-kit', personId: 'p-kit', name: 'Kit Sample', title: 'CMO', company: 'Contoso Demo Inc', listId: 'list-senior', tier: 'premier', why: 'Signs off the budget', lastTouchOn: daysAgo(10) }),
-    member({ id: 'm-lee', personId: 'p-lee', name: 'Lee Example', title: 'VP Marketing', company: 'Globex Fiction', listId: 'list-senior', tier: 'championship', why: 'Hiring again in the new year', lastTouchOn: daysAgo(25) }),
-    member({ id: 'm-max', personId: 'p-max', name: 'Max Madeup', title: 'Head of Growth', company: 'Stark Sample', listId: 'list-senior', tier: 'championship', why: 'Met at the pricing breakfast', lastTouchOn: daysAgo(29) }),
-    member({ id: 'm-nia', personId: 'p-nia', name: 'Nia Pretend', title: 'Director of Marketing', company: 'Hooli Pretend', listId: 'list-senior', tier: 'league_one', why: 'Former client', lastTouchOn: daysAgo(60), missedCycles: 1 }),
+    member({ id: 'm-kit', personId: 'p-kit', name: 'Kit Sample', title: 'CMO', company: 'Contoso Demo Inc', listId: 'list-senior', tier: 'premier', why: 'Signs off the budget', lastTouchOn: daysAgo(10), contactEveryDays: null }),
+    member({ id: 'm-lee', personId: 'p-lee', name: 'Lee Example', title: 'VP Marketing', company: 'Globex Fiction', listId: 'list-senior', tier: 'championship', why: 'Hiring again in the new year', lastTouchOn: daysAgo(25), contactEveryDays: 30, lastContactHow: 'email' }),
+    member({ id: 'm-max', personId: 'p-max', name: 'Max Madeup', title: 'Head of Growth', company: 'Stark Sample', listId: 'list-senior', tier: 'championship', why: 'Met at the pricing breakfast', lastTouchOn: daysAgo(29), contactEveryDays: 90 }),
+    member({ id: 'm-nia', personId: 'p-nia', name: 'Nia Pretend', title: 'Director of Marketing', company: 'Hooli Pretend', listId: 'list-senior', tier: 'league_one', why: 'Former client', lastTouchOn: daysAgo(60), missedCycles: 1, lastContactOn: daysAgo(75), lastContactHow: 'linkedin_request' }),
     member({ id: 'm-ada', personId: 'p-ada', name: 'Ada Example', title: 'Senior PMM', company: 'Northwind Sample Co', city: 'new_york', listId: 'list-top', tier: 'premier', why: 'Senior PMM, open to a move', lastTouchOn: daysAgo(2), profileUrl: 'https://example.com/in/ada', profileSummary: 'Senior PMM at Northwind Sample Co, New York. Eight years in B2B SaaS, launches and pricing. Posts about positioning.', profilePulledAt: `${daysAgo(3)}T07:00:00Z` }),
     member({ id: 'm-dev', personId: 'p-dev', name: 'Dev Madeup', title: 'Product Marketing Manager', company: 'Globex Fiction', city: 'remote_us', listId: 'list-top', tier: 'championship', why: 'Strong on launches', lastTouchOn: daysAgo(31) }),
     member({ id: 'm-finn', personId: 'p-finn', name: 'Finn Fictional', title: 'PMM Lead', company: 'Umbrella Sample', city: 'new_york', listId: 'list-top', tier: 'league_one', why: 'Placed once, keeps in touch', lastTouchOn: null, addedOn: daysAgo(120), missedCycles: 2 }),
@@ -1367,8 +1389,48 @@ export function resetSampleTasks() {
   sampleGone.clear()
 }
 
+/**
+ * An overdue contact rhythm as a task in Other (0061), as tasks_view makes it:
+ * "Get in touch with Cara Placeholder: last contact 27 Sep, meeting". One per
+ * person per cycle, so the key carries the day it fell due.
+ */
+export function keepInTouchTask(m: Member): Task {
+  const last = m.lastContactOn ? `last contact ${dayMonth(m.lastContactOn)}, ${howWord[m.lastContactHow ?? 'other']}` : 'no contact yet'
+  return task({
+    key: `keep_in_touch:${m.id}:${m.nextContactOn}`,
+    source: 'league_members',
+    kind: 'keep_in_touch',
+    title: `Get in touch with ${m.name}: ${last}`,
+    why: `Every ${m.contactEveryDays} days. Due ${m.nextContactOn ? dayMonth(m.nextContactOn) : ''}.`,
+    personName: m.name,
+    company: m.company,
+    dueOn: m.nextContactOn,
+    rank: 30,
+    links: [
+      ...(m.profileUrl ? [{ label: 'Profile', url: m.profileUrl }] : []),
+      ...(m.crmUrl ? [{ label: 'Open in CRM', url: m.crmUrl }] : []),
+    ],
+    // The profile is a link, not where the task came from: the rhythm is.
+    sourceUrl: null,
+    refTable: 'people',
+    refId: m.personId,
+    agent: 'system',
+    createdAt: `${m.nextContactOn ?? daysAgo(0)}T00:00:00Z`,
+  })
+}
+
+/** The overdue people on the sample lists, as tasks. */
+export function sampleKeepInTouchTasks(members: Member[] = freshSampleMembers()): Task[] {
+  return members.filter((m) => m.contactStatus === 'overdue').map(keepInTouchTask)
+}
+
+/** The sample week's tasks and the overdue contact rhythms, less those done, binned or snoozed. */
+function liveSampleTasks(): Task[] {
+  return [...sampleTasks, ...sampleKeepInTouchTasks(sampleMembers).filter((t) => !sampleGone.has(t.key))]
+}
+
 function takeOut(key: string) {
-  const t = sampleTasks.find((x) => x.key === key)
+  const t = liveSampleTasks().find((x) => x.key === key)
   if (!t) throw new Error('No such task')
   sampleGone.set(key, t)
   sampleTasks = sampleTasks.filter((x) => x.key !== key)
@@ -1377,7 +1439,7 @@ function takeOut(key: string) {
 export const sampleSource: DataSource = {
   async needsYou() {
     // What is due or late across the three columns of the Tasks board (18 November 2026).
-    return needsYouCount(sampleTasks, ukClock(new Date()).date)
+    return needsYouCount(liveSampleTasks(), ukClock(new Date()).date)
   },
   async followUpsDue() {
     const today = ukClock(new Date()).date
@@ -1679,6 +1741,9 @@ export const sampleSource: DataSource = {
       m.daysLate = -cadence[m.tier]
       m.state = 'fine'
       m.missedCycles = 0
+      m.lastContactOn = today
+      m.lastContactHow = 'linkedin_message'
+      Object.assign(m, rhythmStatus(today, today, m.contactEveryDays, today))
     }
   },
   async moveTier(memberId, tier, reason) {
@@ -1706,6 +1771,43 @@ export const sampleSource: DataSource = {
   async saveNotes(personId, notes) {
     const m = sampleMembers.find((x) => x.personId === personId)
     if (m) m.notesForNextContact = notes
+  },
+  async saveLinkedIn(personId, url) {
+    const raw = url.trim()
+    const clean = raw ? linkedinProfileUrl(raw) : null
+    if (raw && !clean) throw new Error('That is not a LinkedIn profile link. Paste one with linkedin.com/in/ in it')
+    let queued = false
+    for (const m of sampleMembers) {
+      if (m.personId !== personId) continue
+      const fresh = m.linkedinReadAt !== null && Date.parse(m.linkedinReadAt) > Date.now() - 30 * 86_400_000
+      m.linkedinQueued = clean !== null && (m.linkedinQueued || clean !== m.profileUrl || !fresh)
+      m.profileUrl = clean
+      if (m.linkedinQueued) m.linkedinError = null
+      queued = m.linkedinQueued
+    }
+    return { linkedinUrl: clean, queued }
+  },
+  async saveHowKnown(personId, text) {
+    if (text.trim().length > 500) throw new Error('Keep it to 500 characters')
+    for (const m of sampleMembers) if (m.personId === personId) m.howKnown = text.trim() || null
+  },
+  async saveDetail(personId, field, value) {
+    const v = value.trim() || null
+    for (const m of sampleMembers) {
+      if (m.personId !== personId) continue
+      if (field === 'title') m.title = v
+      if (field === 'company') m.company = v
+      if (field === 'city') m.city = v
+      if (field === 'country') m.country = v
+      if (field === 'headline') m.headline = v
+      m.handEdited = v ? [...new Set([...m.handEdited, field])] : m.handEdited.filter((f) => f !== field)
+    }
+  },
+  async setRhythm(memberId, days) {
+    const m = sampleMembers.find((x) => x.id === memberId)
+    if (!m) throw new Error('No such person on a list')
+    m.contactEveryDays = days
+    Object.assign(m, rhythmStatus(m.lastContactOn, daysAgo(120), days, ukClock(new Date()).date))
   },
   async addPerson({ name, title, company, listId, tier, why }) {
     const id = `p-${name.toLowerCase().replace(/\s+/g, '-')}`
@@ -1822,11 +1924,21 @@ export const sampleSource: DataSource = {
 
   // ---- Tasks (0049)
   async tasks() {
-    return sampleTasks.map((t) => ({ ...t, links: [...t.links], edits: { ...t.edits } }))
+    return liveSampleTasks().map((t) => ({ ...t, links: [...t.links], edits: { ...t.edits } }))
   },
   async completeTask(task, detail) {
     if ((task.kind === 'call_confirm' || task.kind === 'call_writeup') && !detail?.searchId) throw new Error('Choose the search first')
     takeOut(task.key)
+    // Got in touch: a touch for today puts them back on track.
+    if (task.kind === 'keep_in_touch') {
+      const today = ukClock(new Date()).date
+      for (const m of sampleMembers) {
+        if (m.personId !== task.refId) continue
+        m.lastContactOn = today
+        m.lastContactHow = 'other'
+        Object.assign(m, rhythmStatus(today, today, m.contactEveryDays, today))
+      }
+    }
   },
   async binTask(task) {
     takeOut(task.key)
@@ -1837,7 +1949,7 @@ export const sampleSource: DataSource = {
   async reopenTask(task) {
     const back = sampleGone.get(task.key)
     if (back) {
-      sampleTasks = [...sampleTasks, back]
+      if (back.kind !== 'keep_in_touch') sampleTasks = [...sampleTasks, back]
       sampleGone.delete(task.key)
     }
   },

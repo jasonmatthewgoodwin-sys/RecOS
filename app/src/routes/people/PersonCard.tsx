@@ -3,10 +3,9 @@ import { Card } from '../../components/Card'
 import { Field } from '../../components/Field'
 import { PillButton } from '../../components/PillButton'
 import { TextLink } from '../../components/TextLink'
-import { cityName } from '../../lib/leads'
-import { data, type Member, type PeopleList, type Tier, type Touch } from '../../lib/data'
+import { data, type DetailField, type Member, type PeopleList, type Rhythm, type Tier, type Touch } from '../../lib/data'
 import { isOutlookLink, sourceLabel } from '../../lib/links'
-import { signalWord, sinceWord, tierWord, tiers } from '../../lib/people'
+import { contactLine, lastContactWords, linkedinLine, linkedinProfileUrl, placeLine, rhythms, rhythmWord, signalWord, tierWord, tiers } from '../../lib/people'
 import { invalidate, useQuery } from '../../lib/query'
 
 type Mode = 'view' | 'tier' | 'remove' | 'dnc'
@@ -20,6 +19,11 @@ type Props = {
   onNotes: (notes: string) => void
   onProfile: (text: string) => void
   onPull: () => void
+  /** 0061: the LinkedIn link, how you know them, a field typed by hand, the contact rhythm. */
+  onLinkedIn: (url: string) => void
+  onHowKnown: (text: string) => void
+  onDetail: (field: DetailField, value: string) => void
+  onRhythm: (days: Rhythm) => void
   onRemove: (reason: string) => void
   onDoNotContact: () => void
   onClose: () => void
@@ -45,7 +49,17 @@ const kindWord: Record<string, string> = {
 // The person card (29.1): header, list and tier, next contact, the live
 // signal, history, value, one primary and the quiet links. Never an email
 // address or phone number (PEO-4): those are one click away in the CRM.
-export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, onProfile, onPull, onRemove, onDoNotContact, onClose }: Props) {
+const detailFields: { field: DetailField; label: string; value: (m: Member) => string | null }[] = [
+  { field: 'title', label: 'Title', value: (m) => m.title },
+  { field: 'company', label: 'Company', value: (m) => m.company },
+  { field: 'city', label: 'City', value: (m) => m.city },
+  { field: 'country', label: 'Country', value: (m) => m.country },
+  { field: 'headline', label: 'Headline', value: (m) => m.headline },
+]
+
+const fieldWord: Record<DetailField, string> = { title: 'title', company: 'company', city: 'city', country: 'country', headline: 'headline' }
+
+export function PersonCard({ member: m, list, onReply, onTier, onNotes, onProfile, onPull, onLinkedIn, onHowKnown, onDetail, onRhythm, onRemove, onDoNotContact, onClose }: Props) {
   const [mode, setMode] = useState<Mode>('view')
   const [tier, setTier] = useState<Tier>(m.tier)
   const [reason, setReason] = useState('')
@@ -54,6 +68,10 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
   const [asked, setAsked] = useState(false)
   const [problem, setProblem] = useState<string | undefined>()
   const [showAll, setShowAll] = useState(false)
+  const [link, setLink] = useState(m.profileUrl ?? '')
+  const [linkProblem, setLinkProblem] = useState<string | undefined>()
+  const [known, setKnown] = useState(m.howKnown ?? '')
+  const [details, setDetails] = useState<Partial<Record<DetailField, string>>>({})
   const touches = useQuery(`people.touches.${m.personId}`, () => data.touches(m.personId, 20))
 
   const history: Touch[] = touches.data ?? []
@@ -89,7 +107,25 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
       setGroup(m.groupName ?? '')
     }
   }
-  const header = [m.title, m.company, cityName(m.city)].filter(Boolean).join(', ')
+  const header = [m.title, m.company, placeLine(m.city, m.country)].filter(Boolean).join(', ')
+  const fromLinkedIn = linkedinLine(m)
+
+  function saveLink() {
+    const raw = link.trim()
+    if (raw && !linkedinProfileUrl(raw)) {
+      setLinkProblem('Paste a LinkedIn profile link, with linkedin.com/in/ in it')
+      return
+    }
+    setLinkProblem(undefined)
+    const clean = raw ? linkedinProfileUrl(raw)! : ''
+    setLink(clean)
+    onLinkedIn(clean)
+  }
+
+  function saveDetail(field: DetailField, was: string | null) {
+    const v = (details[field] ?? was ?? '').trim()
+    if (v !== (was ?? '')) onDetail(field, v)
+  }
 
   return (
     <Card
@@ -100,11 +136,64 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
           body: (
             <div className="flex flex-col gap-2">
               {header && <p className="text-ink-2">{header}</p>}
+              {m.howKnown && <p data-how-known>{m.howKnown}</p>}
+              {fromLinkedIn && <p className="font-mono text-label text-ink-3">{fromLinkedIn}</p>}
               <p className="flex flex-wrap gap-x-6">
                 {m.crmUrl && <TextLink label="Open in CRM" href={m.crmUrl} icon="open" />}
                 {/* Every person has a way to their LinkedIn profile (14 November 2026): the link held, or a search by name and company. */}
                 <TextLink label={m.profileUrl ? 'LinkedIn profile' : 'Find on LinkedIn'} href={m.profileUrl ?? linkedInSearch(m)} icon="open" />
                 {lastMessage?.sourceUrl && <TextLink label={isOutlookLink(lastMessage.sourceUrl) || lastMessage.channel === 'email' ? 'Last email' : 'Last message'} href={lastMessage.sourceUrl} icon={isOutlookLink(lastMessage.sourceUrl) || lastMessage.channel === 'email' ? 'mail' : 'open'} />}
+              </p>
+            </div>
+          ),
+        },
+        {
+          label: 'How you know them',
+          body: (
+            <div className="flex flex-col gap-3">
+              <Field label="How you know them" kind="lines" rows={2} value={known} onChange={setKnown} placeholder="Such as: placed two of her team in 2024, met at the pricing breakfast" error={known.trim().length > 500 ? `Keep it to 500 characters. This is ${known.trim().length}.` : undefined} />
+              {known !== (m.howKnown ?? '') && known.trim().length <= 500 && (
+                <div>
+                  <TextLink label="Save how you know them" onClick={() => onHowKnown(known.trim())} />
+                </div>
+              )}
+            </div>
+          ),
+        },
+        {
+          label: 'LinkedIn',
+          body: (
+            <div className="flex flex-col gap-4">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  saveLink()
+                }}
+                className="flex flex-col gap-3"
+                aria-label="LinkedIn profile"
+              >
+                <Field label="LinkedIn profile link" value={link} onChange={(v) => { setLink(v); setLinkProblem(undefined) }} placeholder="https://www.linkedin.com/in/their-name" error={linkProblem} />
+                {link.trim() !== (m.profileUrl ?? '') && (
+                  <div>
+                    <TextLink label={link.trim() ? 'Save link' : 'Clear link'} onClick={saveLink} />
+                  </div>
+                )}
+              </form>
+              <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                {detailFields.map(({ field, label, value }) => (
+                  <Field
+                    key={field}
+                    label={label}
+                    value={details[field] ?? value(m) ?? ''}
+                    onChange={(v) => setDetails((d) => ({ ...d, [field]: v }))}
+                    onBlur={() => saveDetail(field, value(m))}
+                  />
+                ))}
+              </div>
+              <p className="font-mono text-label text-ink-3">
+                {m.handEdited.length > 0
+                  ? `Typed by you: ${m.handEdited.map((f) => fieldWord[f]).join(', ')}. The LinkedIn reader leaves these alone; clear one to hand it back.`
+                  : 'The LinkedIn reader fills these from their profile. Anything you type here is kept.'}
               </p>
             </div>
           ),
@@ -188,7 +277,7 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
           ),
         },
         {
-          label: 'Next contact',
+          label: 'Contact',
           body: (
             <div className="flex flex-col gap-3">
               <Field label="Notes for next contact" value={notes} onChange={setNotes} placeholder="What to raise next time" />
@@ -197,10 +286,15 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
                   <TextLink label="Save notes" onClick={() => onNotes(notes)} />
                 </div>
               )}
-              <p className="font-mono text-label text-ink-2">
-                Last touch {m.lastTouchOn ?? 'never'}. Next due {m.nextDueOn}
-                {m.state === 'late' ? `, ${m.daysLate} days late` : ''}
+              <p className="font-mono text-label text-ink-2" data-last-contact>
+                {lastContactWords(m.lastContactOn, m.lastContactHow)}.{' '}
+                {contactLine(m) ?? `Next due ${m.nextDueOn}${m.state === 'late' ? `, ${m.daysLate} days late` : ''}`}
               </p>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Contact rhythm">
+                {rhythms.map((r) => (
+                  <PillButton key={String(r)} label={rhythmWord(r)} current={m.contactEveryDays === r} onClick={() => { if (m.contactEveryDays !== r) onRhythm(r) }} />
+                ))}
+              </div>
             </div>
           ),
         },
@@ -283,7 +377,7 @@ export function PersonCard({ member: m, list, today, onReply, onTier, onNotes, o
           {mode !== 'dnc' && <TextLink label="Do not contact" onClick={() => setMode('dnc')} />}
         </>
       }
-      foot={`${tierWord[m.tier]}, last touch ${sinceWord(m.lastTouchOn, today).toLowerCase()}`}
+      foot={`${tierWord[m.tier]}. ${lastContactWords(m.lastContactOn, m.lastContactHow)}`}
       onClose={onClose}
     />
   )

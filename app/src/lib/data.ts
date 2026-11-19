@@ -230,9 +230,32 @@ export type Member = {
   jobsBriefed: number
   referralsGiven: number
   introsMade: number
+  /** From the LinkedIn reader or typed by hand (0061, 19 November 2026). */
+  country: string | null
+  headline: string | null
+  /** How the owner knows them, in his words. 500 characters at most. */
+  howKnown: string | null
+  /** Fields the owner typed himself: the reader never overwrites these. */
+  handEdited: DetailField[]
+  linkedinReadAt: string | null
+  /** Waiting for the LinkedIn reader on the laptop. */
+  linkedinQueued: boolean
+  linkedinError: string | null
+  /** Get in touch every 30, 60 or 90 days; null is no rhythm. */
+  contactEveryDays: Rhythm
+  /** The newest contact from every source: touches, calls, messages sent, LinkedIn outreach, follow-ups done. */
+  lastContactOn: string | null
+  lastContactHow: ContactHow | null
+  nextContactOn: string | null
+  contactStatus: ContactStatus | null
 }
 
-export type Touch = { id: string; touchedOn: string; channel: string; kind: string; note: string | null; sourceUrl: string | null }
+export type Rhythm = 30 | 60 | 90 | null
+export type ContactHow = 'call' | 'email' | 'linkedin_message' | 'linkedin_request' | 'meeting' | 'event' | 'other'
+export type ContactStatus = 'on_track' | 'due' | 'overdue'
+export type DetailField = 'title' | 'company' | 'city' | 'country' | 'headline'
+
+export type Touch ={ id: string; touchedOn: string; channel: string; kind: string; note: string | null; sourceUrl: string | null }
 
 export type SignalStatus = 'new' | 'actioned' | 'added_to_league' | 'ignored' | 'expired'
 
@@ -1020,6 +1043,14 @@ export interface DataSource {
   saveProfileSummary(personId: string, text: string): Promise<void>
   /** Ask the signals agent to read the profile and write a summary back on its next run. */
   askProfilePull(personId: string): Promise<void>
+  /** A linkedin.com/in/ link, tidied by the database; blank clears it. Queued for the LinkedIn reader unless read in the last 30 days. */
+  saveLinkedIn(personId: string, url: string): Promise<{ linkedinUrl: string | null; queued: boolean }>
+  /** How you know them, 500 characters at most. */
+  saveHowKnown(personId: string, text: string): Promise<void>
+  /** A profile field typed by hand, kept from the reader; blank hands it back. */
+  saveDetail(personId: string, field: DetailField, value: string): Promise<void>
+  /** Every 30, 60 or 90 days, or none. */
+  setRhythm(memberId: string, days: Rhythm): Promise<void>
   /** 29.4: by hand, from name, company, list and tier. A thin person row and a member row. */
   addPerson(input: { name: string; title: string; company: string; listId: string; tier: Tier; why: string }): Promise<void>
 
@@ -1890,7 +1921,7 @@ const live: DataSource = {
   async members() {
     const { data, error } = await supabase!
       .from('league_due_view')
-      .select('id, person_id, display_name, display_title, display_company, list_id, tier, last_touch_on, next_due_on, days_late, state, missed_cycles, live_signal')
+      .select('id, person_id, display_name, display_title, display_company, list_id, tier, last_touch_on, next_due_on, days_late, state, missed_cycles, live_signal, contact_every_days, last_contact_on, last_contact_how, next_contact_on, contact_status')
     fail(error)
     type View = {
       id: string
@@ -1906,12 +1937,17 @@ const live: DataSource = {
       state: 'late' | 'due' | 'fine'
       missed_cycles: number
       live_signal: string | null
+      contact_every_days: number | null
+      last_contact_on: string | null
+      last_contact_how: ContactHow | null
+      next_contact_on: string | null
+      contact_status: ContactStatus | null
     }
     const views = (data ?? []) as View[]
     if (views.length === 0) return []
     const { data: extra, error: e2 } = await supabase!
       .from('league_members')
-      .select('id, why, group_name, jobs_briefed, referrals_given, intros_made, person:people!person_id (city, crm_url, linkedin_url, notes_for_next_contact, profile_summary, profile_pulled_at)')
+      .select('id, why, group_name, jobs_briefed, referrals_given, intros_made, person:people!person_id (city, country, crm_url, linkedin_url, notes_for_next_contact, profile_summary, profile_pulled_at, linkedin_headline, how_we_know, hand_edited, linkedin_read_at, linkedin_queued_at, linkedin_read_error)')
       .in('id', views.map((v) => v.id))
     fail(e2)
     type Extra = {
@@ -1921,7 +1957,21 @@ const live: DataSource = {
       jobs_briefed: number
       referrals_given: number
       intros_made: number
-      person: { city: string | null; crm_url: string | null; linkedin_url: string | null; notes_for_next_contact: string | null; profile_summary: string | null; profile_pulled_at: string | null } | null
+      person: {
+        city: string | null
+        country: string | null
+        crm_url: string | null
+        linkedin_url: string | null
+        notes_for_next_contact: string | null
+        profile_summary: string | null
+        profile_pulled_at: string | null
+        linkedin_headline: string | null
+        how_we_know: string | null
+        hand_edited: DetailField[] | null
+        linkedin_read_at: string | null
+        linkedin_queued_at: string | null
+        linkedin_read_error: string | null
+      } | null
     }
     const byId = new Map(((extra ?? []) as unknown as Extra[]).map((e) => [e.id, e]))
     return views.map((v) => {
@@ -1951,6 +2001,18 @@ const live: DataSource = {
         jobsBriefed: e?.jobs_briefed ?? 0,
         referralsGiven: e?.referrals_given ?? 0,
         introsMade: e?.intros_made ?? 0,
+        country: e?.person?.country ?? null,
+        headline: e?.person?.linkedin_headline ?? null,
+        howKnown: e?.person?.how_we_know ?? null,
+        handEdited: e?.person?.hand_edited ?? [],
+        linkedinReadAt: e?.person?.linkedin_read_at ?? null,
+        linkedinQueued: Boolean(e?.person?.linkedin_queued_at),
+        linkedinError: e?.person?.linkedin_read_error ?? null,
+        contactEveryDays: (v.contact_every_days ?? null) as Rhythm,
+        lastContactOn: v.last_contact_on,
+        lastContactHow: v.last_contact_how,
+        nextContactOn: v.next_contact_on,
+        contactStatus: v.contact_status,
       }
     })
   },
@@ -2000,6 +2062,28 @@ const live: DataSource = {
 
   async askProfilePull(personId) {
     const { error } = await supabase!.rpc('request_run', { p_agent: 'a4_signals', p_note: `profile:${personId}` })
+    fail(error)
+  },
+
+  async saveLinkedIn(personId, url) {
+    const { data, error } = await supabase!.rpc('set_person_linkedin', { p_person: personId, p_url: url })
+    fail(error)
+    const r = data as { linkedin_url: string | null; queued: boolean }
+    return { linkedinUrl: r.linkedin_url, queued: r.queued }
+  },
+
+  async saveHowKnown(personId, text) {
+    const { error } = await supabase!.rpc('set_person_how_known', { p_person: personId, p_text: text })
+    fail(error)
+  },
+
+  async saveDetail(personId, field, value) {
+    const { error } = await supabase!.rpc('set_person_detail', { p_person: personId, p_field: field, p_value: value })
+    fail(error)
+  },
+
+  async setRhythm(memberId, days) {
+    const { error } = await supabase!.rpc('set_contact_rhythm', { p_member: memberId, p_days: days })
     fail(error)
   },
 
@@ -2418,6 +2502,14 @@ const live: DataSource = {
         }
         if (task.kind === 'content_approve') {
           fail((await supabase!.from('content_items').update({ status: 'approved' }).eq('id', task.sourceId)).error)
+          return
+        }
+        break
+      case 'league_members':
+        if (task.kind === 'keep_in_touch' && task.refId) {
+          // Got in touch: a touch for today puts them back on track (0061).
+          const { error } = await supabase!.from('touches').insert({ person_id: task.refId, channel: 'other', kind: 'other', source: 'manual', note: 'Got in touch, from Tasks' })
+          if (error && !/touches_dedup_key_key|duplicate/i.test(error.message)) fail(error)
           return
         }
         break

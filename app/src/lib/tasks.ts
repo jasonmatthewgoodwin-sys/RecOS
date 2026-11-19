@@ -9,6 +9,7 @@ export type TaskSource =
   | 'search_candidates'
   | 'calls'
   | 'content_items'
+  | 'league_members'
 
 export type TaskKind =
   | 'job_lead'
@@ -29,6 +30,7 @@ export type TaskKind =
   | 'cv_chase'
   | 'content_approve'
   | 'content_post'
+  | 'keep_in_touch'
 
 export type TaskLink = { label: string; url: string }
 
@@ -120,6 +122,7 @@ export const typeWord: Record<TaskKind, string> = {
   cv_chase: 'CV',
   content_approve: 'Draft',
   content_post: 'Post',
+  keep_in_touch: 'Keep in touch',
 }
 
 /**
@@ -131,6 +134,8 @@ export function channelOf(task: Task): 'linkedin' | 'email' {
   if (task.channel) return task.channel
   if (task.lead && /linkedin\.com/i.test(task.sourceUrl ?? '')) return 'linkedin'
   if (task.kind === 'signal' || task.kind === 'content_post' || task.kind === 'content_approve') return 'linkedin'
+  // A contact rhythm task goes where their profile is, when RecOS holds one (0061).
+  if (task.kind === 'keep_in_touch' && task.links.some((l) => /profile/i.test(l.label))) return 'linkedin'
   return 'email'
 }
 
@@ -226,6 +231,8 @@ export function primaryLabel(task: Task): string {
       return 'Received'
     case 'content_post':
       return 'Posted'
+    case 'keep_in_touch':
+      return 'Got in touch'
     case 'follow_up':
       return task.messageId && task.channel === 'email' ? 'Send' : 'Done'
     default:
@@ -355,6 +362,8 @@ export function sourceShort(task: Task): string {
       return 'Events agent'
     case 'suggestion':
       return 'Rule'
+    case 'keep_in_touch':
+      return 'Contact rhythm'
     case 'system_notice':
       return 'RecOS'
     default:
@@ -568,6 +577,8 @@ export function binReasons(kind: TaskKind): string[] {
       return ['Already handled', 'No action needed', 'Wrong person']
     case 'suggestion':
       return ['Already done', 'Not now', 'Not useful']
+    case 'keep_in_touch':
+      return ['Already in touch', 'Not this time', 'Off the list soon']
     default:
       return ['Already done', 'Not needed', 'Wrong']
   }
@@ -625,6 +636,11 @@ export function starterDraft(task: Task, myFirstName = 'Jason'): { subject: stri
       }
     case 'prepare_call':
       return null
+    case 'keep_in_touch':
+      return {
+        subject: 'Catching up',
+        body: `Hi ${first},\n\nIt has been a little while, so I wanted to check in. How are things${task.company ? ` at ${task.company}` : ''}?\n\n[Add the detail here]\n\nBest,\n${myFirstName}`,
+      }
     default:
       return {
         subject: reason,
@@ -672,6 +688,8 @@ export function sourceWords(task: Task): string {
       return 'The pipeline, from Spott'
     case 'suggestion':
       return 'A standing rule in RecOS'
+    case 'keep_in_touch':
+      return 'Your contact rhythm on People, Senior network'
     case 'system_notice':
       return 'RecOS itself'
     default:

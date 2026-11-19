@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { actionTitle, binReasons, byOrder, channelOf, shownTitle, columns, dueNow, dueWord, leadEmail, leadMove, leadSource, leadStatus, linkedinUrl, needsYouCount, primaryLabel, snoozeChoices, status, withLeadSources, type Task, type TaskLead } from './tasks'
-import { freshSampleTasks, resetSampleTasks, sampleSource } from './sample'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { actionTitle, binReasons, byOrder, channelOf, columnOf, shownTitle, sourceShort, starterDraft, typeWord, columns, dueNow, dueWord, leadEmail, leadMove, leadSource, leadStatus, linkedinUrl, needsYouCount, primaryLabel, snoozeChoices, status, withLeadSources, type Task, type TaskLead } from './tasks'
+import { freshSampleMembers, freshSampleTasks, keepInTouchTask, resetSampleMembers, resetSampleTasks, sampleKeepInTouchTasks, sampleSource } from './sample'
+import { contactLine, dayMonth, dueCount, dueOrOverdue, lastContactWords, linkedinLine, linkedinProfileUrl, onCadence, placeLine, thisWeek, usesRhythm } from './people'
 
 // The Tasks rules: band, status, order, words. Today is a Monday.
 const today = '2026-11-16'
@@ -208,5 +209,93 @@ describe('the board: Emails, Business development, Other (18 Nov)', () => {
     ]
     expect(dueNow(tasks, today).map((x) => x.key)).toEqual(['late', 'lead', 'today'])
     expect(needsYouCount(tasks, today)).toBe(3)
+  })
+})
+
+// ---- The senior network (Jason, 19 November 2026): last contact, rhythm, the LinkedIn link, keep-in-touch tasks.
+
+describe('senior network contact', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    resetSampleMembers()
+  })
+
+  it('last contact in words: the day and how, or Never; three-letter months as the database writes them', () => {
+    expect(lastContactWords('2026-11-12', 'call')).toBe('Last contact: 12 Nov, call')
+    expect(lastContactWords('2026-09-03', 'linkedin_request')).toBe('Last contact: 3 Sep, LinkedIn request')
+    expect(lastContactWords('2026-11-01', 'linkedin_message')).toBe('Last contact: 1 Nov, LinkedIn message')
+    expect(lastContactWords('2026-11-01', 'meeting')).toBe('Last contact: 1 Nov, meeting')
+    expect(lastContactWords('2026-11-01', 'email')).toBe('Last contact: 1 Nov, email')
+    expect(lastContactWords('2026-11-01', null)).toBe('Last contact: 1 Nov, noted')
+    expect(lastContactWords(null, null)).toBe('Last contact: Never')
+    expect(dayMonth('2026-09-27T07:00:00Z')).toBe('27 Sep')
+  })
+
+  it('status line, place and where the details came from', () => {
+    expect(contactLine({ contactStatus: 'overdue', nextContactOn: '2026-10-27' })).toBe('Overdue since 27 Oct')
+    expect(contactLine({ contactStatus: 'due', nextContactOn: '2026-11-20' })).toBe('Due by 20 Nov')
+    expect(contactLine({ contactStatus: 'on_track', nextContactOn: '2027-01-10' })).toBe('On track, next by 10 Jan')
+    expect(contactLine({ contactStatus: null, nextContactOn: null })).toBeNull()
+    expect(placeLine('new_york', 'United States')).toBe('New York, United States')
+    expect(placeLine(null, 'United Kingdom')).toBe('United Kingdom')
+    expect(linkedinLine({ linkedinQueued: true, linkedinReadAt: '2026-11-03T07:00:00Z', linkedinError: null })).toBe('Waiting for the LinkedIn reader')
+    expect(linkedinLine({ linkedinQueued: false, linkedinReadAt: '2026-11-03T07:00:00Z', linkedinError: null })).toBe('From LinkedIn, read 3 Nov')
+    expect(linkedinLine({ linkedinQueued: false, linkedinReadAt: null, linkedinError: 'Profile not found' })).toBe('The LinkedIn reader could not read it: Profile not found')
+    expect(linkedinLine({ linkedinQueued: false, linkedinReadAt: null, linkedinError: null })).toBeNull()
+  })
+
+  it('a LinkedIn profile link has linkedin.com/in/ in it and is tidied as the database tidies it', () => {
+    expect(linkedinProfileUrl('https://www.linkedin.com/in/dana-sample/')).toBe('https://www.linkedin.com/in/dana-sample')
+    expect(linkedinProfileUrl(' uk.linkedin.com/in/Dana-Sample-123?trk=x ')).toBe('https://www.linkedin.com/in/Dana-Sample-123')
+    expect(linkedinProfileUrl('http://linkedin.com/in/dana')).toBe('https://www.linkedin.com/in/dana')
+    for (const bad of ['https://example.com/in/dana', 'linkedin.com/company/acme', 'https://www.linkedin.com/in/', 'dana sample']) expect(linkedinProfileUrl(bad)).toBeNull()
+  })
+
+  it('rhythm: due counts due and overdue; the filter puts overdue first; this week puts signals, then overdue, then due', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-11T10:00:00Z'))
+    const senior = freshSampleMembers().filter((m) => m.listId === 'list-senior')
+    expect(usesRhythm(senior, 'senior_network')).toBe(true)
+    expect(usesRhythm(freshSampleMembers().filter((m) => m.listId === 'list-top'), 'top_candidates')).toBe(false)
+    expect(dueCount(senior)).toBe(3)
+    expect(onCadence(senior)).toBe(5)
+    expect(dueOrOverdue(senior).map((m) => [m.name, m.contactStatus])).toEqual([['Cara Placeholder', 'overdue'], ['Nia Pretend', 'overdue'], ['Lee Example', 'due']])
+    expect(thisWeek(senior).map((m) => m.name)).toEqual(['Gia Imaginary', 'Ben Sample', 'Cara Placeholder', 'Nia Pretend', 'Lee Example'])
+  })
+
+  it('an overdue person is a keep-in-touch task in Other, worded as the action, done with Got in touch', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-11T10:00:00Z'))
+    const tasks = sampleKeepInTouchTasks()
+    expect(tasks.map((x) => x.personName)).toEqual(['Cara Placeholder', 'Nia Pretend'])
+    const [cara, nia] = tasks
+    expect(cara.key).toBe('keep_in_touch:m-cara:2026-10-27')
+    expect(shownTitle(cara)).toBe('Get in touch with Cara Placeholder: last contact 27 Sep, meeting')
+    expect(shownTitle(nia)).toBe('Get in touch with Nia Pretend: last contact 28 Aug, LinkedIn request')
+    expect(cara.why).toBe('Every 30 days. Due 27 Oct.')
+    expect(columnOf(cara)).toBe('other')
+    expect(columns([...freshSampleTasks(), ...tasks], '2026-11-11').find((c) => c.key === 'other')!.tasks.map((x) => x.key)).toContain(cara.key)
+    expect(status(cara, '2026-11-11')).toBe('late')
+    expect(primaryLabel(cara)).toBe('Got in touch')
+    expect(typeWord.keep_in_touch).toBe('Keep in touch')
+    expect(sourceShort(cara)).toBe('Contact rhythm')
+    expect(channelOf(cara)).toBe('linkedin')
+    expect(channelOf(nia)).toBe('email')
+    expect(starterDraft(cara)?.subject).toBe('Catching up')
+    expect(binReasons('keep_in_touch')).toEqual(['Already in touch', 'Not this time', 'Off the list soon'])
+    const never = keepInTouchTask({ ...freshSampleMembers()[0], lastContactOn: null, lastContactHow: null, contactEveryDays: 60, nextContactOn: '2026-11-01', contactStatus: 'overdue' })
+    expect(never.title).toBe('Get in touch with Ben Sample: no contact yet')
+  })
+
+  it('sample mode: the board carries the overdue people, and Got in touch puts them back on track', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-11T10:00:00Z'))
+    resetSampleMembers()
+    const before = (await sampleSource.tasks()).filter((x) => x.kind === 'keep_in_touch')
+    expect(before.map((x) => x.personName)).toEqual(['Cara Placeholder', 'Nia Pretend'])
+    await sampleSource.completeTask(before[0])
+    expect((await sampleSource.tasks()).filter((x) => x.kind === 'keep_in_touch').map((x) => x.personName)).toEqual(['Nia Pretend'])
+    const cara = (await sampleSource.members()).find((m) => m.personId === 'p-cara')!
+    expect([cara.lastContactOn, cara.contactStatus]).toEqual(['2026-11-11', 'on_track'])
   })
 })

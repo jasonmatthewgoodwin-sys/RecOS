@@ -28,6 +28,10 @@ function mock() {
     add: vi.spyOn(data, 'addPerson').mockResolvedValue(),
     profile: vi.spyOn(data, 'saveProfileSummary').mockResolvedValue(),
     pull: vi.spyOn(data, 'askProfilePull').mockResolvedValue(),
+    link: vi.spyOn(data, 'saveLinkedIn').mockImplementation(async (_id, url) => ({ linkedinUrl: url || null, queued: Boolean(url) })),
+    known: vi.spyOn(data, 'saveHowKnown').mockResolvedValue(),
+    detail: vi.spyOn(data, 'saveDetail').mockResolvedValue(),
+    rhythm: vi.spyOn(data, 'setRhythm').mockResolvedValue(),
   }
 }
 
@@ -41,6 +45,8 @@ function open(path: string) {
 
 const values = () => screen.getAllByTestId('hero-value').map((el) => el.textContent)
 const rows = () => screen.getByRole('main').querySelectorAll('[data-row]')
+const everyone = freshSampleMembers().map((m) => m.name)
+const names = () => [...rows()].map((r) => everyone.find((n) => r.textContent?.includes(n)))
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -58,15 +64,15 @@ describe('People, Senior network', () => {
     open('/people')
     expect(screen.getByRole('heading', { name: 'People' })).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: 'Senior network' })).toHaveAttribute('aria-current', 'page')
-    await waitFor(() => expect(values()).toEqual(['06', '2/50']))
+    // By contact rhythm (19 November 2026): Due is due this week or overdue; on cadence is on track.
+    await waitFor(() => expect(values()).toEqual(['03', '5/50']))
     expect(screen.getByRole('main').querySelectorAll('[data-hero-stat]')).toHaveLength(2)
-    expect(screen.getByRole('img', { name: '1 of 20' })).toBeInTheDocument()
-    // Signals first, then late premier, then late championship, then League One cycles.
-    expect(rows()[0]).toHaveTextContent('Gia Imaginary')
-    expect(rows()[1]).toHaveTextContent('Ben Sample')
-    expect(rows().length).toBeLessThanOrEqual(8)
+    expect(screen.getByRole('img', { name: '2 of 20' })).toBeInTheDocument()
+    // Signals first, then overdue, then due this week.
+    expect(names()).toEqual(['Gia Imaginary', 'Ben Sample', 'Cara Placeholder', 'Nia Pretend', 'Lee Example'])
     expect(screen.getByText('PROMOTED')).toBeInTheDocument()
-    expect(screen.getAllByText('Late').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Overdue')).toHaveLength(2)
+    expect([...rows()].filter((r) => within(r as HTMLElement).queryByText('Due'))).toHaveLength(1)
     expect(screen.getByRole('main').querySelectorAll('[data-kind="primary"]')).toHaveLength(0)
   })
 
@@ -86,19 +92,19 @@ describe('People, Senior network', () => {
     expect(screen.getByRole('button', { name: /^Ada Example/ })).toBeInTheDocument()
   })
 
-  it('T-PEO-2 Logged a reply on a late member: dot turns hollow, last touch is today, Due falls by one', async () => {
+  it('T-PEO-2 Logged a reply on an overdue member: dot turns hollow, last contact is today, Due falls by one', async () => {
     const { reply } = mock()
     open('/people')
-    await waitFor(() => expect(values()[0]).toBe('06'))
+    await waitFor(() => expect(values()[0]).toBe('03'))
     const cara = screen.getByRole('button', { name: /^Cara Placeholder/ })
     expect(cara.querySelector('[data-dot]')).toHaveAttribute('data-dot', 'solid')
     await userEvent.click(within(cara.closest('li')!).getByRole('button', { name: 'Logged a reply' }))
     expect(reply).toHaveBeenCalledWith('p-cara')
-    await waitFor(() => expect(values()[0]).toBe('05'))
+    await waitFor(() => expect(values()[0]).toBe('02'))
     await userEvent.click(screen.getByRole('button', { name: 'All' }))
     const after = screen.getByRole('button', { name: /^Cara Placeholder/ })
     expect(after.querySelector('[data-dot]')).toHaveAttribute('data-dot', 'hollow')
-    expect(after.closest('li')).toHaveTextContent('Today')
+    expect(after.closest('li')).toHaveTextContent('Last contact: 11 Nov, LinkedIn message')
   })
 
   it('T-PEO-3 the person card shows no email or phone, moves tier with a reason, and keeps history', async () => {
@@ -165,7 +171,7 @@ describe('People, Senior network', () => {
   it('Add person asks for a name, company and tier, and nothing more (29.4)', async () => {
     const { add } = mock()
     open('/people')
-    await waitFor(() => expect(values()[0]).toBe('06'))
+    await waitFor(() => expect(values()[0]).toBe('03'))
     await userEvent.click(screen.getByRole('button', { name: 'Add person' }))
     const form = screen.getByRole('form', { name: 'Add person' })
     await userEvent.click(within(form).getByRole('button', { name: 'Add' }))
@@ -175,5 +181,97 @@ describe('People, Senior network', () => {
     await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Tier' }), 'championship')
     await userEvent.click(within(form).getByRole('button', { name: 'Add' }))
     await waitFor(() => expect(add).toHaveBeenCalledWith({ name: 'Sam Newperson', title: '', company: 'Acme Pretend', tier: 'championship', why: '', listId: 'list-senior' }))
+  })
+
+  // ---- 19 November 2026: LinkedIn profile, how you know them, last contact, contact rhythm.
+
+  it('a row shows where they work and live, where the details came from, and the last contact and how', async () => {
+    mock()
+    open('/people/senior-network?show=all')
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0))
+    const cara = screen.getByRole('button', { name: /^Cara Placeholder/ }).closest('li')!
+    expect(cara).toHaveTextContent('Head of Marketing, Fabrikam Test Ltd, Austin, United States')
+    expect(cara).toHaveTextContent('From LinkedIn, read 3 Nov')
+    expect(cara).toHaveTextContent('Last contact: 27 Sep, meeting')
+    expect(cara).toHaveTextContent('Overdue')
+    await userEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    const eve = screen.getByRole('button', { name: /^Eve Invented/ }).closest('li')!
+    expect(eve).toHaveTextContent('Waiting for the LinkedIn reader')
+    expect(eve).toHaveTextContent('Last contact: 28 Sep, LinkedIn message')
+    const nia = screen.getByRole('button', { name: /^Nia Pretend/ }).closest('li')!
+    expect(nia).toHaveTextContent('Last contact: 28 Aug, LinkedIn request')
+  })
+
+  it('Due or overdue lists only those, overdue first; All puts overdue first within a tier; a list with no rhythm has no such filter', async () => {
+    mock()
+    open('/people/senior-network')
+    await userEvent.click(await screen.findByRole('button', { name: 'Due or overdue' }))
+    await waitFor(() => expect(rows()).toHaveLength(3))
+    expect(names()).toEqual(['Cara Placeholder', 'Nia Pretend', 'Lee Example'])
+    // The Due number opens the same filter.
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
+    await userEvent.click(screen.getAllByTestId('hero-value')[0].closest('button')!)
+    await waitFor(() => expect(rows()).toHaveLength(3))
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
+    // Championship: Cara (overdue) before Lee (due) before Max (on track).
+    const order = names()
+    expect(order.indexOf('Cara Placeholder')).toBeLessThan(order.indexOf('Lee Example'))
+    expect(order.indexOf('Lee Example')).toBeLessThan(order.indexOf('Max Madeup'))
+    await userEvent.click(screen.getByRole('link', { name: 'Top candidates' }))
+    await waitFor(() => expect(values()).toEqual(['04', '3/50']))
+    expect(screen.queryByRole('button', { name: 'Due or overdue' })).not.toBeInTheDocument()
+  })
+
+  it('the card takes a LinkedIn profile link, checks its shape and says it is waiting for the reader', async () => {
+    const { link } = mock()
+    open('/people/senior-network?card=person:p-ben')
+    const card = await screen.findByRole('dialog', { name: 'Ben Sample' })
+    const field = within(card).getByLabelText('LinkedIn profile link')
+    await userEvent.type(field, 'https://example.com/in/ben')
+    await userEvent.click(within(card).getByRole('button', { name: 'Save link' }))
+    expect(within(card).getByText('Paste a LinkedIn profile link, with linkedin.com/in/ in it')).toBeInTheDocument()
+    expect(link).not.toHaveBeenCalled()
+    await userEvent.clear(field)
+    await userEvent.type(field, 'uk.linkedin.com/in/ben-sample/?trk=x')
+    await userEvent.click(within(card).getByRole('button', { name: 'Save link' }))
+    expect(link).toHaveBeenCalledWith('p-ben', 'https://www.linkedin.com/in/ben-sample')
+    expect(await within(card).findByText('Waiting for the LinkedIn reader')).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'LinkedIn profile' })).toHaveAttribute('href', 'https://www.linkedin.com/in/ben-sample')
+  })
+
+  it('the card shows how you know them under the name, saves it, keeps hand edits and changes the rhythm', async () => {
+    const { known, detail, rhythm } = mock()
+    open('/people/senior-network?card=person:p-cara')
+    const card = await screen.findByRole('dialog', { name: 'Cara Placeholder' })
+    expect(card.querySelector('[data-how-known]')).toHaveTextContent('Placed two PMMs in her team in 2024.')
+    expect(within(card).getByText('From LinkedIn, read 3 Nov')).toBeInTheDocument()
+    expect(within(card).getByText(/^Typed by you: title\./)).toBeInTheDocument()
+    expect(card.querySelector('[data-last-contact]')).toHaveTextContent('Last contact: 27 Sep, meeting. Overdue since 27 Oct')
+
+    const how = within(card).getByLabelText('How you know them')
+    await userEvent.clear(how)
+    await userEvent.click(how)
+    await userEvent.paste('x'.repeat(501))
+    expect(within(card).getByText('Keep it to 500 characters. This is 501.')).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: 'Save how you know them' })).not.toBeInTheDocument()
+    await userEvent.clear(how)
+    await userEvent.type(how, 'Former client, now a friend of the desk')
+    await userEvent.click(within(card).getByRole('button', { name: 'Save how you know them' }))
+    expect(known).toHaveBeenCalledWith('p-cara', 'Former client, now a friend of the desk')
+
+    const city = within(card).getByLabelText('City')
+    await userEvent.clear(city)
+    await userEvent.type(city, 'Denver')
+    await userEvent.tab()
+    expect(detail).toHaveBeenCalledWith('p-cara', 'city', 'Denver')
+    await waitFor(() => expect(within(card).getByText(/^Typed by you: title, city\./)).toBeInTheDocument())
+
+    const pills = within(card).getByRole('group', { name: 'Contact rhythm' })
+    expect(within(pills).getByRole('button', { name: 'Every 30 days' })).toHaveAttribute('aria-current', 'true')
+    await userEvent.click(within(pills).getByRole('button', { name: 'Every 90 days' }))
+    expect(rhythm).toHaveBeenCalledWith('m-cara', 90)
+    await userEvent.click(within(pills).getByRole('button', { name: 'None' }))
+    expect(rhythm).toHaveBeenCalledWith('m-cara', null)
+    expect(card.textContent).not.toMatch(/@|\+44|\d{3}[ -]\d{3}/)
   })
 })

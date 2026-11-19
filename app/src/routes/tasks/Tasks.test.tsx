@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SignedIn } from '../../App'
 import { data } from '../../lib/data'
-import { freshSampleTasks, sampleSource } from '../../lib/sample'
+import { freshSampleTasks, sampleKeepInTouchTasks, sampleSource } from '../../lib/sample'
 
 // The Tasks tab: the board, the filters, the order, the card, the deck and
 // the two ways out for an email. Runs on the invented sample tasks.
@@ -447,5 +447,22 @@ describe('Tasks', () => {
     open()
     await waitFor(() => expect(screen.getByText('Could not load. Try again.')).toBeInTheDocument())
     expect(screen.getByRole('link', { name: /Business development/ })).toBeInTheDocument()
+  })
+
+  it('an overdue senior network contact sits in Other as "Get in touch with ...", and Got in touch closes it (19 November 2026)', async () => {
+    const { complete } = mock()
+    vi.spyOn(data, 'tasks').mockResolvedValue(sampleKeepInTouchTasks())
+    open()
+    await waitFor(() => expect(board()).toBeInTheDocument())
+    const other = tilesIn('Other').map((t) => t.textContent ?? '')
+    expect(other.some((t) => t.includes('Get in touch with Cara Placeholder: last contact'))).toBe(true)
+    expect(tilesIn('Emails')).toHaveLength(0)
+    expect(tilesIn('Business development')).toHaveLength(0)
+    await userEvent.click(tile('Get in touch with Cara Placeholder'))
+    const card = screen.getByRole('dialog', { name: /Get in touch with Cara Placeholder/ })
+    const primary = card.querySelector<HTMLButtonElement>('[data-kind="primary"]')!
+    expect(primary).toHaveTextContent('Got in touch')
+    await userEvent.click(primary)
+    await waitFor(() => expect(complete).toHaveBeenCalledWith(expect.objectContaining({ kind: 'keep_in_touch', refId: 'p-cara' }), undefined))
   })
 })
