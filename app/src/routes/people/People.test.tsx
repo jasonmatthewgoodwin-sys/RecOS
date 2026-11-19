@@ -168,7 +168,7 @@ describe('People, Senior network', () => {
     expect(screen.queryByRole('button', { name: /^Cara Placeholder/ })).not.toBeInTheDocument()
   })
 
-  it('Add person asks for a name, company and tier, and nothing more (29.4)', async () => {
+  it('Add person asks for a name, company and tier; the LinkedIn link and how you know them are optional (29.4, 19 November)', async () => {
     const { add } = mock()
     open('/people')
     await waitFor(() => expect(values()[0]).toBe('03'))
@@ -180,7 +180,14 @@ describe('People, Senior network', () => {
     await userEvent.type(within(form).getByLabelText('Company'), 'Acme Pretend')
     await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Tier' }), 'championship')
     await userEvent.click(within(form).getByRole('button', { name: 'Add' }))
-    await waitFor(() => expect(add).toHaveBeenCalledWith({ name: 'Sam Newperson', title: '', company: 'Acme Pretend', tier: 'championship', why: '', listId: 'list-senior' }))
+    await waitFor(() => expect(add).toHaveBeenCalledWith({ name: 'Sam Newperson', title: '', company: 'Acme Pretend', tier: 'championship', why: '', linkedinUrl: '', howKnown: '', listId: 'list-senior' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add person' }))
+    const again = screen.getByRole('form', { name: 'Add person' })
+    await userEvent.type(within(again).getByLabelText('LinkedIn profile'), 'https://www.linkedin.com/in/pat-pretend')
+    await userEvent.type(within(again).getByLabelText('Name'), 'Pat Pretend')
+    await userEvent.type(within(again).getByLabelText('How you know them'), 'Met at a dinner')
+    await userEvent.click(within(again).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(add).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Pat Pretend', linkedinUrl: 'https://www.linkedin.com/in/pat-pretend', howKnown: 'Met at a dinner' })))
   })
 
   // ---- 19 November 2026: LinkedIn profile, how you know them, last contact, contact rhythm.

@@ -1809,9 +1809,11 @@ export const sampleSource: DataSource = {
     m.contactEveryDays = days
     Object.assign(m, rhythmStatus(m.lastContactOn, daysAgo(120), days, ukClock(new Date()).date))
   },
-  async addPerson({ name, title, company, listId, tier, why }) {
+  async addPerson({ name, title, company, listId, tier, why, linkedinUrl, howKnown }) {
     const id = `p-${name.toLowerCase().replace(/\s+/g, '-')}`
     sampleMembers.push(member({ id: `m-${id}`, personId: id, name: name.trim(), title: title.trim() || null, company: company.trim() || null, listId, tier, why: why.trim() || null, lastTouchOn: null }))
+    if (howKnown?.trim()) await this.saveHowKnown(id, howKnown.trim())
+    if (linkedinUrl?.trim()) await this.saveLinkedIn(id, linkedinUrl.trim())
   },
 
   async appSettings() {

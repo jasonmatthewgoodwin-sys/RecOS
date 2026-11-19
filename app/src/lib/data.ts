@@ -1052,7 +1052,8 @@ export interface DataSource {
   /** Every 30, 60 or 90 days, or none. */
   setRhythm(memberId: string, days: Rhythm): Promise<void>
   /** 29.4: by hand, from name, company, list and tier. A thin person row and a member row. */
-  addPerson(input: { name: string; title: string; company: string; listId: string; tier: Tier; why: string }): Promise<void>
+  /** linkedinUrl and howKnown are optional (Jason, 19 November 2026): a link queues the person for the LinkedIn reader. */
+  addPerson(input: { name: string; title: string; company: string; listId: string; tier: Tier; why: string; linkedinUrl?: string; howKnown?: string }): Promise<void>
 
   /** New signals, strongest first (29.2). */
   /** Numbers, Quarter (32.2). */
@@ -2087,7 +2088,7 @@ const live: DataSource = {
     fail(error)
   },
 
-  async addPerson({ name, title, company, listId, tier, why }) {
+  async addPerson({ name, title, company, listId, tier, why, linkedinUrl, howKnown }) {
     const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
     const { data, error } = await supabase!
       .from('people')
@@ -2098,6 +2099,8 @@ const live: DataSource = {
     const personId = (data as { id: string }).id
     const { error: e2 } = await supabase!.from('league_members').insert({ person_id: personId, list_id: listId, tier, why: why.trim() || null, added_from: 'manual' })
     fail(e2)
+    if (howKnown?.trim()) await this.saveHowKnown(personId, howKnown.trim())
+    if (linkedinUrl?.trim()) await this.saveLinkedIn(personId, linkedinUrl.trim())
   },
 
   async appSettings() {

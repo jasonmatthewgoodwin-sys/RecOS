@@ -41,7 +41,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
   const filter: Filter = shown === 'all' ? 'all' : shown === 'due' ? 'due' : 'week'
   const cardId = params.get('card')?.startsWith('person:') ? params.get('card')!.slice(7) : null
   const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({ name: '', title: '', company: '', tier: 'league_one' as Tier, why: '' })
+  const [form, setForm] = useState({ name: '', title: '', company: '', tier: 'league_one' as Tier, why: '', linkedinUrl: '', howKnown: '' })
   const [problem, setProblem] = useState<string | undefined>()
   const [note, setNote] = useState<string | null>(null)
 
@@ -203,9 +203,10 @@ export function PeopleList({ listKey }: { listKey: string }) {
       await data.addPerson({ ...form, listId: list.id })
       invalidate('people')
       setAdding(false)
-      setForm({ name: '', title: '', company: '', tier: 'league_one', why: '' })
-    } catch {
-      setNote('That did not save. Try again.')
+      setForm({ name: '', title: '', company: '', tier: 'league_one', why: '', linkedinUrl: '', howKnown: '' })
+      if (form.linkedinUrl.trim()) setNote(`${form.name.trim()} is added. Their LinkedIn details fill in at the next LinkedIn reader run on your laptop.`)
+    } catch (e) {
+      setNote(e instanceof Error && /LinkedIn profile link/.test(e.message) ? e.message : 'That did not save. Try again.')
     }
   }
 
@@ -284,6 +285,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
 
       {adding && (
         <form onSubmit={add} className="flex max-w-sm flex-col gap-6" aria-label="Add person">
+          <Field label="LinkedIn profile" value={form.linkedinUrl} onChange={(v) => setForm((f) => ({ ...f, linkedinUrl: v }))} placeholder="https://www.linkedin.com/in/..." />
           <Field label="Name" value={form.name} onChange={(v) => { setForm((f) => ({ ...f, name: v })); setProblem(undefined) }} error={problem} autoFocus />
           <Field label="Title" value={form.title} onChange={(v) => setForm((f) => ({ ...f, title: v }))} />
           <Field label="Company" value={form.company} onChange={(v) => setForm((f) => ({ ...f, company: v }))} />
@@ -294,6 +296,7 @@ export function PeopleList({ listKey }: { listKey: string }) {
             onChange={(v) => setForm((f) => ({ ...f, tier: v as Tier }))}
             choices={tiers.map((t) => ({ value: t, label: tierWord[t] }))}
           />
+          <Field label="How you know them" kind="lines" rows={2} value={form.howKnown} onChange={(v) => setForm((f) => ({ ...f, howKnown: v.slice(0, 500) }))} placeholder="Placed them at Acme in 2024, met at a PMM dinner, a client's VP" />
           <Field label="Why" value={form.why} onChange={(v) => setForm((f) => ({ ...f, why: v }))} placeholder="Why they are on the list" />
           <div className="flex items-center gap-6">
             <PillButton kind={empty ? 'primary' : 'plain'} type="submit" label="Add" />
